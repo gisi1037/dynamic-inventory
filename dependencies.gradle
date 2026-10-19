@@ -1,0 +1,111 @@
+/*
+ * Add your dependencies here. Supported configurations:
+ *  - api("group:name:version:classifier"): if you use the types from this dependency in the public API of this mod
+ *       Available at runtime and compiletime for mods depending on this mod
+ *  - implementation("g:n:v:c"): if you need this for internal implementation details of the mod, but none of it is visible via the public API
+ *       Available at runtime but not compiletime for mods depending on this mod
+ *  - compileOnly("g:n:v:c"): if the mod you're building doesn't need this dependency during runtime at all, e.g. for optional mods
+ *       Not available at all for mods depending on this mod, only visible at compiletime for this mod
+ *  - compileOnlyApi("g:n:v:c"): like compileOnly, but also visible at compiletime for mods depending on this mod
+ *       Available at compiletime but not runtime for mods depending on this mod
+ *  - runtimeOnlyNonPublishable("g:n:v:c"): if you want to include a mod in this mod's runClient/runServer runs, but not publish it as a dependency
+ *       Not available at all for mods depending on this mod, only visible at runtime for this mod
+ *  - devOnlyNonPublishable("g:n:v:c"): a combination of runtimeOnlyNonPublishable and compileOnly for dependencies present at both compiletime and runtime,
+ *       but not published as Maven dependencies - useful for RFG-deobfuscated dependencies or local testing
+ *  - runtimeOnly("g:n:v:c"): if you don't need this at compile time, but want it to be present at runtime
+ *       Available at runtime for mods depending on this mod
+ *  - annotationProcessor("g:n:v:c"): mostly for java compiler plugins, if you know you need this, use it, otherwise don't worry
+ *  - testCONFIG("g:n:v:c") - replace CONFIG by one of the above (except api), same as above but for the test sources instead of main
+ *
+ *  - shadowImplementation("g:n:v:c"): effectively the same as API, but the dependency is included in your jar under a renamed package name
+ *       Requires you to enable usesShadowedDependencies in gradle.properties
+ *
+ *  - compile("g:n:v:c"): deprecated, replace with "api" (works like the old "compile") or "implementation" (can be more efficient)
+ *
+ * You can exclude transitive dependencies (dependencies of the chosen dependency) by appending { transitive = false } if needed,
+ * but use this sparingly as it can break using your mod as another mod's dependency if you're not careful.
+ *
+ * To depend on obfuscated jars you can use `devOnlyNonPublishable(rfg.deobf("dep:spec:1.2.3"))` to fetch an obfuscated jar from maven,
+ * or `devOnlyNonPublishable(rfg.deobf(project.files("libs/my-mod-jar.jar")))` to use a file.
+ *
+ * Gradle names for some of the configuration can be misleading, compileOnlyApi and runtimeOnly both get published as dependencies in Maven, but compileOnly does not.
+ * The buildscript adds runtimeOnlyNonPublishable to also have a runtime dependency that's not published.
+ *
+ * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
+ */
+dependencies {
+    // Optional integration APIs only; never add these mods to the isolated runtime or published POM.
+    compileOnly("com.github.GTNewHorizons:Baubles-Expanded:2.2.25-GTNH:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:NotEnoughItems:2.8.155-GTNH:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:CodeChickenCore:1.4.22:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:InventoryBogoSorter:1.3.54-GTNH:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:ModularUI2:2.3.92-1.7.10:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:ModularUI:1.3.4:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:TinkersConstruct:1.14.118-GTNH:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:Galacticraft:3.4.34-GTNH:dev") { transitive = false }
+    // GTNHExtLib bundles this at runtime; Bogo's refill field exposes its API directly.
+    compileOnly("it.unimi.dsi:fastutil:8.5.18") { transitive = false }
+    // Match the shared-library version shipped in the GTNH 2.9.0-RC-2 baseline.
+    runtimeOnlyNonPublishable("com.github.GTNewHorizons:GTNHExtLib:1.0.5")
+}
+
+def inventoryProfile = providers.gradleProperty("inventoryProfile").getOrElse("isolated")
+if (!(inventoryProfile in ["isolated", "rc2-mui2", "rc2-backhand", "rc2-integration"])) {
+    throw new GradleException("Unknown inventoryProfile: " + inventoryProfile)
+}
+if (project.hasProperty("inventoryTinkersTests") && inventoryProfile != "rc2-integration") {
+    throw new GradleException("inventoryTinkersTests requires the rc2-integration fixture")
+}
+if (project.hasProperty("inventoryActionTests") && inventoryProfile != "rc2-integration") {
+    throw new GradleException("inventoryActionTests requires the rc2-integration fixture")
+}
+if (inventoryProfile != "isolated") {
+    // Override the launch-plugin defaults and transitive mod versions only in the RC-2 fixture.
+    def pins = [GTNHLib: "0.11.52", lwjgl3ify: "3.0.37", Hodgepodge: "2.7.215",
+        GTNHExtLib: "1.0.5", ModularUI2: "2.3.92-1.7.10", ModularUI: "1.3.4",
+        NotEnoughItems: "2.8.155-GTNH", "Baubles-Expanded": "2.2.25-GTNH",
+        CodeChickenCore: "1.4.22", Backhand: "1.8.16", "Battlegear2-for-Backhand": "1.6.8-backhand",
+        InventoryBogoSorter: "1.3.54-GTNH"]
+    configurations.configureEach {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == "com.github.GTNewHorizons" && pins.containsKey(details.requested.name)) {
+                details.useVersion(pins[details.requested.name])
+                details.because("Pinned GTNH 2.9.0-RC-2 compatibility fixture")
+            }
+        }
+    }
+    dependencies {
+        devOnlyNonPublishable("com.github.GTNewHorizons:ModularUI2:2.3.92-1.7.10:dev")
+        devOnlyNonPublishable("com.github.GTNewHorizons:ModularUI:1.3.4:dev") { transitive = false }
+        if (inventoryProfile in ["rc2-backhand", "rc2-integration"]) {
+            devOnlyNonPublishable("com.github.GTNewHorizons:Backhand:1.8.16:dev")
+            runtimeOnlyNonPublishable("com.github.GTNewHorizons:Battlegear2-for-Backhand:1.6.8-backhand:dev")
+        }
+        if (inventoryProfile == "rc2-integration") {
+            devOnlyNonPublishable("com.github.GTNewHorizons:InventoryBogoSorter:1.3.54-GTNH:dev")
+            if (project.hasProperty("inventoryTinkersTests")) {
+                // Opt-in runtime for the native oversized-stack opening regression, not full-pack evidence.
+                // Mantle matches RC-2's installed Mantle-0.5.4.jar; keep unrelated transitive mods out.
+                runtimeOnlyNonPublishable("com.github.GTNewHorizons:TinkersConstruct:1.14.118-GTNH:dev") { transitive = false }
+                runtimeOnlyNonPublishable("com.github.GTNewHorizons:Mantle:0.5.4:dev") { transitive = false }
+            }
+            if (project.hasProperty("inventoryActionTests")) {
+                // This pinned release has no Maven development artifact. Remap a caller-supplied
+                // installed RC-2 JAR for local qualification only; never publish or infer a user path.
+                def craftingTweaksPath = providers.gradleProperty("inventoryCraftingTweaksJar").orNull
+                if (!craftingTweaksPath || !new File(craftingTweaksPath).isAbsolute()) {
+                    throw new GradleException("inventoryActionTests requires -PinventoryCraftingTweaksJar=absolutePath to craftingtweaks-1.0.3.jar")
+                }
+                def craftingTweaksJar = file(craftingTweaksPath)
+                def referenceFiles = new groovy.json.JsonSlurper().parse(file("pack-compatibility-rc2.json")).installedFiles
+                def expectedHash = referenceFiles.find { it.file == "craftingtweaks-1.0.3.jar" }.sha256
+                if (!craftingTweaksJar.isFile() || !java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(craftingTweaksJar.bytes).encodeHex().toString().equalsIgnoreCase(expectedHash)) {
+                    throw new GradleException("CraftingTweaks JAR does not match the pinned RC-2 1.0.3 checksum")
+                }
+                // A file dependency is a leaf: it cannot bring transitive mods into this fixture.
+                runtimeOnlyNonPublishable(rfg.deobf(project.files(craftingTweaksJar)))
+            }
+        }
+    }
+}

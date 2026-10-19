@@ -1,0 +1,172 @@
+// The small source-level client needs much less memory than the full GTNH pack.
+afterEvaluate {
+    tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.each {
+        it.minHeapSize = "512m"
+        it.maxHeapSize = "2g"
+    }
+}
+
+// Runtime command fixtures need a running Forge server, rather than a JUnit runner.
+sourceSets {
+    storageTest {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+configurations.storageTestAnnotationProcessor.extendsFrom(configurations.annotationProcessor)
+
+// Example add-ons need the compile API, not a game launch or a developer's cached
+// launch settings. Export it through Gradle so fresh checkouts resolve the same dependencies.
+tasks.register("writeInventoryExampleClasspath") {
+    description = "Export the public API example compile classpath without launching Minecraft."
+    dependsOn tasks.named("classes")
+    notCompatibleWithConfigurationCache("Resolves the selected profile's example compile classpath")
+    doLast {
+        def destination = file(".setup/inventory-example-classpath.json")
+        destination.parentFile.mkdirs()
+        destination.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+            profile: providers.gradleProperty("inventoryProfile").getOrElse("isolated"),
+            // Jabel auto-starts as a javac plugin when present on a plain classpath.
+            // These Java 8 examples need API types, not the project's compiler plugin.
+            classpath: (sourceSets.main.compileClasspath + sourceSets.main.output)
+                .filter { !it.name.startsWith("jabel-javac-plugin-") }.asPath
+        ])) + "\n"
+        logger.lifecycle("Wrote example compile classpath to {}", destination)
+    }
+}
+
+def inventoryProfile = providers.gradleProperty("inventoryProfile").getOrElse("isolated")
+if (inventoryProfile != "isolated") {
+    sourceSets {
+        rc2Compat {
+            compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+            runtimeClasspath += sourceSets.main.runtimeClasspath
+        }
+    }
+    configurations.rc2CompatAnnotationProcessor.extendsFrom(configurations.annotationProcessor)
+    tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.configureEach {
+        dependsOn tasks.named("rc2CompatClasses")
+        classpath += sourceSets.rc2Compat.output
+        systemProperty "dynamicinventory.profile", inventoryProfile
+    }
+    // The launch plugin sets workingDir in the task's registration action, after
+    // configureEach callbacks. Apply directory isolation after registration finishes.
+    afterEvaluate {
+        tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.each {
+            it.workingDir = file("run/" + inventoryProfile + (it.name.startsWith("runClient") ? "/client" : "/server"))
+        }
+    }
+}
+
+tasks.register("writeInventoryProfile") {
+    description = "Record resolved development-profile artifacts and SHA-256 hashes."
+    notCompatibleWithConfigurationCache("Resolves and hashes development artifact configurations on demand")
+    def profileName = inventoryProfile
+    def profileOutput = layout.buildDirectory.file("inventory-profile/" + inventoryProfile + ".json")
+    def profileConfigurations = [configurations.runtimeClasspath,
+        configurations.java17Dependencies, configurations.java17PatchDependencies]
+    outputs.file(profileOutput)
+    // Always resolve again when requested; a stale manifest must not imply qualification.
+    outputs.upToDateWhen { false }
+    doLast {
+        def entries = profileConfigurations.collectMany { configuration ->
+            configuration.resolvedConfiguration.resolvedArtifacts.collect { artifact ->
+                [configuration: configuration.name, module: artifact.moduleVersion.id.toString(),
+                    classifier: artifact.classifier, file: artifact.file.name,
+                    sha256: java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(artifact.file.bytes).encodeHex().toString()]
+            }
+        }.sort { a, b -> (a.configuration + a.module + a.file) <=> (b.configuration + b.module + b.file) }
+        def destination = profileOutput.get().asFile
+        destination.parentFile.mkdirs()
+        destination.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
+            [profile: profileName, packTarget: "2.9.0-RC-2", artifacts: entries])) + "\n"
+        logger.lifecycle("Wrote {}", destination)
+    }
+}
+
+tasks.register("writeFixtureClientLaunch") {
+    description = "Export an offline-only development launch for local multiplayer fixtures."
+    notCompatibleWithConfigurationCache("Reads the configured development JavaExec task")
+    def clientTask = tasks.named("runClient25")
+    dependsOn { clientTask.get().taskDependencies.getDependencies(clientTask.get()) }
+    doLast {
+        if (!(inventoryProfile in ["isolated", "rc2-mui2", "rc2-backhand", "rc2-integration"]) || !project.hasProperty("inventoryStorageTests")) {
+            throw new GradleException("Requires a known inventory profile and inventoryStorageTests")
+        }
+        def launch = clientTask.get()
+        // Force an inert offline credential before constructing arguments. Never inspect
+        // a running process or copy an authenticated launcher command line.
+        launch.accessToken.set("0")
+        launch.username.set("Developer")
+        def data = [profile: inventoryProfile, offlineOnly: true,
+            executable: launch.javaLauncher.get().executablePath.asFile.absolutePath,
+            jvmArgs: (launch.allJvmArgs + launch.calculateJvmArgs()).findAll {
+                !it.startsWith("-Xms") && !it.startsWith("-Xmx")
+            } + ["-Xms512m", "-Xmx2g"],
+            classpath: launch.classpath.asPath, mainClass: launch.mainClass.get(),
+            gameArgs: launch.calculateArgs()]
+        def destination = file(".setup/" + inventoryProfile + "-offline-client-launch.json")
+        destination.parentFile.mkdirs()
+        destination.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(data)) + "\n"
+        logger.lifecycle("Wrote offline fixture launch settings to {}", destination)
+    }
+}
+
+tasks.register("writeFixtureServerLaunch") {
+    description = "Export the matching local dedicated-server fixture without starting it."
+    notCompatibleWithConfigurationCache("Reads the configured development JavaExec task")
+    def serverTask = tasks.named("runServer25")
+    dependsOn { serverTask.get().taskDependencies.getDependencies(serverTask.get()) }
+    doLast {
+        if (!project.hasProperty("inventoryStorageTests")) {
+            throw new GradleException("The disposable server requires inventoryStorageTests")
+        }
+        def launch = serverTask.get()
+        def data = [profile: inventoryProfile, offlineOnly: true,
+            executable: launch.javaLauncher.get().executablePath.asFile.absolutePath,
+            jvmArgs: (launch.allJvmArgs + launch.calculateJvmArgs()).findAll {
+                !it.startsWith("-Xms") && !it.startsWith("-Xmx")
+            } + ["-Xms512m", "-Xmx2g"],
+            classpath: launch.classpath.asPath, mainClass: launch.mainClass.get(),
+            gameArgs: launch.calculateArgs(), gameDirectory: launch.workingDir.absolutePath]
+        def destination = file(".setup/" + inventoryProfile + "-server-launch.json")
+        destination.parentFile.mkdirs()
+        destination.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(data)) + "\n"
+        logger.lifecycle("Wrote local server fixture launch settings to {}", destination)
+    }
+}
+
+// Test commands are compiled separately and never packaged in the production mod.
+if (project.hasProperty("inventoryStorageTests")) {
+    tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.configureEach {
+        dependsOn tasks.named("storageTestClasses")
+        classpath += sourceSets.storageTest.output
+    }
+    if (inventoryProfile in ["rc2-backhand", "rc2-integration"]) {
+        sourceSets {
+            backhandTest {
+                compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output + sourceSets.storageTest.output
+                runtimeClasspath += sourceSets.main.runtimeClasspath
+            }
+        }
+        if (inventoryProfile == "rc2-integration") {
+            sourceSets {
+                packTest {
+                    compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output + sourceSets.storageTest.output
+                    runtimeClasspath += sourceSets.main.runtimeClasspath
+                }
+            }
+            configurations.packTestAnnotationProcessor.extendsFrom(configurations.annotationProcessor)
+            tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.configureEach {
+                dependsOn tasks.named("packTestClasses")
+                classpath += sourceSets.packTest.output
+            }
+        }
+        configurations.backhandTestAnnotationProcessor.extendsFrom(configurations.annotationProcessor)
+        tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.configureEach {
+            dependsOn tasks.named("backhandTestClasses")
+            classpath += sourceSets.backhandTest.output
+        }
+    }
+}

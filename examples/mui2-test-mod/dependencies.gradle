@@ -1,0 +1,23 @@
+// A separate build consumes the development JAR, never Dynamic Inventory's source sets.
+// Outside this checkout, supply -PdynamicInventoryDevJar=C:/path/to/the-dev.jar.
+def inventoryJar = file(providers.gradleProperty("dynamicInventoryDevJar")
+    .getOrElse("../../build/libs/dynamicinventory-0.8.0-dev-dev.jar"))
+if (!inventoryJar.isFile()) {
+    throw new GradleException("Build Dynamic Inventory first, or set -PdynamicInventoryDevJar to its development JAR.")
+}
+
+dependencies {
+    // These are dependencies, not bundled/shaded copies inside the example JAR.
+    devOnlyNonPublishable(files(inventoryJar))
+    devOnlyNonPublishable("com.github.GTNewHorizons:ModularUI2:2.3.92-1.7.10:dev")
+}
+
+// Keep a small runClient25 session on the same library versions as our RC-2 fixture.
+def pins = [GTNHLib: "0.11.52", lwjgl3ify: "3.0.37", Hodgepodge: "2.7.215", GTNHExtLib: "1.0.5"]
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == "com.github.GTNewHorizons" && pins.containsKey(details.requested.name)) {
+            details.useVersion(pins[details.requested.name])
+        }
+    }
+}

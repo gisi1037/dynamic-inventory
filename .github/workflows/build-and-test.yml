@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [ master, main ]
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERSION: 0.8.0-dev
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ isolated, rc2-backhand, rc2-integration ]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check tracked files for local-only data
+        run: python3 scripts/tools/check_public_tree.py
+      - name: Test qualification manifest validation
+        shell: pwsh
+        run: ./scripts/testing/test-qualification-validator.ps1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: |
+            8
+            17
+            25
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build mod and compile runtime fixtures
+        shell: bash
+        run: |
+          chmod +x gradlew
+          tasks=(build storageTestClasses)
+          if [[ "${{ matrix.profile }}" != "isolated" ]]; then
+            tasks+=(rc2CompatClasses backhandTestClasses)
+          fi
+          if [[ "${{ matrix.profile }}" == "rc2-integration" ]]; then
+            tasks+=(packTestClasses)
+          fi
+          ./gradlew --no-daemon "${tasks[@]}" -PinventoryProfile=${{ matrix.profile }} -PinventoryStorageTests
+      - name: Save development mod
+        uses: actions/upload-artifact@v7
+        with:
+          name: dynamicinventory-${{ matrix.profile }}
+          path: build/libs/*.jar
+          retention-days: 7
+
+  windows-tooling:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check tracked files for local-only data
+        run: python scripts/tools/check_public_tree.py
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build RC-2 fixture artifact and offline launch metadata
+        shell: pwsh
+        run: .\scripts\gradle.ps1 build writeFixtureClientLaunch -PinventoryProfile=rc2-integration -PinventoryStorageTests --no-daemon --no-configuration-cache
+      - name: Compile public API examples
+        shell: pwsh
+        run: .\scripts\tools\Test-InventoryUiExamples.ps1 -EvidencePath .setup/examples-verification-ci.json
+      - name: Build standalone MUI2 consumer mod
+        shell: pwsh
+        run: .\scripts\gradle.ps1 --project-dir=examples/mui2-test-mod build --no-daemon --no-configuration-cache
+      - name: Scan production artifact and run headless qualification checks
+        shell: pwsh
+        run: |
+          .\scripts\tools\Test-InventoryArtifact.ps1 -EvidencePath .setup/artifact-verification-ci.json | Out-Null
+          .\scripts\testing\test-fixture-artifacts.ps1
+          .\scripts\testing\test-qualification-validator.ps1
+          .\scripts\testing\test-inventory-artifact.ps1
+      - name: Test headless qualification checks in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          .\scripts\testing\test-fixture-artifacts.ps1
+          .\scripts\testing\test-qualification-validator.ps1
+          .\scripts\testing\test-inventory-artifact.ps1
+      - name: Test GUI audit and template tooling in Windows PowerShell 5.1
+        shell: powershell
+        run: .\scripts\testing\test-ui-template-tools.ps1 -EvidencePath .setup/template-tooling-windows-powershell.json
+      - name: Test GUI audit and template tooling in PowerShell 7
+        shell: pwsh
+        run: .\scripts\testing\test-ui-template-tools.ps1 -EvidencePath .setup/template-tooling-pwsh.json

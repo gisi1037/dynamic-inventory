@@ -1,0 +1,19 @@
+{
+  "java.import.gradle.wrapper.enabled": true,
+  "java.import.gradle.arguments": "-PinventoryProfile=rc2-integration -PinventoryStorageTests",
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "files.watcherExclude": {
+    "**/.gradle/**": true,
+    "**/build/**": true,
+    "**/run/**": true,
+    "**/.setup/**": true
+  },
+  "files.exclude": {
+    "**/.setup": true
+  },
+  "java.import.exclusions": [
+    "**/.setup/**",
+    "**/run/**"
+  ],
+  "java.compile.nullAnalysis.mode": "automatic"
+}

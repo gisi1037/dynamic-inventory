@@ -1,0 +1,7 @@
+Dynamic Inventory
+Copyright (C) 2026 gisi1037 and contributors.
+
+Project code: GPL-3.0-only.
+Build setup is based on the GTNH ExampleMod1.7.10 starter and GTNHGradle conventions.
+The Gradle wrapper scripts retain their original Apache-2.0 copyright and license notices.
+Dependency mods and Minecraft/Forge are not included in this source distribution.

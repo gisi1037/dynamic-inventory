@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "GTNH: Launch and debug RC-2 inventory integration client",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "GTNH: Start integration client for debugger"
+    },
+    {
+      "type": "java",
+      "name": "GTNH: Launch and debug Backhand compatibility client",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "GTNH: Start Backhand client for debugger"
+    },
+    {
+      "type": "java",
+      "name": "GTNH: Launch and debug RC-2 compatibility client",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "GTNH: Start RC-2 client for debugger"
+    },
+    {
+      "type": "java",
+      "name": "GTNH: Launch and debug Minecraft",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "GTNH: Start client for debugger"
+    },
+    {
+      "type": "java",
+      "name": "GTNH: Attach to running debug client",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005
+    }
+  ]
+}

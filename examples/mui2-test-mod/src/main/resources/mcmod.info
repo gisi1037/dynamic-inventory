@@ -1,0 +1,14 @@
+{
+  "modListVersion": 2,
+  "modList": [
+    {
+      "modid": "${modId}",
+      "name": "${modName}",
+      "description": "Small external MUI2 consumer of Dynamic Inventory's public API. Open with /dinvexample.",
+      "version": "${modVersion}",
+      "mcversion": "${minecraftVersion}",
+      "authorList": ["gilbe"],
+      "useDependencyInformation": false
+    }
+  ]
+}

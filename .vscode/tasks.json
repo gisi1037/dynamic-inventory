@@ -1,0 +1,233 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GTNH: Build external MUI2 example mod",
+      "dependsOn": ["GTNH: Build mod"],
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "--project-dir=examples/mui2-test-mod", "build"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Run RC-2 inventory integration client",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25", "-PinventoryProfile=rc2-integration", "-PinventoryStorageTests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Run RC-2 inventory integration server",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runServer25", "-PinventoryProfile=rc2-integration", "-PinventoryStorageTests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Start integration client for debugger",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25", "--debug-jvm", "-PinventoryProfile=rc2-integration", "-PinventoryStorageTests"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "minecraft",
+        "pattern": {"regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$", "message": 1},
+        "background": {"activeOnStart": true, "beginsPattern": ".*",
+          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"}
+      }
+    },
+    {
+      "label": "GTNH: Run Backhand compatibility client",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25", "-PinventoryProfile=rc2-backhand", "-PinventoryStorageTests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Run Backhand qualification server",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runServer25", "-PinventoryProfile=rc2-backhand", "-PinventoryStorageTests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Start Backhand client for debugger",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25", "--debug-jvm", "-PinventoryProfile=rc2-backhand", "-PinventoryStorageTests"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "minecraft",
+        "pattern": {"regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$", "message": 1},
+        "background": {"activeOnStart": true, "beginsPattern": ".*",
+          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"}
+      }
+    },
+    {
+      "label": "GTNH: Run RC-2 compatibility client",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25", "-PinventoryProfile=rc2-mui2", "-PinventoryStorageTests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Run RC-2 qualification server",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runServer25", "-PinventoryProfile=rc2-mui2", "-PinventoryStorageTests"],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Start RC-2 client for debugger",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25", "--debug-jvm", "-PinventoryProfile=rc2-mui2", "-PinventoryStorageTests"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "minecraft",
+        "pattern": {"regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$", "message": 1},
+        "background": {"activeOnStart": true, "beginsPattern": ".*",
+          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"}
+      }
+    },
+    {
+      "label": "GTNH: Build mod",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "build"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Run development client",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Start client for debugger",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25",
+        "--debug-jvm"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "minecraft",
+        "pattern": {
+          "regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"
+        }
+      }
+    },
+    {
+      "label": "GTNH: Prepare Minecraft sources",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "setupDecompWorkspace",
+        "eclipse"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Run development server",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "runServer25"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Generate GUI templates on F9 (RC-2)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/tools/Watch-InventoryUiTemplates.ps1"
+      ],
+      "problemMatcher": [],
+      "runOptions": { "instanceLimit": 1 }
+    },
+    {
+      "label": "GTNH: Build and launch UI preview (unqualified)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        "${workspaceFolder}/scripts/full-pack.ps1",
+        "-ExperimentalInventoryIntegration", "-VisualPreview"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "GTNH: Build and launch experimental RC-2 full-pack test",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/full-pack.ps1",
+        "-ExperimentalInventoryIntegration",
+        "-QualificationManifest",
+        "docs/qualification/rc2-opening-gate-qualified/build-verification.json"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}
