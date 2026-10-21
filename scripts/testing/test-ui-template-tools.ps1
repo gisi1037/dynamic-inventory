@@ -21,7 +21,8 @@ if ($bootstrapTasks.Count -gt 0) {
     $bootstrapTasks.Add('--no-daemon')
     $bootstrapTasks.Add('--no-configuration-cache')
     $gradle = Join-Path $projectRoot 'scripts/gradle.ps1'
-    & $gradle @($bootstrapTasks.ToArray())
+    # Bind the array explicitly; PS 5.1 otherwise combines it into one Gradle task name.
+    & $gradle -GradleArguments $bootstrapTasks.ToArray()
     if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the RC-2 template regression classpath/artifact.' }
 }
 $launch = Get-Content -LiteralPath $launchPath -Raw | ConvertFrom-Json
@@ -46,8 +47,28 @@ function Signature([string] $Directory) {
     return @(Get-ChildItem -LiteralPath $Directory -Recurse -File | Where-Object Name -ne '.watcher.lock' |
         ForEach-Object { "$($_.FullName):$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)" })
 }
-$nativeText = Get-Content docs/qualification/ui-api/integrated/native-audit.json -Raw
-$muiText = Get-Content docs/qualification/ui-api/gt-mui2/gt-audit.json -Raw
+# Exercise the audit schema without depending on private, machine-specific F9 captures.
+# These deterministic examples describe 27 host slots and 81 ordinary player slots;
+# raw index 36 belongs to Backhand, so the expanded ordinary indices skip it.
+function New-TemplateAudit([bool] $Mui2) {
+    $indices = if ($Mui2) { @(0..35) + @(37..81) } else { @(9..35) + @(0..8) + @(37..81) }
+    $slots = @(for ($i = 0; $i -lt $indices.Count; $i++) {
+        $raw = $indices[$i]
+        @{ containerSlot=27+$i; rawIndex=$raw; ordinaryIndex=$(if ($raw -gt 36) { $raw-1 } else { $raw });
+            x=13+18*($i%9); y=[int](94+18*[math]::Floor($i/9));
+            slotClass=$(if ($Mui2) { 'com.cleanroommc.modularui.widgets.slot.ModularSlot' } else { 'net.minecraft.inventory.Slot' }) }
+    })
+    @{schemaVersion=1; capturedAtUtc='2026-01-01T00:00:00Z'; packTarget='2.9.0-RC-2';
+        containerClass=$(if ($Mui2) { 'com.cleanroommc.modularui.screen.ModularContainer' } else { 'dev.gilbe.dynamicinventory.qualification.UiApiFixtures$NativeContainer' });
+        screenClass=$(if ($Mui2) { 'com.cleanroommc.modularui.screen.GuiContainerWrapper' } else { 'dev.gilbe.dynamicinventory.qualification.UiApiFixtures$NativeGui' });
+        framework=$(if ($Mui2) { 'MUI2' } else { 'NATIVE' }); slotCount=108;
+        nativeSlotCount=$(if ($Mui2) { $null } else { 63 }); adapterId=$null;
+        playerSlots=$slots; missingLegacyIndices=@(); duplicateOrdinaryIndices=@();
+        candidate=$true; reasons=@('Synthetic audit for template-tool regression only.'); externalSlotCount=27} |
+        ConvertTo-Json -Depth 12
+}
+$nativeText = New-TemplateAudit $false
+$muiText = New-TemplateAudit $true
 # New captures include refusal diagnostics; historical schema-1 captures may omit them.
 $refused = $nativeText | ConvertFrom-Json
 $refused | Add-Member -NotePropertyName refusalReason -NotePropertyValue 'Expected 63 native slots; found 62' -Force
