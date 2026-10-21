@@ -1,6 +1,7 @@
 package dev.gilbe.dynamicinventory.container;
 
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
@@ -14,9 +15,20 @@ public final class PlayerInventoryTransfers {
     private PlayerInventoryTransfers() {}
 
     public static ItemStack transfer(Container container, EntityPlayer player, int id) {
-        int[] storage = mainSlots(InventoryLayout.HOTBAR_SLOTS, InventoryLayout.mainSlots(), false);
-        int[] hotbar = mainSlots(0, InventoryLayout.HOTBAR_SLOTS, false);
-        int[] allMain = mainSlots(InventoryLayout.HOTBAR_SLOTS, InventoryLayout.mainSlots(), true);
+        InventoryPlayer inventory = player.inventory;
+        int[] storage = mainSlots(
+            inventory,
+            InventoryLayout.HOTBAR_SLOTS,
+            InventoryLayout.of(inventory)
+                .mainSlots(),
+            false);
+        int[] hotbar = mainSlots(inventory, 0, InventoryLayout.HOTBAR_SLOTS, false);
+        int[] allMain = mainSlots(
+            inventory,
+            InventoryLayout.HOTBAR_SLOTS,
+            InventoryLayout.of(inventory)
+                .mainSlots(),
+            true);
         if (id < 0 || id >= container.inventorySlots.size()) return null;
         Slot slot = container.getSlot(id);
         if (!slot.getHasStack() || !slot.canTakeStack(player)) return null;
@@ -28,12 +40,12 @@ public final class PlayerInventoryTransfers {
             if (moved) slot.onSlotChange(source, original);
         } else if (id < PlayerContainerLayout.LEGACY_STORAGE_START
             || (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND)
-            || id >= PlayerContainerLayout.slotCount()) {
+            || id >= PlayerContainerLayout.slotCount(inventory)) {
                 moved = merge(container, source, allMain);
             } else {
-                moved = equip(container, source);
+                moved = equip(container, source, inventory);
                 if (!moved) {
-                    int mainIndex = PlayerContainerLayout.mainIndex(id);
+                    int mainIndex = PlayerContainerLayout.mainIndex(inventory, id);
                     moved = merge(container, source, mainIndex < InventoryLayout.HOTBAR_SLOTS ? storage : hotbar);
                 }
             }
@@ -44,12 +56,12 @@ public final class PlayerInventoryTransfers {
         return original;
     }
 
-    private static boolean equip(Container container, ItemStack source) {
+    private static boolean equip(Container container, ItemStack source, InventoryPlayer inventory) {
         for (int id = PlayerContainerLayout.ARMOR_START; id < PlayerContainerLayout.LEGACY_STORAGE_START; id++) {
             Slot slot = container.getSlot(id);
             if (!slot.getHasStack() && slot.isItemValid(source)) return merge(container, source, new int[] { id });
         }
-        for (int id = PlayerContainerLayout.slotCount(); id < container.inventorySlots.size(); id++) {
+        for (int id = PlayerContainerLayout.slotCount(inventory); id < container.inventorySlots.size(); id++) {
             Slot slot = container.getSlot(id);
             if (slot.isItemValid(source) && merge(container, source, new int[] { id })) return true;
         }
@@ -103,13 +115,13 @@ public final class PlayerInventoryTransfers {
         return source.stackSize != originalCount;
     }
 
-    private static int[] mainSlots(int start, int end, boolean includeHotbar) {
+    private static int[] mainSlots(InventoryPlayer inventory, int start, int end, boolean includeHotbar) {
         int[] ids = new int[end - start + (includeHotbar ? InventoryLayout.HOTBAR_SLOTS : 0)];
         int next = 0;
-        for (int main = start; main < end; main++) ids[next++] = PlayerContainerLayout.containerId(main);
+        for (int main = start; main < end; main++) ids[next++] = PlayerContainerLayout.containerId(inventory, main);
         if (includeHotbar) {
             for (int main = 0; main < InventoryLayout.HOTBAR_SLOTS; main++)
-                ids[next++] = PlayerContainerLayout.containerId(main);
+                ids[next++] = PlayerContainerLayout.containerId(inventory, main);
         }
         return ids;
     }

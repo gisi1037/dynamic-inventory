@@ -39,5 +39,7 @@ public final class CoreFixtures {
         event.registerServerCommand(new QualificationCommand());
         event.registerServerCommand(new dev.gilbe.dynamicinventory.ContainerAdapterTestCommand());
         event.registerServerCommand(new dev.gilbe.dynamicinventory.CapacityTestCommand());
+        if (cpw.mods.fml.common.Loader.isModLoaded("Baubles"))
+            event.registerServerCommand(new dev.gilbe.dynamicinventory.InventoryUpgradeTestCommand());
     }
 }

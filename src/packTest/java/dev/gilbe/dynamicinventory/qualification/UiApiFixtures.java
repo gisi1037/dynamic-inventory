@@ -120,6 +120,9 @@ public final class UiApiFixtures implements IGuiHandler {
         if (id == 0) return new NativeContainer(player.inventory, 27);
         if (id == 1) return new FilteredContainer(player.inventory);
         if (id == 2) return new UnknownContainer(player.inventory);
+        if (id == 3) return new net.minecraft.inventory.ContainerChest(
+            player.inventory,
+            new InventoryBasic("Automatic scroll fixture", true, 27));
         return null;
     }
 
@@ -129,6 +132,7 @@ public final class UiApiFixtures implements IGuiHandler {
         if (id == 0) return new NativeGui(new NativeContainer(player.inventory, 27));
         if (id == 1) return new FilteredGui(new FilteredContainer(player.inventory));
         if (id == 2) return new UnknownGui(new UnknownContainer(player.inventory));
+        if (id == 3) return new AutomaticStorageGui(player);
         return null;
     }
 
@@ -380,6 +384,36 @@ public final class UiApiFixtures implements IGuiHandler {
         }
     }
 
+    /** Uses a registered HOST without registering this GUI: the fallback must approve the presentation. */
+    @SideOnly(Side.CLIENT)
+    public static final class AutomaticStorageGui extends net.minecraft.client.gui.inventory.GuiContainer {
+
+        private static final net.minecraft.util.ResourceLocation TEXTURE = new net.minecraft.util.ResourceLocation(
+            "textures/gui/container/generic_54.png");
+
+        AutomaticStorageGui(EntityPlayer player) {
+            super(
+                new net.minecraft.inventory.ContainerChest(
+                    player.inventory,
+                    new InventoryBasic("Automatic scroll fixture", true, 27)));
+            ySize = 168;
+        }
+
+        @Override
+        protected void drawGuiContainerBackgroundLayer(float tick, int mouseX, int mouseY) {
+            org.lwjgl.opengl.GL11.glColor4f(1, 1, 1, 1);
+            mc.getTextureManager()
+                .bindTexture(TEXTURE);
+            drawTexturedModalRect(guiLeft, guiTop, 0, 0, xSize, 71);
+            drawTexturedModalRect(guiLeft, guiTop + 71, 0, 126, xSize, 96);
+        }
+
+        @Override
+        protected void drawGuiContainerForegroundLayer(int mouseX, int mouseY) {
+            fontRendererObj.drawString("Automatic scroll fixture", 8, 6, 0x404040);
+        }
+    }
+
     private static final class Command extends CommandBase {
 
         private final UiApiFixtures owner;
@@ -395,7 +429,7 @@ public final class UiApiFixtures implements IGuiHandler {
 
         @Override
         public String getCommandUsage(ICommandSender sender) {
-            return "/dinvuiapi native|filtered|unknown|selftest";
+            return "/dinvuiapi native|filtered|unknown|auto-scroll|selftest";
         }
 
         @Override
@@ -415,6 +449,7 @@ public final class UiApiFixtures implements IGuiHandler {
             if ("native".equals(args[0])) player.openGui(owner, 0, player.worldObj, 0, 0, 0);
             else if ("filtered".equals(args[0])) player.openGui(owner, 1, player.worldObj, 0, 0, 0);
             else if ("unknown".equals(args[0])) player.openGui(owner, 2, player.worldObj, 0, 0, 0);
+            else if ("auto-scroll".equals(args[0])) player.openGui(owner, 3, player.worldObj, 0, 0, 0);
             else if ("selftest".equals(args[0])) {
                 List<String> passed = new ArrayList<String>();
                 JsonObject report = new JsonObject();

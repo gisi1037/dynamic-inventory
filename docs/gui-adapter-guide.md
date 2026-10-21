@@ -1,6 +1,6 @@
 # Discovering and adapting inventory GUIs
 
-This guide is a starting point for developers adding support for an additional inventory GUI. It describes the implemented audit workflow and current adapter boundaries; generated scaffolds do not enable or register support. Inventory and synchronization remain server-authoritative. The public Java API is experimental version 1 for this unreleased development build; multiplayer compatibility uses wire protocol 3, and neither provides a general compatibility guarantee.
+This guide is a starting point for developers adding support for an additional inventory GUI. It describes the implemented audit workflow and current adapter boundaries; generated scaffolds do not enable or register support. Inventory and synchronization remain server-authoritative. The public Java API is experimental version 1 for this unreleased development build; multiplayer compatibility uses wire protocol 4, and neither provides a general compatibility guarantee.
 
 Start with the [inventory integration contract](inventory-integration-contract.md) for ownership,
 index namespaces, transfer responsibilities, and the runtime opening gate.
@@ -8,7 +8,7 @@ index namespaces, transfer responsibilities, and the runtime opening gate.
 Native adapter declarations must be registered during pre-initialization, initialization, or
 post-initialization. Dynamic Inventory freezes those registrations at `FMLLoadComplete`; late
 adapter registration throws. The protocol declaration sent during login is
-`<mod-version>;protocol=3;storage=<count>;adapters=<sha256>`. It compares the effective storage
+`<mod-version>;protocol=4;storage=<count>;adapters=<sha256>`. It compares the startup storage
 capacity and a sorted startup digest of adapter IDs, container class names, subclass matching,
 expected native slot counts, transfer-policy presence, plain-versus-custom appended-slot factory,
 and each adapter's declared compatibility revision. It does not exchange runtime container slot
@@ -20,6 +20,28 @@ when an adapter's binding, transfer, slot-factory, or other compatibility behavi
 For the current data model, save format, native/MUI adapters, and pinned RC-2 test scope, see [project architecture](project-architecture.md). The current full-pack target and installed file hashes are recorded in [`pack-compatibility-rc2.json`](../pack-compatibility-rc2.json).
 
 ## Inspect before adapting
+
+### Organizing optional integrations
+
+`BuiltinInventoryUiAdapters` dispatches to `TinkersConstructCompatibility`,
+`GalacticraftCompatibility`, `AvaritiaddonsCompatibility` and `DreamcraftCompatibility`.
+Use a file per owning mod, or a package for a larger integration such as AE2. The
+[per-mod patch files](compatibility-patches/README.md) record current owners and upcoming
+integration scope without enabling unreviewed support. Check `Loader.isModLoaded("the-mod-id")` before loading a class that
+imports that optional mod's APIs. Keep client classes behind the client proxy and apply the
+same presence rule to its mixins. String class names in an adapter declaration avoid linking
+the optional classes just to declare the integration.
+
+The current Tinkers, Galacticraft, Avaritiaddons and Dreamcraft registrations are conditional.
+This does not make every dependency optional: the selected full-pack inventory profile still
+requires its Backhand/Baubles/NEI/Bogo contract. Do not weaken startup or opening checks to
+handle a missing core dependency. Both peers must use matching inventory contracts, and the
+pack or another mod may also declare its own dependency on a removed optional integration.
+
+For presentation changes to an **already registered native GUI**, use the development
+[in-game GUI editor](ingame-gui-editor.md) with **F10**. It previews and saves a local client layout
+without changing slot registration or transfers. F9 below remains the discovery/template tool;
+the editor does not enable unknown containers or edit MUI2 widgets yet.
 
 Use the live GUI audit to observe one open screen at a time. In the client, press the configurable **Inventory UI audit** key (F9 by default) while the target `GuiContainer` is open; the chat message gives the absolute path of the saved JSON. The harness `ui-audit` action captures the same report from the current GUI. The audit is read-only: it reports the container and screen class, native slot counts, player-backed slot coordinates, adapter ID when available, and gaps/duplicates in detected player indices (duplicate detection covers the full ordinary capacity). It cannot prove how a GUI handles transfers, recipes, rendering, or resize state. Treat it as a discovery aid, not an approval signal.
 
@@ -59,9 +81,22 @@ MUI1/MUI2 live player builders use separate logical-index wrappers and native fr
 
 ## Generate a review scaffold
 
-For the in-game hotkey workflow, start the VS Code task **GTNH: Generate GUI templates on F9 (RC-2)**, then open the target GUI and press **Inventory UI audit** (F9 by default). Keep the task running while inspecting other interfaces. Each new capture produces its own bundle under `.setup/generated-ui-adapters/`; the task terminal prints the exact directory. Stop the task with Ctrl+C or VS Code's Terminate Task command.
+For the in-game hotkey workflow, start **GTNH: Watch F9 GUI templates**, choose the nightly or RC-2 instance, then open the target GUI and press **Inventory UI audit** (F9 by default). Keep the task running while inspecting other interfaces. Each new capture produces its own bundle under `.setup/generated-ui-adapters/`; the task terminal prints the exact directory. Stop the task with Ctrl+C or VS Code's Terminate Task command before switching instances.
 
-The task uses the local Prism instance named in `pack-baseline.json`. For a source client or another developer's instance, run from the repository root:
+The task also passes `-InsertIntoSource`. For a new native container it inserts a complete,
+fully commented registration block at the `F9-SCAFFOLDS` marker in
+`BuiltinInventoryUiAdapters.registerGeneratedAdapters()`. The generator also checks Java
+files in that compatibility directory and child packages for existing container declarations,
+so moving an adapter to its own mod file does not generate a conflicting central registration.
+Existing registrations/suggestions are left alone, so repeated captures do not duplicate code.
+New native scaffolds use one `/* ... */` block comment. Remove its two delimiters after review;
+the explanatory comments and unselected transfer option remain ordinary `//` comments.
+Review the bundle's notes, resolve layout/transfer behavior and explicitly enable the block.
+A GUI sharing an existing container may need `registerPresentation` instead of another adapter.
+MUI1/MUI2 keep their framework-specific notes/templates in the bundle: native registration cannot
+replace their builder integration. No generated registration is activated automatically.
+
+The task defaults to the current nightly instance and also offers RC-2. For a source client or another developer's instance, run from the repository root:
 
 ```powershell
 .\scripts\tools\Watch-InventoryUiTemplates.ps1 `
@@ -70,7 +105,7 @@ The task uses the local Prism instance named in `pack-baseline.json`. For a sour
 
 The watcher reads F9 audit files and runs the same generator below; it does not need a new game build. It ignores captures already present when started unless `-IncludeExisting` is passed. `-Once` processes existing captures and exits. Completed bundles are preserved on repeated runs; a changed capture gets a new content-hashed directory. Partially written or invalid files cannot activate support or stop subsequent captures from being processed.
 
-Each successful bundle contains the original `audit.json`, a normalized audit summary, manual-review notes, and an inactive `template-export.json` receipt. Native captures also include a commented Java registration scaffold. MUI2 captures include a Java template for binding and creating the shared live player-inventory component; it does not copy machine controls or migrate the original screen. MUI1 captures currently produce notes only. Nothing is copied into `src`, registered, compiled, or enabled automatically.
+Each successful bundle contains the original `audit.json`, a normalized audit summary, manual-review notes, and an inactive `template-export.json` receipt. Native captures also include a commented Java registration scaffold. MUI2 captures include a Java template for binding and creating the shared live player-inventory component; it does not copy machine controls or migrate the original screen. MUI1 captures currently produce notes only. The command-line watcher defaults to bundle-only export; `-InsertIntoSource` additionally inserts native comments into source as described above.
 
 From the repository root, run the generator with a saved audit JSON:
 
@@ -80,9 +115,9 @@ From the repository root, run the generator with a saved audit JSON:
   -OutputDirectory .setup\generated-ui-adapters
 ```
 
-The tool validates schema version 1, counts, slot indices, and class names, then writes an audit summary and manual-review notes. Native audits produce a fully commented Java registration example; MUI2 audits produce a player-section template, and MUI1 reports get framework-specific notes. Generated files stay outside `src` and are never compiled or activated by the exporter. Java files use UTF-8 without a byte-order mark on both Windows PowerShell 5.1 and PowerShell 7.
+The tool validates schema version 1, counts, slot indices, and class names, then writes an audit summary and manual-review notes. Native audits produce a fully commented Java registration example; MUI2 audits produce a player-section template, and MUI1 reports get framework-specific notes. Standalone bundles stay outside `src`; pass `-InsertIntoSource` to also insert native comments directly. No generated registration is activated by the exporter. Java files use UTF-8 without a byte-order mark on both Windows PowerShell 5.1 and PowerShell 7.
 
-Run `scripts/testing/test-ui-template-tools.ps1` to exercise the developer workflow, partial-file recovery, repeated-export preservation, source-output guard, and generated Java compilation. Its local tooling report is separate from production runtime qualification.
+Run `scripts/testing/test-ui-template-tools.ps1` to exercise the developer workflow, partial-file recovery, repeated-export preservation, source-output guard, and generated Java compilation. These tooling checks are separate from production GUI qualification.
 
 ## Generated scaffold and manual review
 
@@ -101,6 +136,22 @@ Do not register an unknown GUI by package wildcard, class-name prefix, heuristic
 ## Native registration API
 
 For an approved native adapter, use the explicit public API and exact observed classes. The generator's commented snippet is only a scaffold; it deliberately does not select transfer behavior or layout values:
+
+For a stable player grid, use `NativeUiLayout.builder().fixedPlayerColumns(9)`.
+This locks editor columns and lets visible rows/scrolling handle height limits,
+including when loading an older wide layout. It never moves stacks between slots.
+The default value, zero, retains the adapter's existing editable-column behavior.
+Native adapters follow the existing Machines: Vertical/Scroll setting by default;
+viewport height still limits visible rows. Use `.followMachineMode(false)` only when
+the integration deliberately needs the editor's own visible-row preference.
+The native editor can preview either mode without changing that global preference.
+
+Use `NativeUiLayout.builder().presentationRevision(1)` (the default) for saved
+geometry compatibility. Bump it only when that GUI's saved geometry becomes
+incompatible. The adapter's `compatibilityRevision` still tracks binding and
+transfer changes on both peers; transfer-only fixes no longer invalidate editor
+layouts. Schema-5 layout files retain strict GUI/capacity matching and can import
+compatible schema-1/2/3/4 geometry without deleting the originals.
 
 ```java
 InventoryUi.register(
@@ -154,16 +205,24 @@ For a new MUI2 panel that owns a live MUI2 player inventory, add the factory's `
 ```java
 sync.bindPlayerInventory(player);
 ModularPanel panel = ModularPanel.defaultPanel("example_inventory", 320, 240)
-    .child(Mui2InventoryWidgets.playerInventory((logicalIndex, slot) -> slot).pos(20, 20));
+    .child(Mui2InventoryWidgets.playerInventory((logicalIndex, slot) -> slot, player.inventory).pos(20, 20));
 ```
 
 The one-argument factory keeps the standard nine-column hotbar and responsive scrollable storage viewport. It uses MUI2's normal `sync.bindPlayerInventory(player)` path, for which Dynamic Inventory registers its canonical expanded player inventory wrapper under MUI2's `player` sync key; new panels should not need custom container overrides just to expose expanded player slots. For a caller-owned fixed layout, use `playerInventory(slotConsumer, columns, visibleRows)`, where columns are 3–18 and visible rows are 1–12; that overload does not join Dynamic Inventory's responsive MUI2 resize handling:
 
 ```java
-Mui2InventoryWidgets.playerInventory((logicalIndex, slot) -> slot, 12, 6);
+Mui2InventoryWidgets.playerInventory((logicalIndex, slot) -> slot, 12, 6, player.inventory);
 ```
 
 The consumer may decorate each supplied MUI2 `ItemSlot`, but return it with its sync handler and identity intact. These widgets are live slots backed by the player's inventory, not a visual-only preview. Complete public-API examples are in [`examples/java/example`](../examples/java/example/README.md).
+
+Pass the explicit owner for new common-side builders so per-player live capacity
+works on both sides. Older actorless factories resolve the local client viewer,
+or the startup default when no client viewer exists. Native API bindings capture
+a capacity revision: custom `PlayerInventoryBinding` implementations must return
+the revision captured at construction from `InventoryLayout.of(owner).revision()`;
+the default method describes revision zero only. Reopen a host after resizing
+instead of reusing its old binding. See [live resizing](live-inventory-resizing.md).
 
 For a complete, independently built Forge addon, use the [MUI2 test mod](../examples/mui2-test-mod/README.md).
 It depends on the development JAR, imports only the public widget API, and opens a
@@ -192,13 +251,21 @@ For GUIs that share an already registered container but need different layout ge
 4. Add targeted fixture coverage for slot maps, pickup/place, shift-click in both directions, final/offscreen slots, cursor conservation, recipe/equipment restrictions, and resizing/scrolling.
 5. Add an exact-version/profile activation gate and qualify the adapter in the intended pinned runtime. Record the tested artifact checksum and screenshots/reports before considering default activation.
 
+## Coverage boundary
 
-## Coverage and local reports
+A successful build is not a claim of support for every interface. Qualify the exact
+artifact, pinned dependency profile and host behavior; keep raw reports local.
+See [testing](testing.md) for the integrated, dedicated and pack test workflow.
+Standard MUI2 player-binding paths share integration, while custom widget creation,
+container overrides, transfer rules and synchronization require separate review.
+Class-scanner candidates and generated scaffolds do not establish compatibility.
 
-The API is experimental. Standard MUI1/MUI2 builder coverage does not mean every
-custom screen is supported. Check binding, transfer dispatch, filtering, equipment,
-custom packets, and lifecycle behavior for the actual host.
+## MUI2 migration direction
 
-Runtime reports, screenshots, launch metadata, and personal settings stay local
-and untracked. A successful build or preview is not full-pack qualification.
-See [testing](testing.md) for focused checks and runtime fixtures.
+For simple native storage screens, see the narrow
+[automatic scroll presentation contract](automatic-scroll-support.md). It reuses
+already integrated hosts and does not remove the need to review unknown container
+behavior. `NativeUiLayout.maximumVisibleRows(3)` can also cap a developer-owned
+presentation while retaining its fixed player columns.
+
+Keep the inventory core independent of the UI framework and native GUIs as the default. The public MUI2 factory above supports developer-owned MUI2 panels with live player slots; it does not convert existing native GT screens or qualify an entire mod. Keep the native presentation-only overlay opt-in, and do not layer MUI2 `ItemSlot` widgets on a native container's slots.

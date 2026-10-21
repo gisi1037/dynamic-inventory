@@ -5,7 +5,9 @@ param(
     [string] $GeneratedNamespace = 'dev.gilbe.dynamicinventory.discovered',
     [string] $AdapterName = '',
     [string] $AdapterId = '',
-    [switch] $Force
+    [switch] $Force,
+    [switch] $InsertIntoSource,
+    [string] $RegistrationFile = 'src/main/java/dev/gilbe/dynamicinventory/compat/BuiltinInventoryUiAdapters.java'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -162,7 +164,7 @@ $notesPath = Join-Path $outputFull ($outStem + '-manual-review.md')
 $summaryPath = Join-Path $outputFull ($outStem + '-audit-summary.json')
 $writeSource = $audit.framework -in @('NATIVE', 'MUI2')
 $expectedNativeSlotsLine = if ($null -ne $nativeSlotCount -and $nativeSlotCount -ge 36 -and $nativeSlotCount -le 32767) {
-    "        //     .expectedNativeSlots($nativeSlotCount)`n"
+    "                .expectedNativeSlots($nativeSlotCount)`n"
 } else {
     ''
 }
@@ -187,19 +189,21 @@ public final class $AdapterName {
 
     /** Manual opt-in hook; not called by any loader. */
     public static void register() {
+        /*
         // TODO resolve every audit reason and validate transfer/recipe/header behavior first.
-        // InventoryUi.register(
-        //     InventoryUiAdapter.builder("$AdapterId", "$($audit.containerClass)")
-        //         .gui("$($audit.screenClass)")
-$expectedNativeSlotsLine        //         .layout(NativeUiLayout.builder()
-        //             .topPadding(0) // TODO measure tab/header padding.
-        //             .minimumHeaderHeight(0) // TODO measure native header geometry.
-        //             .backgroundInset(0) // TODO choose per-frame clipping after inspection.
-        //             .build())
-        //         // Choose exactly one after inspection:
-        //         // .extraTransfers(InventoryTransfers.toNativeSlots())
-        //         // .nativeTransfers()
-        //         .build());
+        InventoryUi.register(
+            InventoryUiAdapter.builder("$AdapterId", "$($audit.containerClass)")
+                .gui("$($audit.screenClass)")
+$expectedNativeSlotsLine                .layout(NativeUiLayout.builder()
+                    .topPadding(0) // TODO measure tab/header padding.
+                    .minimumHeaderHeight(0) // TODO measure native header geometry.
+                    .backgroundInset(0) // TODO choose per-frame clipping after inspection.
+                    .build())
+                // Choose exactly one after inspection:
+                // .extraTransfers(InventoryTransfers.toNativeSlots())
+                // .nativeTransfers()
+                .build());
+        */
     }
 }
 "@
@@ -308,4 +312,65 @@ if ($writeSource) { Write-Output "Unregistered Java template: $sourcePath" }
 else { Write-Output "Framework-specific review notes: $notesPath" }
 Write-Output "Review notes: $notesPath"
 Write-Output "Audit summary: $summaryPath"
-Write-Output 'No source files were changed; the scaffold is not registered or enabled.'
+if ($InsertIntoSource -and $audit.framework -eq 'NATIVE') {
+    if (![IO.Path]::IsPathRooted($RegistrationFile)) { $RegistrationFile = Join-Path $projectRoot $RegistrationFile }
+    $registrationPath = [IO.Path]::GetFullPath($RegistrationFile)
+    $projectPrefix = $projectRoot.TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar
+    if (!$registrationPath.StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetExtension($registrationPath) -ne '.java') {
+        throw 'RegistrationFile must be an existing Java file inside this workspace.'
+    }
+    # One lock across all watchers/output directories. The game never writes project source itself.
+    $lockPath = Join-Path $projectRoot '.setup/ui-source-insert.lock'
+    New-Item -ItemType Directory -Force -Path (Split-Path $lockPath -Parent) | Out-Null
+    $sourceLock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
+    $temporarySource = $null
+    try {
+        $source = [IO.File]::ReadAllText($registrationPath)
+        $marker = '        // F9-SCAFFOLDS: New native adapter suggestions are inserted above this marker, fully commented.'
+        if ([regex]::Matches($source, [regex]::Escape($marker)).Count -ne 1) { throw 'Expected one F9 source insertion marker.' }
+        # Reviewed adapters live in per-mod files beside this dispatcher. Include child packages
+        # so moving a declaration cannot make F9 suggest a conflicting second registration.
+        # Match the exact Java string; commented suggestions still count as declarations.
+        $containerLiteral = '"' + $audit.containerClass + '"'
+        $alreadyDeclared = $source.Contains($containerLiteral)
+        if (!$alreadyDeclared) {
+            $templatePrefix = $outputFull.TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar
+            foreach ($module in Get-ChildItem -LiteralPath (Split-Path $registrationPath -Parent) -Filter '*.java' -File -Recurse) {
+                # An exported template is not a declaration in the integration source.
+                if ($module.FullName.StartsWith($templatePrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ([IO.File]::ReadAllText($module.FullName).Contains($containerLiteral)) {
+                    $alreadyDeclared = $true
+                    break
+                }
+            }
+        }
+        if ($alreadyDeclared) {
+            Write-Output 'Compatibility source already contains this container; keeping its existing adapter/scaffold.'
+        } else {
+            $expression = [regex]::Match($java, '(?ms)^        /\*\r?\n.*?InventoryUi\.register\(.*?\.build\(\)\);\r?\n        \*/')
+            if (!$expression.Success) { throw 'Missing native registration scaffold.' }
+            $newline = if ($source.Contains("`r`n")) { "`r`n" } else { "`n" }
+            $block = "        // F9 suggestion: $AdapterId. Review transfers and layout before enabling." + $newline +
+                $expression.Value.Replace("`r`n", "`n").Replace("`n", $newline) + $newline + $newline
+            # Only the validated, generator-owned commented expression enters source. No audit reason text/code is copied.
+            $next = $source.Replace($marker, $block + $marker)
+            $temporarySource = Join-Path (Split-Path $registrationPath -Parent) ('.f9-' + [guid]::NewGuid().ToString('N') + '.tmp')
+            [IO.File]::WriteAllText($temporarySource, $next, $utf8NoBom)
+            if ([IO.File]::ReadAllText($registrationPath) -cne $source) { throw 'Source changed during insertion; retry capture.' }
+            # PowerShell 5 converts $null to an empty path here; use a real backup path for .NET Framework.
+            $sourceBackup = $temporarySource + '.bak'
+            [IO.File]::Replace($temporarySource, $registrationPath, $sourceBackup)
+            [IO.File]::Delete($sourceBackup)
+            $temporarySource = $null
+            Write-Output "Commented registration inserted: $registrationPath"
+        }
+    } finally {
+        if ($temporarySource -and [IO.File]::Exists($temporarySource)) { [IO.File]::Delete($temporarySource) }
+        $sourceLock.Dispose()
+    }
+} elseif ($InsertIntoSource) {
+    Write-Output 'This framework needs a builder integration; its template/notes remain in the generated bundle.'
+} else {
+    Write-Output 'No source files were changed; the scaffold is not registered or enabled.'
+}

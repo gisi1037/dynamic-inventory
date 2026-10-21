@@ -17,7 +17,7 @@ function Start-QualificationEvidence {
         [Parameter(Mandatory)][string] $ProjectRoot,
         [Parameter(Mandatory)][int] $Port,
         [Parameter(Mandatory)][string] $GameDirectory,
-        [Parameter(Mandatory)][ValidateSet('isolated','rc2-integration')][string] $Profile,
+        [Parameter(Mandatory)][ValidateSet('isolated','rc2-integration','daily-2026-10-19')][string] $Profile,
         [Parameter(Mandatory)][string] $EvidenceDirectory,
         [string] $PeerMetadataPath = '',
         [string] $ServerGameDirectory = '',

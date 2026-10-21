@@ -40,14 +40,19 @@ public class DynamicInventory {
 
     @NetworkCheckHandler
     public boolean acceptsRemote(Map<String, String> versions, Side remoteSide) {
-        int remoteStorage = InventoryCapacity.readWireStorage(versions.get(MODID));
+        String advertised = versions.get(MODID);
+        // Forge probes an empty mod list while constructing this mod, before adapter
+        // registration can close. Status probes also use a bare version. Neither is
+        // a capacity negotiation, so neither may request the frozen adapter digest.
+        if (advertised == null) return false;
+        boolean statusVersion = Tags.VERSION.equals(advertised);
+        int remoteStorage = statusVersion ? -1 : InventoryCapacity.readWireStorage(advertised);
         // Forge also calls this for server-list status probes, which contain ordinary mod versions.
         // Bare versions are not negotiable: CapacityLoginMixin requires protocol + digest on the real handshake.
-        boolean compatible = (remoteStorage >= 0 || Tags.VERSION.equals(versions.get(MODID)))
+        boolean compatible = (remoteStorage >= 0 || statusVersion)
             && (!BackhandCompatibility.enabled() || PackCompatibility.enabled() == versions.containsKey("bogosorter"))
-            && (BackhandCompatibility.enabled()
-                ? BackhandCompatibility.SUPPORTED_VERSION.equals(versions.get("backhand"))
-                : !versions.containsKey("backhand"));
+            && (BackhandCompatibility.enabled() ? BackhandCompatibility.supportedVersion()
+                .equals(versions.get("backhand")) : !versions.containsKey("backhand"));
         return compatible;
     }
 
@@ -88,6 +93,9 @@ public class DynamicInventory {
         // Registering this channel with Forge would change its dispatch order/thread. Fail early on a collision.
         for (Side side : Side.values()) if (NetworkRegistry.INSTANCE.hasChannel(InventoryOpeningProtocol.CHANNEL, side))
             throw new IllegalStateException("Inventory opening channel is unexpectedly registered with Forge");
+        for (Side side : Side.values()) if (NetworkRegistry.INSTANCE
+            .hasChannel(dev.gilbe.dynamicinventory.network.InventoryResizeProtocol.CHANNEL, side))
+            throw new IllegalStateException("Inventory resize channel is unexpectedly registered with Forge");
         // Addons may register through postInit. Every subsequent handshake uses this fixed declaration digest.
         InventoryUi.closeRegistration();
     }

@@ -4,6 +4,7 @@ param(
     [string] $OutputDirectory = '.setup/generated-ui-adapters',
     [switch] $IncludeExisting,
     [switch] $Once,
+    [switch] $InsertIntoSource,
     [ValidateRange(100, 10000)] [int] $PollMilliseconds = 500,
     [ValidateRange(0, 86400)] [int] $RunForSeconds = 0
 )
@@ -87,7 +88,8 @@ try {
                         New-Item -ItemType Directory -Path $staging | Out-Null
                         $snapshot = Join-Path $staging 'audit.json'
                         [IO.File]::WriteAllBytes($snapshot, $bytes)
-                        & (Join-Path $PSScriptRoot 'New-InventoryUiAdapter.ps1') -AuditPath $snapshot -OutputDirectory $staging | Out-Null
+                        & (Join-Path $PSScriptRoot 'New-InventoryUiAdapter.ps1') -AuditPath $snapshot -OutputDirectory $staging -InsertIntoSource:$InsertIntoSource |
+                            ForEach-Object { if ($_ -match 'inserted:|already contains|builder integration') { Write-Host $_ } }
                         @{schemaVersion=1; sourceAudit=$file.FullName; auditSha256=$digest;
                             generatedAtUtc=[datetime]::UtcNow.ToString('o'); activated=$false} |
                             ConvertTo-Json | Set-Content -LiteralPath (Join-Path $staging 'template-export.json') -Encoding UTF8

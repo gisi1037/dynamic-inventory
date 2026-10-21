@@ -2,8 +2,16 @@ package dev.gilbe.dynamicinventory.inventory;
 
 import net.minecraft.nbt.NBTTagCompound;
 
-/** Opaque rejected save data, retained for recovery rather than inserted as playable items. */
+/** Internal inventory-owned state. Setters are lifecycle hooks, not an unsynchronized resize API. */
 public interface ExpandedInventoryAccess {
+
+    InventoryShape dynamicinventory$getShape();
+
+    void dynamicinventory$setShape(InventoryShape shape);
+
+    boolean dynamicinventory$hasCapacityOverride();
+
+    void dynamicinventory$setCapacityOverride(boolean overridden);
 
     NBTTagCompound dynamicinventory$getRecovery();
 

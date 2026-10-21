@@ -13,7 +13,7 @@ import dev.gilbe.dynamicinventory.inventory.InventoryCapacity;
 /** Startup declaration agreement, not an exchange of each runtime container's slot layout. */
 public final class InventoryUiProtocol {
 
-    public static final int WIRE_VERSION = 3;
+    public static final int WIRE_VERSION = 4;
 
     private InventoryUiProtocol() {}
 

@@ -4,7 +4,8 @@ param(
     [string] $EvidenceDirectory = '',
     [string] $PlayerName = '',
     [switch] $SourceFixture,
-    [int] $ExpectedPlayerSlots = 0
+    [int] $ExpectedPlayerSlots = 0,
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -44,6 +45,10 @@ if ($SourceFixture) {
     $artifactSha256 = (Get-FileHash -LiteralPath $installedJar -Algorithm SHA256).Hash
     $developmentArtifactSha256 = $null
     $sourceLaunch = $null
+}
+$packTarget = if ($SourceFixture) { '2.9.0-RC-2' } else {
+    $marker = Join-Path (Split-Path $GameDirectory -Parent) '.dynamicinventory-dev-instance'
+    (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).version
 }
 $checks = [Collections.Generic.List[string]]::new()
 
@@ -128,11 +133,11 @@ function Set-GuiScale([string] $Name, [int] $Scale, $Baseline, [int] $SlotCount,
     Assert-Presentation $Name $script:expectedPresentationSlots
 }
 
-Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null
+Harness require-qualification $WorldName | Out-Null
 Harness background | Out-Null
 Harness resume | Out-Null
-$teleportCommand = if ($PlayerName) { "/tp $PlayerName 0 4 0" } else { '/tp 0 4 0' }
-Harness command $teleportCommand | Out-Null
+$testPlayer = if ($PlayerName) { $PlayerName } else { '@p' }
+Harness command "/tp $testPlayer 0 4 0" | Out-Null
 Harness command '/setblock 1 4 0 minecraft:air' | Out-Null
 Harness command '/setblock 2 4 0 minecraft:air' | Out-Null
 Ensure-PresentationEnabled
@@ -238,7 +243,7 @@ if (!(Test-Path -LiteralPath $installedJar)) { throw "Missing installed producti
 @{
     success = $true
     prototype = '0.8.0-dev'
-    packTarget = '2.9.0-RC-2'
+    packTarget = $packTarget
     sourceFixture = [bool] $SourceFixture
     expectedPlayerSlots = $ExpectedPlayerSlots
     presentationEnabled = $true

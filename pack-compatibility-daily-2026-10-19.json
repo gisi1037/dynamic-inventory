@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Exact integration files from the SHA-256 verified official daily 795 client archive; runtime qualification pending",
+  "profile": "daily-2026-10-19",
+  "packVersion": "2.9.0-nightly-2026-10-19",
+  "build": 795,
+  "archiveSha256": "178D45D2C9F67D408B387A0A9ACE98B1D4EF0BC069A09020A373F595AC3D1612",
+  "installedFiles": [
+    {
+      "file": "backhand-1.8.17.jar",
+      "sha256": "232AA0A2AB6CFC34405AFF76C18730E901877463D1DF819B6B133A1CA448F93A"
+    },
+    {
+      "file": "battlegear2-1.6.8-backhand.jar",
+      "sha256": "2A05BF562FA84C82E7D03AE642CBB4BB488EDC60A1BD3E65717D44F222B09908"
+    },
+    {
+      "file": "BaublesExpanded-2.2.25-GTNH.jar",
+      "sha256": "942F2A9E7D97582A9B1EC9302F1FA3BB86CC547F2873AA902DC44AA919F7CEEE"
+    },
+    {
+      "file": "bogosorter-1.3.54-GTNH.jar",
+      "sha256": "B043C875DF9FCD38349E9D26F73840E1DFEA9E1C4A1254E060C0D51FE05A139B"
+    },
+    {
+      "file": "craftingtweaks-1.0.3.jar",
+      "sha256": "36425FB80523D3F9FF61C686638476DE7257E68C4CC2F3CCBEC5F7A16AA4346A"
+    },
+    {
+      "file": "Galacticraft-3.4.35-GTNH.jar",
+      "sha256": "AB57BF9E6D2A91A15C34D1F4467D903D50DA731ABB1A5A52E2943E96ED824D50"
+    },
+    {
+      "file": "gregtech-5.09.54.238.jar",
+      "sha256": "274C7FC6EC5B16933BBB2156AC5D44652DDD0F3232AD3B0D83E0CDE4B54C14C4"
+    },
+    {
+      "file": "gtnhextlib-1.0.5.jar",
+      "sha256": "64509AE4FD28A61C01CA71712FEC0BFBD2B62DDB2BB8E53B1BAB1B73C1E1BB38"
+    },
+    {
+      "file": "gtnhlib-0.11.54.jar",
+      "sha256": "61340948F200CE52F210380EC00EC763FE867FAC10C6342743E04C1688E85039"
+    },
+    {
+      "file": "hodgepodge-2.7.217.jar",
+      "sha256": "BACE1388077B6A8A1DD46A27EAB35CAEF61C1913FE417F3120B02AFBCD1C1F38"
+    },
+    {
+      "file": "lwjgl3ify-3.0.39.jar",
+      "sha256": "C120EF93DFDA5BD54E2B16FFAE3265FC8BB188E952790CB886999896A70A52C6"
+    },
+    {
+      "file": "Mantle-0.5.4.jar",
+      "sha256": "6E5C4B0699888B54D81EC9E2A2AC0FBD2905A08766A819B8F823FF3E1BD6B9EE"
+    },
+    {
+      "file": "modularui-1.3.4.jar",
+      "sha256": "9221B07C9B09725FC4E935CF63E8116751667FE9C0E7A98BD523A6411141B33F"
+    },
+    {
+      "file": "modularui2-2.3.92-1.7.10.jar",
+      "sha256": "B6FB3B9C33D2B059AB7E9AF75FEA255F52F9F2FB752C6CC27BF3616EBD9B9E86"
+    },
+    {
+      "file": "NotEnoughItems-2.8.162-GTNH.jar",
+      "sha256": "CC4190B66573177A919F96B405B71B3D1BC190B503AD275F8561212C0E464B2D"
+    },
+    {
+      "file": "IronChest-6.1.13.jar",
+      "sha256": "EAADB2B27192D1EC086C59BDE8C216A7AABD967F7B84CA2D389B05989C096735"
+    },
+    {
+      "file": "OpenBlocks-1.12.22-GTNH.jar",
+      "sha256": "BF7DC845B023E72EA6DF24B70557CD42D6F3DF91C5BC978D2561C711C963CB52"
+    },
+    {
+      "file": "TConstruct-1.14.119-GTNH.jar",
+      "sha256": "92F43F02B02D8A0224112DF2F001399D7D1A11A6421BB9B21E1B0C81C5EF7F89"
+    }
+  ],
+  "fullPackAcceptanceComplete": false
+}

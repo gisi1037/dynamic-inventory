@@ -80,13 +80,14 @@ public final class InventoryUi {
         PRESENTATIONS.put(key, layout);
     }
 
-    /** Returns null when this native GUI has not explicitly opted into the shared presentation. */
+    /** Explicit presentations win; the client may approve a narrow storage-only presentation fallback. */
     public static synchronized NativeUiLayout findLayout(Container container, Class<?> guiClass) {
         InventoryUiAdapter adapter = findAdapter(container);
         if (adapter == null || guiClass == null) return null;
         NativeUiLayout override = PRESENTATIONS.get(adapter.getId() + "\n" + guiClass.getName());
         if (override != null) return override;
-        return adapter.matchesGuiClass(guiClass) ? adapter.getLayout() : null;
+        if (adapter.matchesGuiClass(guiClass)) return adapter.getLayout();
+        return DynamicInventory.proxy == null ? null : DynamicInventory.proxy.automaticLayout(container, guiClass);
     }
 
     /** Returns the most specific explicit class registration, or null for an unsupported container. */
@@ -123,6 +124,9 @@ public final class InventoryUi {
      */
     public static boolean isOpeningReady(EntityPlayer player) {
         if (player == null) return false;
+        PlayerInventoryBinding binding = getBinding(player.openContainer);
+        if (binding != null && binding.getCapacityRevision() != InventoryLayout.of(player.inventory)
+            .revision()) return false;
         if (player instanceof EntityPlayerMP) {
             EntityPlayerMP serverPlayer = (EntityPlayerMP) player;
             // Forge fake players have no play connection or remote peer to negotiate with. Preserve
@@ -214,12 +218,17 @@ public final class InventoryUi {
                 "Expected " + adapter.getExpectedNativeSlots()
                     + " native slots; found "
                     + container.inventorySlots.size());
-        boolean[] seen = new boolean[InventoryLayout.mainSlots()];
+        if (inventory.mainInventory.length != InventoryLayout.of(inventory)
+            .rawMainSlots())
+            throw new IllegalArgumentException("Player backing array differs from its inventory shape");
+        boolean[] seen = new boolean[InventoryLayout.of(inventory)
+            .mainSlots()];
         for (Slot slot : container.inventorySlots) {
             if (slot.inventory instanceof InventoryPlayer && slot.inventory != inventory)
                 throw new IllegalArgumentException("Container contains another player's inventory");
             if (slot.inventory != inventory) continue;
-            int logical = InventoryLayout.ordinaryIndex(slot.getSlotIndex());
+            int logical = InventoryLayout.of(inventory)
+                .ordinaryIndex(slot.getSlotIndex());
             if (logical < 0) continue;
             if (seen[logical]) throw new IllegalArgumentException("Duplicate player index " + logical);
             seen[logical] = true;
@@ -239,6 +248,8 @@ public final class InventoryUi {
         PlayerInventoryBinding binding = getBinding(container);
         InventoryUiAdapter adapter = findAdapter(container);
         return binding != null && adapter != null
+            && binding.getCapacityRevision() == InventoryLayout.of(binding.getPlayerInventory())
+                .revision()
             && adapter.getTransferPolicy() != null
             && slotId >= binding.getNativeSlotCount()
             && slotId < container.inventorySlots.size()

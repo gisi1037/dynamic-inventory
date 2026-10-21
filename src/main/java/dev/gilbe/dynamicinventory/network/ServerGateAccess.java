@@ -4,4 +4,6 @@ package dev.gilbe.dynamicinventory.network;
 public interface ServerGateAccess {
 
     ServerInventoryGate dynamicinventory$openingGate();
+
+    ServerInventoryResizeGate dynamicinventory$resizeGate();
 }

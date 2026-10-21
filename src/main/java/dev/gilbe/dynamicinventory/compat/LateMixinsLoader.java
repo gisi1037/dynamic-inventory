@@ -18,32 +18,57 @@ public final class LateMixinsLoader implements ILateMixinLoader {
 
     @Override
     public List<String> getMixins(Set<String> loadedMods) {
+        // Subpackages organize integrations; these guards still control whether
+        // their mixins load. Moving a class must never change its side/mod guard.
         List<String> mixins = new ArrayList<>();
-        if (PackCompatibility.enabled() && loadedMods.contains("bogosorter"))
-            mixins.addAll(Arrays.asList("BogoPlayerSlotsMixin", "BogoRefillMixin", "BogoOpeningActionsMixin"));
+        if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.addAll(
+            Arrays.asList(
+                "bogosorter.BogoPlayerSlotsMixin",
+                "bogosorter.BogoRefillMixin",
+                "bogosorter.BogoOpeningActionsMixin"));
         if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
-            mixins.add("CraftingTweakOpeningActionsMixin");
+            mixins.add("craftingtweaks.CraftingTweakOpeningActionsMixin");
+        if (PackCompatibility.enabled() && loadedMods.contains("OpenBlocks")) mixins
+            .addAll(Arrays.asList("openblocks.OpenBlocksInventoryRestoreMixin", "openblocks.OpenBlocksGraveMixin"));
         if (PackCompatibility.enabled() && loadedMods.contains("TConstruct")) {
-            mixins.add("CraftingStationInventoryMixin");
+            mixins.add("tconstruct.CraftingStationInventoryMixin");
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
-                .isClient()) mixins.addAll(Arrays.asList("CraftingStationGuiMixin", "TinkerRecipePositionMixin"));
+                .isClient())
+                mixins.addAll(
+                    Arrays.asList(
+                        "tconstruct.CraftingStationGuiMixin",
+                        "tconstruct.TinkerRecipePositionMixin",
+                        "tconstruct.InventoryTabFrameMixin"));
         }
         if (PackCompatibility.enabled() && loadedMods.contains("GalacticraftCore"))
-            mixins.add("GalacticraftInventoryMixin");
-        if (loadedMods.contains("modularui2"))
-            mixins.addAll(Arrays.asList("Mui2PlayerBindingMixin", "Mui2PlayerWidgetsMixin", "Mui2PlayerLookupMixin"));
+            mixins.add("galacticraft.GalacticraftInventoryMixin");
+        if (loadedMods.contains("modularui2")) mixins.addAll(
+            Arrays.asList(
+                "modularui2.Mui2PlayerBindingMixin",
+                "modularui2.Mui2PlayerWidgetsMixin",
+                "modularui2.Mui2PlayerLookupMixin"));
         if (loadedMods.contains("modularui"))
-            mixins.addAll(Arrays.asList("Mui1PlayerWidgetsMixin", "Mui1PlayerTransferMixin"));
+            mixins.addAll(Arrays.asList("modularui.Mui1PlayerWidgetsMixin", "modularui.Mui1PlayerTransferMixin"));
         if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
             .isClient()) {
-            if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.add("BogoSortButtonMixin");
+            if (PackCompatibility.enabled() && loadedMods.contains("etfuturum")) {
+                PackCompatibility.require("etfuturum", "EtFuturum");
+                mixins.add("etfuturum.EtFuturumEnchantmentGuiMixin");
+            }
+            if (PackCompatibility.enabled() && loadedMods.contains("bogosorter"))
+                mixins.add("bogosorter.BogoSortButtonMixin");
             if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
-                mixins.add("CraftingTweakButtonMixin");
-            if (loadedMods.contains("modularui2")) mixins.add("Mui2InventoryResizeMixin");
-            if (loadedMods.contains("modularui")) mixins.add("Mui1InventoryResizeMixin");
+                mixins.add("craftingtweaks.CraftingTweakButtonMixin");
+            if (loadedMods.contains("modularui2")) mixins.add("modularui2.Mui2InventoryResizeMixin");
+            if (loadedMods.contains("modularui")) mixins.add("modularui.Mui1InventoryResizeMixin");
         }
         if (loadedMods.contains("NotEnoughItems") && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
-            .isClient()) mixins.addAll(Arrays.asList("NativeRecipeTransferMixin", "NativeRecipePositionMixin"));
+            .isClient())
+            mixins.addAll(
+                Arrays.asList(
+                    "nei.NativeRecipeTransferMixin",
+                    "nei.NativeRecipePositionMixin",
+                    "nei.NativeRecipeHotspotMixin"));
         return mixins;
     }
 }

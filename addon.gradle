@@ -1,3 +1,5 @@
+apply from: "gradle/integration-profiles.gradle"
+
 // The small source-level client needs much less memory than the full GTNH pack.
 afterEvaluate {
     tasks.matching { it.name.startsWith("runClient") || it.name.startsWith("runServer") }.each {
@@ -80,7 +82,7 @@ tasks.register("writeInventoryProfile") {
         def destination = profileOutput.get().asFile
         destination.parentFile.mkdirs()
         destination.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
-            [profile: profileName, packTarget: "2.9.0-RC-2", artifacts: entries])) + "\n"
+            [profile: profileName, packTarget: inventoryPackTarget, artifacts: entries])) + "\n"
         logger.lifecycle("Wrote {}", destination)
     }
 }
@@ -91,7 +93,7 @@ tasks.register("writeFixtureClientLaunch") {
     def clientTask = tasks.named("runClient25")
     dependsOn { clientTask.get().taskDependencies.getDependencies(clientTask.get()) }
     doLast {
-        if (!(inventoryProfile in ["isolated", "rc2-mui2", "rc2-backhand", "rc2-integration"]) || !project.hasProperty("inventoryStorageTests")) {
+        if (!project.hasProperty("inventoryStorageTests")) {
             throw new GradleException("Requires a known inventory profile and inventoryStorageTests")
         }
         def launch = clientTask.get()
@@ -143,14 +145,14 @@ if (project.hasProperty("inventoryStorageTests")) {
         dependsOn tasks.named("storageTestClasses")
         classpath += sourceSets.storageTest.output
     }
-    if (inventoryProfile in ["rc2-backhand", "rc2-integration"]) {
+    if (inventoryBackhand) {
         sourceSets {
             backhandTest {
                 compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output + sourceSets.storageTest.output
                 runtimeClasspath += sourceSets.main.runtimeClasspath
             }
         }
-        if (inventoryProfile == "rc2-integration") {
+        if (inventoryFullIntegration) {
             sourceSets {
                 packTest {
                     compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output + sourceSets.storageTest.output

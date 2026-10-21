@@ -13,12 +13,14 @@ public final class ClientInputGuard {
 
     private ClientInputGuard() {}
 
-    /** Window zero and unregistered containers retain their normal input path. */
+    /** Resize agreement locks all inventory screens; ordinary opening checks remain adapter-specific. */
     public static boolean isPending(GuiScreen screen) {
         Minecraft client = Minecraft.getMinecraft();
         EntityPlayer player = client.thePlayer;
         if (screen == null || screen != client.currentScreen || player == null || player.openContainer == null)
             return false;
+        if (client.getNetHandler() != null && !((ClientGateAccess) client.getNetHandler()).dynamicinventory$resizeGate()
+            .allowsInput(player)) return true;
         if (player.openContainer.windowId == 0 || InventoryUi.findAdapter(player.openContainer) == null) return false;
         return !InventoryUi.isOpeningReady(player);
     }

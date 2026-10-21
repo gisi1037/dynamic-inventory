@@ -23,6 +23,7 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     private InventoryViewLayout view;
+    private final net.minecraft.entity.player.InventoryPlayer ownerInventory;
     private PlayerHeaderLayout header;
     private BaublesPanelLayout baublesPanel;
     private boolean baublesOpen;
@@ -42,6 +43,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     public PlayerInventoryScreen(EntityPlayer player) {
         super(player.inventoryContainer);
+        ownerInventory = player.inventory;
         allowUserInput = true;
     }
 
@@ -77,7 +79,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             width,
             height - tabSpace,
             InventoryViewSettings.columns,
-            InventoryViewSettings.rows);
+            InventoryViewSettings.rows,
+            InventoryLayout.of(ownerInventory)
+                .storageSlots());
         int equipmentSlots = PackCompatibility.enabled() ? BaublesInventoryBridge.visibleSlotCount() : 0;
         header = new PlayerHeaderLayout(view.width, equipmentSlots);
         baublesPanel = baublesOpen && !header.inlineBaublesFits && equipmentSlots > 0
@@ -87,7 +91,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             width - baublesPanel.width - 4,
             height - tabSpace,
             InventoryViewSettings.columns,
-            InventoryViewSettings.rows);
+            InventoryViewSettings.rows,
+            InventoryLayout.of(ownerInventory)
+                .storageSlots());
         xSize = view.width + (baublesPanel == null ? 0 : baublesPanel.width + 4);
         ySize = tabSpace + Math.max(view.height, baublesPanel == null ? 0 : baublesPanel.height);
         header = new PlayerHeaderLayout(view.width, equipmentSlots);
@@ -168,8 +174,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             offhand.xDisplayPosition = PlayerHeaderLayout.OFFHAND_X;
             offhand.yDisplayPosition = PlayerHeaderLayout.OFFHAND_Y;
         }
-        for (int main = 0; main < InventoryLayout.mainSlots(); main++) {
-            Slot slot = inventorySlots.getSlot(PlayerContainerLayout.containerId(main));
+        for (int main = 0; main < InventoryLayout.of(ownerInventory)
+            .mainSlots(); main++) {
+            Slot slot = inventorySlots.getSlot(PlayerContainerLayout.containerId(ownerInventory, main));
             if (main < 9) {
                 slot.xDisplayPosition = (view.width - 162) / 2 + main * 18;
                 slot.yDisplayPosition = view.hotbarY;
@@ -182,7 +189,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             }
         }
         int cell = 0;
-        for (int id = PlayerContainerLayout.slotCount(); id < inventorySlots.inventorySlots.size(); id++) {
+        for (int id = PlayerContainerLayout.slotCount(ownerInventory); id
+            < inventorySlots.inventorySlots.size(); id++) {
             Slot slot = inventorySlots.getSlot(id);
             boolean assigned = BaublesInventoryBridge.visible(slot);
             boolean visible = baublesOpen && assigned;
@@ -209,15 +217,18 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 break;
             case 101:
                 columns = 18;
-                rows = (InventoryLayout.storageSlots() + 17) / 18;
+                rows = (InventoryLayout.of(ownerInventory)
+                    .storageSlots() + 17) / 18;
                 break;
             case 102:
                 columns = 9;
-                rows = (InventoryLayout.storageSlots() + 8) / 9;
+                rows = (InventoryLayout.of(ownerInventory)
+                    .storageSlots() + 8) / 9;
                 break;
             case 103:
                 columns = 6;
-                rows = (InventoryLayout.storageSlots() + 5) / 6;
+                rows = (InventoryLayout.of(ownerInventory)
+                    .storageSlots() + 5) / 6;
                 break;
             case 104:
                 columns--;
@@ -515,7 +526,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                     mouseY,
                     fontRendererObj);
             if (baublesOpen) {
-                for (int id = PlayerContainerLayout.slotCount(); id < inventorySlots.inventorySlots.size(); id++) {
+                for (int id = PlayerContainerLayout.slotCount(ownerInventory); id
+                    < inventorySlots.inventorySlots.size(); id++) {
                     Slot slot = inventorySlots.getSlot(id);
                     int x = guiLeft + slot.xDisplayPosition;
                     int y = guiTop + slot.yDisplayPosition;
@@ -600,10 +612,12 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         presentation.dispose();
         super.onGuiClosed();
         // Geometry is local to this screen; restore the persistent container's default positions afterward.
-        for (int main = 0; main < InventoryLayout.mainSlots(); main++) {
-            Slot slot = inventorySlots.getSlot(PlayerContainerLayout.containerId(main));
+        for (int main = 0; main < InventoryLayout.of(ownerInventory)
+            .mainSlots(); main++) {
+            Slot slot = inventorySlots.getSlot(PlayerContainerLayout.containerId(ownerInventory, main));
             slot.xDisplayPosition = main < 9 ? 8 + main * 18 : PlayerContainerLayout.storageX(main);
-            slot.yDisplayPosition = main < 9 ? PlayerContainerLayout.hotbarY() : PlayerContainerLayout.storageY(main);
+            slot.yDisplayPosition = main < 9 ? PlayerContainerLayout.hotbarY(ownerInventory)
+                : PlayerContainerLayout.storageY(main);
         }
         inventorySlots.getSlot(0).xDisplayPosition = 144;
         inventorySlots.getSlot(0).yDisplayPosition = 36;
@@ -620,7 +634,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             offhand.xDisplayPosition = 80;
             offhand.yDisplayPosition = 65;
         }
-        for (int id = PlayerContainerLayout.slotCount(); id < inventorySlots.inventorySlots.size(); id++) {
+        for (int id = PlayerContainerLayout.slotCount(ownerInventory); id
+            < inventorySlots.inventorySlots.size(); id++) {
             inventorySlots.getSlot(id).xDisplayPosition = -10000;
             inventorySlots.getSlot(id).yDisplayPosition = -10000;
         }

@@ -9,6 +9,8 @@ import net.minecraft.network.play.client.C17PacketCustomPayload;
 
 import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
+import dev.gilbe.dynamicinventory.compat.PackClientCompatibility;
+import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 import dev.gilbe.dynamicinventory.network.InventoryOpeningProtocol;
 import dev.gilbe.dynamicinventory.network.InventoryOpeningProtocol.Message;
 
@@ -19,11 +21,18 @@ public final class ClientInventoryGate {
     private int window, deadline;
     private long lastNonce;
     private Message offer;
-    private boolean accepted, committed, ready;
+    private boolean accepted, committed, ready, recipeDetour;
 
     public boolean allowsInput(EntityPlayer player, int packetWindow) {
-        if (player == null || packetWindow != player.openContainer.windowId) return false;
+        if (player == null) return false;
+        Minecraft current = Minecraft.getMinecraft();
+        if (current.getNetHandler() == null
+            || !((ClientGateAccess) current.getNetHandler()).dynamicinventory$resizeGate()
+                .allowsInput(player))
+            return false;
         refresh(player);
+        if (recipeDetour || packetWindow != player.openContainer.windowId
+            || (PackCompatibility.enabled() && PackClientCompatibility.isRecipePlaceholder(player))) return false;
         Container active = player.openContainer;
         if (active.windowId == 0) return active == player.inventoryContainer || InventoryUi.findAdapter(active) == null;
         if (container == active && offer != null) return ready;
@@ -83,8 +92,10 @@ public final class ClientInventoryGate {
     public boolean filter(Minecraft client, int packetWindow) {
         EntityPlayer player = client.thePlayer;
         if (player == null || packetWindow == 0) return false;
-        if (packetWindow != -1 && packetWindow != player.openContainer.windowId) return false;
         refresh(player);
+        if (packetWindow != -1 && packetWindow != player.openContainer.windowId) return false;
+        // Native contents cannot target NEI's placeholder. The host is checked again when NEI returns it.
+        if (recipeDetour) return false;
         if (container == player.openContainer && committed) return false;
         if (allowsInput(player, player.openContainer.windowId)) return false;
         if (offer == null) close(client, "Inventory contents arrived before opening agreement");
@@ -117,11 +128,43 @@ public final class ClientInventoryGate {
         accepted = false;
         committed = false;
         ready = false;
+        recipeDetour = false;
         // Keep lastNonce for this connection. Window IDs are reused, but an old offer must stay obsolete.
     }
 
     private void refresh(EntityPlayer player) {
-        if (container != null && (container != player.openContainer || window != container.windowId)) clear();
+        if (container == null) return;
+        if (window != container.windowId) {
+            clear();
+            return;
+        }
+        if (container != player.openContainer) {
+            // Only an already approved exact host survives NEI's temporary client-only container.
+            if (ready && committed
+                && offer != null
+                && PackCompatibility.enabled()
+                && PackClientCompatibility.isRecipeDetour(player, container)) {
+                recipeDetour = true;
+            } else clear();
+            return;
+        }
+        if (recipeDetour) {
+            recipeDetour = false;
+            byte[] local = InventoryOpeningProtocol.describe(container, player.inventory);
+            if (local == null || !MessageDigest.isEqual(local, offer.digest))
+                refuse(Minecraft.getMinecraft(), "Client inventory mapping changed during recipe view");
+        }
+    }
+
+    /** Server closes still refer to the real window while NEI displays its client-only placeholder. */
+    public boolean acceptsClose(Minecraft client, int packetWindow) {
+        EntityPlayer player = client.thePlayer;
+        if (player == null) return false;
+        refresh(player);
+        // The recipe placeholder's window zero is local only; a delayed close for it cannot close the host.
+        if (packetWindow != (recipeDetour ? window : player.openContainer.windowId)) return false;
+        clear();
+        return true;
     }
 
     private void refuse(Minecraft client, String reason) {
@@ -138,6 +181,11 @@ public final class ClientInventoryGate {
         if (player == null) return;
         refresh(player);
         boolean current = container != null && container == player.openContainer && window == container.windowId;
+        if (recipeDetour) {
+            // closeScreen must send the server's host ID, never NEI's temporary window zero.
+            player.openContainer = container;
+            current = true;
+        }
         // An unsolicited contents packet can precede the first tick/offer; the registered active screen is locked too.
         current |= container == null && player.openContainer.windowId != 0
             && InventoryUi.findAdapter(player.openContainer) != null;

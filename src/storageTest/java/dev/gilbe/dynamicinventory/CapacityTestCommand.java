@@ -108,7 +108,7 @@ public final class CapacityTestCommand extends CommandBase {
         String differentDigest = (digest.charAt(0) == '0' ? "1" : "0") + digest.substring(1);
         for (String bad : new String[] { InventoryUiProtocol.wireVersion(currentCapacity, differentDigest),
             InventoryCapacity.wireVersion()
-                .replace(";protocol=3;", ";protocol=2;"),
+                .replace(";protocol=" + InventoryUiProtocol.WIRE_VERSION + ";", ";protocol=0;"),
             InventoryUiProtocol.wireVersion(26, digest), InventoryUiProtocol.wireVersion(217, digest),
             InventoryCapacity.wireVersion() + ";storage=72", InventoryCapacity.wireVersion() + ";",
             InventoryCapacity.wireVersion()

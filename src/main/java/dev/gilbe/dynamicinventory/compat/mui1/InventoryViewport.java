@@ -4,7 +4,20 @@ import com.gtnewhorizons.modularui.common.widget.Scrollable;
 
 public final class InventoryViewport extends Scrollable {
 
+    private final int storageSlots;
     private boolean updatingVisibility;
+
+    public InventoryViewport() {
+        this(dev.gilbe.dynamicinventory.inventory.InventoryLayout.storageSlots());
+    }
+
+    public InventoryViewport(int storageSlots) {
+        this.storageSlots = storageSlots;
+    }
+
+    public int getStorageSlots() {
+        return storageSlots;
+    }
 
     boolean isUpdatingVisibility() {
         return updatingVisibility;

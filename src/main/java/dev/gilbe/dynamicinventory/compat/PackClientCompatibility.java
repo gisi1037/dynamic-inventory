@@ -8,7 +8,9 @@ import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.inventory.GuiContainer;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
 
 import com.cleanroommc.bogosorter.api.IBogoSortAPI;
@@ -16,6 +18,7 @@ import com.cleanroommc.bogosorter.api.IPosSetter;
 import com.cleanroommc.bogosorter.common.sort.ButtonHandler;
 import com.cleanroommc.bogosorter.common.sort.ButtonPos;
 import com.cleanroommc.bogosorter.common.sort.SlotGroup;
+import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 
 import baubles.client.gui.GuiBaublesButton;
 import codechicken.nei.NEIClientConfig;
@@ -28,6 +31,7 @@ import codechicken.nei.api.GuiInfo;
 import codechicken.nei.api.INEIGuiHandler;
 import codechicken.nei.recipe.DefaultOverlayHandler;
 import codechicken.nei.recipe.GuiOverlayButton.ItemOverlayState;
+import codechicken.nei.recipe.GuiRecipe;
 import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.util.EmptyContainer;
 import dev.gilbe.dynamicinventory.client.NativeSortButton;
@@ -38,6 +42,18 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 public final class PackClientCompatibility {
 
     private PackClientCompatibility() {}
+
+    /** NEI temporarily installs its empty recipe container while retaining this exact native host. */
+    public static boolean isRecipeDetour(EntityPlayer player, Container host) {
+        return Minecraft.getMinecraft().currentScreen instanceof GuiRecipe<?>recipe && recipe.firstGui != null
+            && recipe.firstGui.inventorySlots == host
+            && player.openContainer == recipe.inventorySlots;
+    }
+
+    public static boolean isRecipePlaceholder(EntityPlayer player) {
+        return Minecraft.getMinecraft().currentScreen instanceof GuiRecipe<?>recipe
+            && player.openContainer == recipe.inventorySlots;
+    }
 
     /** Mirror NEI's wheel-transfer eligibility; NEI retains ownership of the actual transfer. */
     public static boolean usesItemWheelTransfer(GuiContainer gui) {
@@ -108,6 +124,36 @@ public final class PackClientCompatibility {
         positionSortButtons(buttons, left, top, x, y, true, false);
     }
 
+    /** Re-anchor each native inventory's own button pair after an editor moves its slots. */
+    public static void positionMovedNativeSortButtons(List<GuiButton> buttons, int left, int top) {
+        java.util.Map<SlotGroup, ButtonHandler.SortButton[]> pairs = new java.util.IdentityHashMap<>();
+        for (GuiButton button : buttons) {
+            if (!(button instanceof ButtonHandler.SortButton nativeButton) || !(button instanceof NativeSortButton))
+                continue;
+            SlotGroup group = ((NativeSortButton) button).dynamicinventory$sortGroup();
+            if (group.isPlayerInventory() || group.isHotbar() || group.isEmpty()) continue;
+            ButtonHandler.SortButton[] pair = pairs.computeIfAbsent(group, ignored -> new ButtonHandler.SortButton[2]);
+            if (button.id == 394658246) pair[0] = nativeButton;
+            if (button.id == 394658247) pair[1] = nativeButton;
+        }
+        for (java.util.Map.Entry<SlotGroup, ButtonHandler.SortButton[]> entry : pairs.entrySet()) {
+            ButtonHandler.SortButton[] pair = entry.getValue();
+            if (pair[0] == null || pair[1] == null) continue;
+            int right = Integer.MIN_VALUE, firstRow = Integer.MAX_VALUE;
+            for (SlotAccessor slot : entry.getKey()
+                .getSlots()) {
+                if (slot.bogo$getX() < 0 || slot.bogo$getY() < 0) continue;
+                right = Math.max(right, slot.bogo$getX() + 16);
+                firstRow = Math.min(firstRow, slot.bogo$getY());
+            }
+            if (right == Integer.MIN_VALUE) continue;
+            ButtonPos position = new ButtonPos();
+            position.setTopLeft();
+            position.setPos(right - 20, firstRow - 16);
+            position.applyPos(left, top, pair[0], pair[1]);
+        }
+    }
+
     private static void positionSortButtons(List<GuiButton> buttons, int left, int top, int x, int y, boolean enabled,
         boolean player) {
         ButtonHandler.SortButton sort = null;
@@ -148,7 +194,8 @@ public final class PackClientCompatibility {
 
     private static boolean ordinary(Slot slot, GuiContainer gui) {
         return slot.inventory instanceof InventoryPlayer && slot.inventory == gui.mc.thePlayer.inventory
-            && InventoryLayout.ordinaryIndex(slot.getSlotIndex()) >= 0;
+            && InventoryLayout.of(gui.mc.thePlayer.inventory)
+                .ordinaryIndex(slot.getSlotIndex()) >= 0;
     }
 
     private static final class CraftingOverlay extends DefaultOverlayHandler {

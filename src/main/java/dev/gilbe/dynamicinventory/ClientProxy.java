@@ -16,10 +16,24 @@ import dev.gilbe.dynamicinventory.client.ClientGateAccess;
 import dev.gilbe.dynamicinventory.client.InventoryGuiTheme;
 import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.PlayerInventoryEvents;
+import dev.gilbe.dynamicinventory.client.editor.InventoryLayoutEditor;
+import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
 import dev.gilbe.dynamicinventory.compat.PackClientCompatibility;
 import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 
 public class ClientProxy extends CommonProxy {
+
+    @Override
+    public net.minecraft.entity.player.InventoryPlayer getClientInventory() {
+        EntityPlayer player = Minecraft.getMinecraft().thePlayer;
+        return player == null ? null : player.inventory;
+    }
+
+    @Override
+    public dev.gilbe.dynamicinventory.api.NativeUiLayout automaticLayout(net.minecraft.inventory.Container container,
+        Class<?> guiClass) {
+        return dev.gilbe.dynamicinventory.client.AutomaticScrollPresentation.layoutFor(container, guiClass);
+    }
 
     @Override
     public boolean isClientOpeningReady(EntityPlayer player) {
@@ -33,6 +47,7 @@ public class ClientProxy extends CommonProxy {
     public void preInit(FMLPreInitializationEvent event) {
         super.preInit(event);
         InventoryViewSettings.initialize(new File(event.getModConfigurationDirectory(), "dynamicinventory-client.cfg"));
+        NativeLayoutPatches.initialize(new File(event.getModConfigurationDirectory(), "dynamicinventory/ui-layouts"));
     }
 
     @Override
@@ -42,6 +57,11 @@ public class ClientProxy extends CommonProxy {
             Minecraft.getMinecraft()
                 .getResourceManager());
         MinecraftForge.EVENT_BUS.register(new PlayerInventoryEvents());
+        InventoryLayoutEditor editor = new InventoryLayoutEditor();
+        MinecraftForge.EVENT_BUS.register(editor);
+        FMLCommonHandler.instance()
+            .bus()
+            .register(editor);
         if (Loader.isModLoaded("modularui2")) {
             try {
                 Object inputEvents = Class.forName("dev.gilbe.dynamicinventory.client.Mui2PendingInputEvents")

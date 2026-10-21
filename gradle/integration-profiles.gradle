@@ -1,0 +1,20 @@
+// GTNHGradle loads addon.gradle before dependencies.gradle. Either script may be
+// the first reader; initialize once so both use the same validated launch identity.
+if (project.ext.has("inventoryPackTarget")) return
+def profile = providers.gradleProperty("inventoryProfile").getOrElse("isolated")
+def keys = [isolated: "rc2", "rc2-mui2": "rc2", "rc2-backhand": "rc2",
+    "rc2-integration": "rc2", "daily-2026-10-19": "daily-2026-10-19"]
+if (!keys.containsKey(profile)) throw new GradleException("Unknown inventoryProfile: " + profile)
+def properties = new Properties()
+file("src/main/resources/integration-profiles.properties").withInputStream { properties.load(it) }
+def prefix = keys[profile] + "."
+def pins = properties.findAll { key, value -> key.startsWith(prefix) }
+    .collectEntries { key, value -> [(key.substring(prefix.length())): value] }
+ext.inventoryPins = pins
+ext.inventoryPackTarget = pins.target
+ext.inventoryFullIntegration = profile in ["rc2-integration", "daily-2026-10-19"]
+ext.inventoryBackhand = inventoryFullIntegration || profile == "rc2-backhand"
+ext.inventoryPin = { String name ->
+    if (!pins[name]) throw new GradleException("Missing integration pin: " + prefix + name)
+    return pins[name]
+}

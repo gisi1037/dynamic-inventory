@@ -9,6 +9,7 @@ public class StorageHarness {
     static ThreadReference thread;
     static ClassLoaderReference loader;
     static ObjectReference client;
+    static boolean awaitingGraveSeed;
     static final Map<String, String> mappedFields = new HashMap<>();
     static final Map<String, Set<String>> mappedMethods = new HashMap<>();
 
@@ -70,14 +71,153 @@ public class StorageHarness {
         ClassType layout = type("dev.gilbe.dynamicinventory.inventory.InventoryLayout");
         return ((IntegerValue) layout.invokeMethod(thread, layout.methodsByName(method).getFirst(), List.of(), ObjectReference.INVOKE_SINGLE_THREADED)).value();
     }
+    static int ownedLayoutInt(ObjectReference inventory, String method) throws Exception {
+        ClassType layout = type("dev.gilbe.dynamicinventory.inventory.InventoryLayout");
+        ObjectReference shape = (ObjectReference) layout.invokeMethod(thread,
+            layout.methodsByName("of").getFirst(), List.of(inventory), ObjectReference.INVOKE_SINGLE_THREADED);
+        return ((IntegerValue) call(shape, method, "()I")).value();
+    }
+    static String canonicalNbt(ObjectReference nbt) throws Exception {
+        nbt.disableCollection();
+        ClassType diagnostics = type("dev.gilbe.dynamicinventory.diagnostics.BaselineDiagnostics");
+        ObjectReference json = (ObjectReference) diagnostics.invokeMethod(thread,
+            methods(diagnostics, "canonicalNbt", "(Lnet/minecraft/nbt/NBTBase;)Lcom/google/gson/JsonObject;").getFirst(),
+            List.of(nbt), ObjectReference.INVOKE_SINGLE_THREADED);
+        json.disableCollection();
+        return ((StringReference) call(json, "toString", "()Ljava/lang/String;")).value();
+    }
     static void act(String[] args) throws Exception {
         ObjectReference player = field(client, "thePlayer");
-        if (Boolean.getBoolean("dinv.packInput") && Set.of("click", "visible-click", "layout-control").contains(args[0])) {
+        if (Boolean.getBoolean("dinv.packInput") && Set.of("click", "visible-click", "layout-control", "nei-fill-recipe").contains(args[0])) {
             ClassType events = type("com.cleanroommc.bogosorter.ClientEventHandler");
             events.invokeMethod(thread, events.methodsByName("handleInput").getFirst(),
                 List.of(field(client, "currentScreen"), vm.mirrorOf(false)), ObjectReference.INVOKE_SINGLE_THREADED);
         }
         switch (args[0]) {
+            case "seed-large-grave": {
+                act(new String[]{"require-qualification", "DI-Baseline-Large-Grave-Smoke-2-Qualification"});
+                if (!thread.name().equals("Server thread")) {
+                    // Arm a normal server packet handler before queuing a harmless command.
+                    // Fixture writes must happen on the authoritative server thread, never the render thread.
+                    ClassType handler = type("net.minecraft.network.NetHandlerPlayServer");
+                    Method chat = methods(handler, "processChatMessage", "(Lnet/minecraft/network/play/client/C01PacketChatMessage;)V").getFirst();
+                    BreakpointRequest seed = vm.eventRequestManager().createBreakpointRequest(chat.location());
+                    seed.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
+                    seed.enable();
+                    awaitingGraveSeed = true;
+                    call(player, "sendChatMessage", "(Ljava/lang/String;)V", vm.mirrorOf("/dinvbaseline"));
+                    break;
+                }
+                awaitingGraveSeed = false;
+                ObjectReference serverPlayer = field(thread.frame(0).thisObject(), "playerEntity");
+                if (layoutInt("storageSlots") != 216) throw new IllegalStateException("Requires cold-start capacity216");
+                ObjectReference inventory = field(serverPlayer, "inventory");
+                for (String array : List.of("mainInventory", "armorInventory"))
+                    for (Value stack : ((ArrayReference) inventory.getValue(fieldInfo(inventory.referenceType(), array))).getValues())
+                        if (stack != null) throw new IllegalStateException("Seed requires empty inventory and armor");
+                if (call(inventory, "getItemStack", "()Lnet/minecraft/item/ItemStack;") != null)
+                    throw new IllegalStateException("Seed requires empty cursor");
+                ArrayReference main = (ArrayReference) inventory.getValue(fieldInfo(inventory.referenceType(), "mainInventory"));
+                ClassType items = type("net.minecraft.init.Items"), json = type("net.minecraft.nbt.JsonToNBT");
+                for (int i = 0; i < 130; i++) {
+                    ObjectReference stack = make("net.minecraft.item.ItemStack", "(Lnet/minecraft/item/Item;I)V",
+                        items.getValue(fieldInfo(items, "diamond")), vm.mirrorOf(1));
+                    ObjectReference nbt = (ObjectReference) json.invokeMethod(thread,
+                        methods(json, "func_150315_a", "(Ljava/lang/String;)Lnet/minecraft/nbt/NBTBase;").getFirst(),
+                        List.of(vm.mirrorOf("{dinv_grave_smoke:\"large-grave-130\",index:" + i + ",typed:{byte:1b,long:17l}}")), ObjectReference.INVOKE_SINGLE_THREADED);
+                    call(stack, "setTagCompound", "(Lnet/minecraft/nbt/NBTTagCompound;)V", nbt);
+                    int raw = i < 36 ? i : i + 1;
+                    main.setValue(raw, stack);
+                }
+                call(inventory, "markDirty", "()V");
+                call(field(serverPlayer, "inventoryContainer"), "detectAndSendChanges", "()V");
+                System.out.println("Seeded130 unique fixture stacks on the server thread; normal death/reclaim remain native");
+                break;
+            }
+            case "sneak": {
+                act(new String[]{"require-qualification"});
+                if (args.length != 2 || !(args[1].equals("true") || args[1].equals("false")))
+                    throw new IllegalArgumentException("sneak true|false");
+                // Unfocused LWJGL windows clear held keys. Use the ordinary client packet instead;
+                // the server still validates/applies it through its native handler, with no server field writes.
+                ObjectReference packet = make("net.minecraft.network.play.client.C0BPacketEntityAction",
+                    "(Lnet/minecraft/entity/Entity;I)V", player, vm.mirrorOf(Boolean.parseBoolean(args[1]) ? 1 : 2));
+                call(field(player, "sendQueue"), "addToSendQueue", "(Lnet/minecraft/network/Packet;)V", packet);
+                System.out.println("sneakPacket=" + args[1] + " awaiting normal server handler");
+                break;
+            }
+            case "hotbar-select": {
+                act(new String[]{"require-qualification"});
+                if (args.length != 2) throw new IllegalArgumentException("hotbar-select 0..8");
+                int selected = Integer.parseInt(args[1]);
+                if (selected < 0 || selected > 8) throw new IllegalArgumentException("Hotbar index must be 0..8");
+                ObjectReference inventory = field(player, "inventory");
+                inventory.setValue(fieldInfo(inventory.referenceType(), "currentItem"), vm.mirrorOf(selected));
+                // syncCurrentPlayItem inside the normal controller path sends C09 to the server.
+                call(field(client, "playerController"), "updateController", "()V");
+                System.out.println("selectedHotbar=" + selected);
+                break;
+            }
+            case "fixture-player-state":
+            case "grave-info": {
+                act(new String[]{"require-qualification"});
+                if (args.length != 1 && !(args[0].equals("grave-info") && args.length == 4))
+                    throw new IllegalArgumentException("grave-info [x y z] or fixture-player-state");
+                ObjectReference server = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
+                ObjectReference world = (ObjectReference) call(server, "worldServerForDimension", "(I)Lnet/minecraft/world/WorldServer;", vm.mirrorOf(0));
+                ObjectReference manager = (ObjectReference) call(server, "getConfigurationManager", "()Lnet/minecraft/server/management/ServerConfigurationManager;");
+                ObjectReference serverPlayer = (ObjectReference) call(manager, "func_152612_a", "(Ljava/lang/String;)Lnet/minecraft/entity/player/EntityPlayerMP;",
+                    call(player, "getCommandSenderName", "()Ljava/lang/String;"));
+                if (serverPlayer == null) throw new IllegalStateException("No matching integrated server player");
+                System.out.println("serverSneaking=" + call(serverPlayer, "isSneaking", "()Z"));
+                ObjectReference inventory = field(serverPlayer, "inventory");
+                System.out.println("serverCurrentItem=" + inventory.getValue(fieldInfo(inventory.referenceType(), "currentItem")));
+                System.out.println("serverDimension=" + serverPlayer.getValue(fieldInfo(serverPlayer.referenceType(), "dimension")));
+                ObjectReference gameType = (ObjectReference) call(field(serverPlayer, "theItemInWorldManager"), "getGameType", "()Lnet/minecraft/world/WorldSettings$GameType;");
+                System.out.println("serverGameMode=" + ((StringReference) call(gameType, "toString", "()Ljava/lang/String;")).value());
+                System.out.println("serverDifficulty=" + ((StringReference) call(field(world, "difficultySetting"), "toString", "()Ljava/lang/String;")).value());
+                ObjectReference rules = (ObjectReference) call(world, "getGameRules", "()Lnet/minecraft/world/GameRules;");
+                System.out.println("gameRulesNbt=" + canonicalNbt((ObjectReference) call(rules, "writeGameRulesToNBT", "()Lnet/minecraft/nbt/NBTTagCompound;")));
+                if (args[0].equals("fixture-player-state")) break;
+                double[] near = new double[3];
+                for (int i = 0; i < 3; i++) near[i] = args.length == 4 ? Double.parseDouble(args[i + 1])
+                    : ((DoubleValue) serverPlayer.getValue(fieldInfo(serverPlayer.referenceType(), new String[]{"posX", "posY", "posZ"}[i]))).value();
+                ArrayReference tiles = (ArrayReference) call(field(world, "loadedTileEntityList"), "toArray", "()[Ljava/lang/Object;");
+                ObjectReference grave = null;
+                int count = 0;
+                double nearest = Double.POSITIVE_INFINITY;
+                for (Value value : tiles.getValues()) {
+                    ObjectReference tile = (ObjectReference) value;
+                    if (!tile.referenceType().name().equals("openblocks.common.tileentity.TileEntityGrave")) continue;
+                    count++;
+                    double distance = 0;
+                    for (int i = 0; i < 3; i++) {
+                        double delta = ((IntegerValue) tile.getValue(fieldInfo(tile.referenceType(), new String[]{"xCoord", "yCoord", "zCoord"}[i]))).value() - near[i];
+                        distance += delta * delta;
+                    }
+                    if (distance < nearest) { nearest = distance; grave = tile; }
+                }
+                System.out.println("loadedGraveCount=" + count);
+                if (grave == null) { System.out.println("graveNbt=null"); break; }
+                System.out.println("graveDistanceSquared=" + nearest);
+                for (String coordinate : List.of("xCoord", "yCoord", "zCoord"))
+                    System.out.println("grave." + coordinate + "=" + grave.getValue(fieldInfo(grave.referenceType(), coordinate)));
+                StringReference owner = (StringReference) call(grave, "getUsername", "()Ljava/lang/String;");
+                System.out.println("graveOwner=" + (owner == null ? "null" : owner.value()));
+                ObjectReference nbt = make("net.minecraft.nbt.NBTTagCompound", "()V");
+                // Serialization observes the stable server TE; no client-thread item mutation is performed.
+                call(grave, "writeToNBT", "(Lnet/minecraft/nbt/NBTTagCompound;)V", nbt);
+                System.out.println("graveNbt=" + canonicalNbt(nbt));
+                break;
+            }
+            case "openblocks-guard-info": {
+                ClassType store = type("openblocks.common.PlayerInventoryStore");
+                boolean guarded = store.methods().stream()
+                    .anyMatch(method -> method.name().contains("dynamicinventory$checkBackupSize"));
+                System.out.println("openBlocksRestoreGuard=" + guarded);
+                if (!guarded) throw new IllegalStateException("OpenBlocks restore guard is not installed in this process");
+                break;
+            }
             case "opening-report": {
                 ClassType fixture = type("dev.gilbe.dynamicinventory.qualification.OpeningGateFixtures$Client");
                 fixture.invokeMethod(thread, fixture.methodsByName("capture").getFirst(), List.of(), ObjectReference.INVOKE_SINGLE_THREADED);
@@ -130,12 +270,122 @@ public class StorageHarness {
                     + " count=" + count + " canonical=true layout=true");
                 break;
             }
+            case "automatic-scroll-screen": {
+                act(new String[]{"require-qualification", "DI-Baseline-Automatic-Scroll-Qualification"});
+                ObjectReference active = field(player, "openContainer");
+                ObjectReference old = field(client, "currentScreen");
+                if (!active.referenceType().name().equals("net.minecraft.inventory.ContainerChest")
+                    || old == null || !old.referenceType().name().equals("net.minecraft.client.gui.inventory.GuiChest"))
+                    throw new IllegalStateException("Open the disposable vanilla chest first");
+                if (call(field(player,"inventory"),"getItemStack","()Lnet/minecraft/item/ItemStack;") != null)
+                    throw new IllegalStateException("Put down the cursor stack first");
+                act(new String[]{"gate-state", "ready"});
+                ObjectReference panel = (ObjectReference)call(old,"dynamicinventory$panel",
+                    "()Ldev/gilbe/dynamicinventory/client/NativeInventoryPanel;");
+                if(panel!=null) call(panel,"restore","()V");
+                ObjectReference slot = (ObjectReference)call(active,"getSlot","(I)Lnet/minecraft/inventory/Slot;",vm.mirrorOf(0));
+                ObjectReference replacement = make("thaumcraft.client.gui.GuiMagicBox",
+                    "(Lnet/minecraft/inventory/IInventory;Lnet/minecraft/inventory/IInventory;)V",
+                    field(player,"inventory"),field(slot,"inventory"));
+                // Synthetic PRESENTATION fixture only: keep the already negotiated vanilla host on
+                // both peers. This does not qualify Thaumcraft's actual ContainerMagicBox opening.
+                replacement.setValue(fieldInfo(replacement.referenceType(),"inventorySlots"),active);
+                call(client,"displayGuiScreen","(Lnet/minecraft/client/gui/GuiScreen;)V",replacement);
+                act(new String[]{"ui-binding"});
+                ObjectReference decorated = (ObjectReference)call(replacement,"dynamicinventory$panel",
+                    "()Ldev/gilbe/dynamicinventory/client/NativeInventoryPanel;");
+                if(decorated==null || ((IntegerValue)call(decorated,"visibleColumns","()I")).value()!=9
+                    || ((IntegerValue)call(decorated,"visibleRows","()I")).value()!=3)
+                    throw new AssertionError("Fallback did not supply the compact nine-by-three viewport");
+                System.out.println("PASS synthetic storage presentation fallback; native server/client host retained");
+                break;
+            }
+            case "automatic-scroll-bottom": {
+                act(new String[]{"require-qualification", "DI-Baseline-Automatic-Scroll-Qualification"});
+                ObjectReference screen = field(client,"currentScreen");
+                ObjectReference panel = (ObjectReference)call(screen,"dynamicinventory$panel",
+                    "()Ldev/gilbe/dynamicinventory/client/NativeInventoryPanel;");
+                if(panel==null) throw new AssertionError("Fallback panel required");
+                call(panel,"scroll","(I)V",vm.mirrorOf(1000));
+                ObjectReference host = field(player,"openContainer");
+                ObjectReference slots = field(host,"inventorySlots");
+                int last = ((IntegerValue)call(slots,"size","()I")).value()-1;
+                ObjectReference slot = (ObjectReference)call(host,"getSlot","(I)Lnet/minecraft/inventory/Slot;",vm.mirrorOf(last));
+                if(((IntegerValue)slot.getValue(fieldInfo(slot.referenceType(),"xDisplayPosition"))).value()<0
+                    || ((IntegerValue)slot.getValue(fieldInfo(slot.referenceType(),"yDisplayPosition"))).value()<0)
+                    throw new AssertionError("Last expanded slot is still hidden after scrolling");
+                System.out.println("PASS last expanded slot visible after scrolling: "+last);
+                break;
+            }
             case "ui-audit": {
                 ClassType audit = type("dev.gilbe.dynamicinventory.client.InventoryUiAudit");
                 ObjectReference report = (ObjectReference) audit.invokeMethod(thread,
                     audit.methodsByName("capture").getFirst(), List.of(field(client, "currentScreen")),
                     ObjectReference.INVOKE_SINGLE_THREADED);
                 System.out.println("uiAudit=" + ((StringReference) call(report,"getAbsolutePath","()Ljava/lang/String;")).value());
+                break;
+            }
+            case "editor-save-if-open": {
+                ClassType editorType = type("dev.gilbe.dynamicinventory.client.editor.InventoryLayoutEditor");
+                if (editorType.getValue(editorType.fieldByName("active")) != null) {
+                    act(new String[]{"editor-control", "100"});
+                    if (editorType.getValue(editorType.fieldByName("active")) != null)
+                        throw new IllegalStateException("Editor save failed; preserve the open draft before restarting");
+                }
+                break;
+            }
+            case "editor-open": {
+                ClassType editor = type("dev.gilbe.dynamicinventory.client.editor.InventoryLayoutEditor");
+                BooleanValue opened = (BooleanValue) editor.invokeMethod(thread, editor.methodsByName("open").getFirst(),
+                    List.of(field(client, "currentScreen")), ObjectReference.INVOKE_SINGLE_THREADED);
+                if (!opened.value()) throw new IllegalStateException("Editor rejected the current screen");
+                break;
+            }
+            case "editor-control": {
+                if (args.length > 2) {
+                    for (int i = 0; i < Integer.parseInt(args[2]); i++) act(new String[]{"editor-control", args[1]});
+                    break;
+                }
+                ClassType editorType = type("dev.gilbe.dynamicinventory.client.editor.InventoryLayoutEditor");
+                ObjectReference editor = (ObjectReference) editorType.getValue(editorType.fieldByName("active"));
+                if (editor == null) throw new AssertionError("Editor is not open");
+                int id = Integer.parseInt(args[1]);
+                ObjectReference buttons = field(editor, "buttonList");
+                ArrayReference entries = (ArrayReference) call(buttons, "toArray", "()[Ljava/lang/Object;");
+                ObjectReference selected = null;
+                for (Value entry : entries.getValues()) {
+                    ObjectReference button = (ObjectReference) entry;
+                    if (((IntegerValue) button.getValue(fieldInfo(button.referenceType(), "id"))).value() == id)
+                        selected = button;
+                }
+                if (selected == null || !((BooleanValue) selected.getValue(fieldInfo(selected.referenceType(), "enabled"))).value())
+                    throw new AssertionError("Missing/disabled editor control " + id);
+                call(editor, "actionPerformed", "(Lnet/minecraft/client/gui/GuiButton;)V", selected);
+                break;
+            }
+            case "editor-crop-check": {
+                ObjectReference screen = field(client, "currentScreen");
+                ObjectReference panel = (ObjectReference) call(screen, "dynamicinventory$panel", "()Ldev/gilbe/dynamicinventory/client/NativeInventoryPanel;");
+                ClassType panelType = type("dev.gilbe.dynamicinventory.client.NativeInventoryPanel");
+                Field scope = panelType.fieldByName("drawingBackground");
+                Value previous = panelType.getValue(scope);
+                try {
+                    // Probe the real scoped crop math while the render thread is paused, restoring the scope immediately.
+                    panelType.setValue(scope, panel);
+                    int width = ((IntegerValue) panel.getValue(fieldInfo(panel.referenceType(), "nativeWidth"))).value();
+                    int height = ((IntegerValue) panel.getValue(fieldInfo(panel.referenceType(), "nativeHeight"))).value();
+                    int left = ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "guiLeft"))).value();
+                    int top = ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "guiTop"))).value();
+                    int inset = ((IntegerValue) call(field(panel, "layout"), "getBackgroundInset", "()I")).value();
+                    if (inset < 1) throw new AssertionError("Increase Texture crop before checking it");
+                    if (((IntegerValue) panel.getValue(fieldInfo(panel.referenceType(), "frameStyle"))).value() != 0) inset = Math.max(4, inset);
+                    ArrayReference result = (ArrayReference) panelType.invokeMethod(thread, panelType.methodsByName("clipBackground").getFirst(),
+                        List.of(vm.mirrorOf(left), vm.mirrorOf(top), vm.mirrorOf(0), vm.mirrorOf(0), vm.mirrorOf(width), vm.mirrorOf(height)), ObjectReference.INVOKE_SINGLE_THREADED);
+                    if (result == null || ((IntegerValue) result.getValue(0)).value() != left + inset
+                        || ((IntegerValue) result.getValue(4)).value() != width - 2 * inset)
+                        throw new AssertionError("Native texture crop did not change the drawn rectangle");
+                    System.out.println("PASS live native crop inset=" + inset);
+                } finally { panelType.setValue(scope, previous); }
                 break;
             }
             case "runtime-info": {
@@ -266,7 +516,7 @@ public class StorageHarness {
                 if (attached != null) {
                     json.append(",\"attachedLayout\":{");
                     boolean first = true;
-                    for (String name : new String[] {"lowerY", "lowerHeight", "playerY", "craftingY", "sideBySide"}) {
+                    for (String name : new String[] {"width", "chestColumns", "lowerY", "lowerHeight", "playerY", "craftingY", "sideBySide"}) {
                         if (!first) json.append(',');
                         first = false;
                         json.append('"').append(name).append("\":").append(attached.getValue(fieldInfo(attached.referenceType(), name)));
@@ -337,6 +587,116 @@ public class StorageHarness {
                 System.out.println("PASS real-pack NEI ghost/transfer registration and ordinary/offhand slot classification");
                 break;
             }
+            case "nei-open-recipe": {
+                ClassType itemType = type("net.minecraft.item.Item");
+                ObjectReference registry = (ObjectReference) itemType.getValue(fieldInfo(itemType, "itemRegistry"));
+                ObjectReference item = (ObjectReference) call(registry, "getObject", "(Ljava/lang/Object;)Ljava/lang/Object;", vm.mirrorOf(args[1]));
+                ObjectReference stack = make("net.minecraft.item.ItemStack", "(Lnet/minecraft/item/Item;I)V", item, vm.mirrorOf(1));
+                ArrayReference query = ((ArrayType) vm.classesByName("java.lang.Object[]").getFirst()).newInstance(1);
+                query.setValue(0, stack);
+                ClassType recipes = type("codechicken.nei.recipe.GuiCraftingRecipe");
+                recipes.invokeMethod(thread, recipes.methodsByName("openRecipeGui").getFirst(),
+                    List.of(vm.mirrorOf("item"), query), ObjectReference.INVOKE_SINGLE_THREADED);
+                ObjectReference recipe = field(client, "currentScreen");
+                ObjectReference handlers = field(recipe, "currenthandlers");
+                ArrayReference handlerEntries = (ArrayReference) call(handlers, "toArray", "()[Ljava/lang/Object;");
+                boolean selected = false;
+                for (int i = 0; i < handlerEntries.length(); i++) {
+                    ObjectReference handler = (ObjectReference) handlerEntries.getValue(i);
+                    StringReference ident = (StringReference) call(handler, "getOverlayIdentifier", "()Ljava/lang/String;");
+                    String overlay = ident == null ? "" : ident.value();
+                    System.out.println("recipeHandler=" + handler.referenceType().name() + " overlay=" + overlay);
+                    if (!selected && overlay.equals("crafting")) {
+                        int recipesCount = ((IntegerValue) call(handler, "numRecipes", "()I")).value();
+                        for (int r = 0; r < recipesCount; r++) {
+                            ObjectReference inputs = (ObjectReference) call(handler, "getIngredientStacks", "(I)Ljava/util/List;", vm.mirrorOf(r));
+                            System.out.println("craftRecipe=" + r + " " + call(inputs, "toString", "()Ljava/lang/String;"));
+                        }
+                        call(recipe, "setRecipePage", "(I)V", vm.mirrorOf(i));
+                        selected = true;
+                    }
+                }
+                if (!selected) throw new AssertionError("No native crafting recipe for " + args[1]);
+                break;
+            }
+            case "nei-fill-recipe":
+            case "nei-return": {
+                ObjectReference recipe = field(client, "currentScreen");
+                ObjectReference host = field(recipe, "firstGui");
+                if (host == null) throw new AssertionError("A recipe with a real host is required");
+                if (args[0].equals("nei-return")) {
+                    call(recipe, "keyTyped", "(CI)V", vm.mirrorOf('\0'), vm.mirrorOf(1));
+                } else {
+                    ArrayReference buttons = (ArrayReference) recipe.getValue(fieldInfo(recipe.referenceType(), "overlayButtons"));
+                    ObjectReference button = buttons.length() > 0 ? (ObjectReference) buttons.getValue(0) : null;
+                    if (button == null) {
+                        // New NEI keeps its real buttons in recipe widgets; the legacy array stays empty.
+                        ObjectReference widgets = (ObjectReference) call(field(recipe, "container"), "getWidgets", "()Ljava/util/List;");
+                        ArrayReference entries = (ArrayReference) call(widgets, "toArray", "()[Ljava/lang/Object;");
+                        for (Value entry : entries.getValues()) {
+                            ObjectReference widget = (ObjectReference) entry;
+                            if (!widget.referenceType().name().equals("codechicken.nei.recipe.widget.RecipeWidget")) continue;
+                            ObjectReference nativeButtons = (ObjectReference) call(widget, "getRecipeButtons", "()Ljava/util/List;");
+                            ArrayReference candidates = (ArrayReference) call(nativeButtons, "toArray", "()[Ljava/lang/Object;");
+                            for (Value candidate : candidates.getValues()) {
+                                ObjectReference nativeButton = (ObjectReference) candidate;
+                                if (nativeButton.referenceType().name().equals("codechicken.nei.recipe.GuiOverlayButton")) {
+                                    button = nativeButton;
+                                    break;
+                                }
+                            }
+                            if (button != null) break;
+                        }
+                    }
+                    if (button == null) throw new AssertionError("No NEI fill button");
+                    if (!((BooleanValue) button.getValue(fieldInfo(button.referenceType(), "canFillCraftingGrid"))).value())
+                        throw new AssertionError("NEI says this recipe cannot fill the native crafting grid");
+                    ObjectReference ref = field(button, "handlerRef");
+                    ObjectReference handler = field(ref, "handler");
+                    Value index = ref.getValue(fieldInfo(ref.referenceType(), "recipeIndex"));
+                    ObjectReference ingredients = (ObjectReference) call(handler, "getIngredientStacks", "(I)Ljava/util/List;", index);
+                    System.out.println("fillHandler=" + handler.referenceType().name() + " recipeIndex=" + index
+                        + " ingredients=" + call(ingredients, "toString", "()Ljava/lang/String;"));
+                    // Exercise the actual overlay handler after the same host-return step as NEI's button.
+                    call(client, "displayGuiScreen", "(Lnet/minecraft/client/gui/GuiScreen;)V", host);
+                    ObjectReference overlay = (ObjectReference) call(ref, "getOverlayHandler", "(Lnet/minecraft/client/gui/inventory/GuiContainer;)Lcodechicken/nei/api/IOverlayHandler;", host);
+                    ArrayReference mapping = (ArrayReference) call(overlay, "mapIngredSlots", "(Lnet/minecraft/client/gui/inventory/GuiContainer;Ljava/util/List;)[[Lnet/minecraft/inventory/Slot;", host, ingredients);
+                    int mapped = 0;
+                    for (Value value : mapping.getValues()) mapped += ((ArrayReference) value).length();
+                    System.out.println("mappedIngredients=" + mapped + "/" + mapping.length());
+                    call(button, "overlayRecipe", "(Z)V", vm.mirrorOf(true));
+                }
+                break;
+            }
+            case "nei-stale-close": {
+                ObjectReference recipe = field(client, "currentScreen");
+                ObjectReference host = field(recipe, "firstGui");
+                if (host == null) throw new AssertionError("A recipe with a real host is required");
+                ObjectReference connection = (ObjectReference) call(client, "getNetHandler", "()Lnet/minecraft/client/network/NetHandlerPlayClient;");
+                ObjectReference packet = make("net.minecraft.network.play.server.S2EPacketCloseWindow", "(I)V", vm.mirrorOf(0));
+                call(connection, "handleCloseWindow", "(Lnet/minecraft/network/play/server/S2EPacketCloseWindow;)V", packet);
+                if (!recipe.equals(field(client, "currentScreen"))) throw new AssertionError("Stale placeholder close replaced the recipe screen");
+                act(new String[]{"gate-state", "detour"});
+                break;
+            }
+            case "gate-state": {
+                ObjectReference access = (ObjectReference) call(client, "getNetHandler", "()Lnet/minecraft/client/network/NetHandlerPlayClient;");
+                ObjectReference gate = (ObjectReference) call(access, "dynamicinventory$openingGate", "()Ldev/gilbe/dynamicinventory/client/ClientInventoryGate;");
+                ObjectReference active = field(player, "openContainer");
+                System.out.println("gate ready=" + gate.getValue(fieldInfo(gate.referenceType(), "ready")) + " committed=" + gate.getValue(fieldInfo(gate.referenceType(), "committed"))
+                    + " host=" + field(gate, "container") + " active=" + active
+                    + " input=" + call(gate, "allowsInput", "(Lnet/minecraft/entity/player/EntityPlayer;I)Z", player, active.getValue(fieldInfo(active.referenceType(), "windowId"))));
+                ObjectReference server = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
+                if (server != null) System.out.println("world=" + call(server, "getFolderName", "()Ljava/lang/String;"));
+                if (args.length > 1) {
+                    boolean expectedInput = args[1].equals("ready");
+                    boolean input = ((BooleanValue) call(gate, "allowsInput", "(Lnet/minecraft/entity/player/EntityPlayer;I)Z", player,
+                        active.getValue(fieldInfo(active.referenceType(), "windowId")))).value();
+                    if (input != expectedInput || !((BooleanValue) gate.getValue(fieldInfo(gate.referenceType(), "ready"))).value())
+                        throw new AssertionError("Opening agreement or input state lost: " + args[1]);
+                }
+                break;
+            }
             case "wait-screen":
                 System.out.println("PASS screen: " + field(client, "currentScreen").referenceType().name());
                 break;
@@ -350,12 +710,14 @@ public class StorageHarness {
                 break;
             }
             case "screen-fixtures":
+            case "editor-fixtures":
             case "presentation-fixtures":
             case "mui-lifecycle-fixtures": {
                 if (player == null || field(client, "currentScreen") == null)
                     throw new IllegalStateException("Open the disposable player inventory first");
                 String fixture = switch (args[0]) {
                     case "screen-fixtures" -> "InventoryScreenFixtures";
+                    case "editor-fixtures" -> "NativeEditorClientFixtures";
                     case "mui-lifecycle-fixtures" -> "Mui2LifecycleClientFixtures";
                     default -> "PresentationClientFixtures";
                 };
@@ -490,10 +852,33 @@ public class StorageHarness {
                         for(boolean down:new boolean[]{true,false}) mouse.invokeMethod(thread,methods(mouse,"addButtonEvent","(IZ)V").getFirst(),List.of(vm.mirrorOf(0),vm.mirrorOf(down)),ObjectReference.INVOKE_SINGLE_THREADED);
                     } else mouse.invokeMethod(thread,methods(mouse,"addWheelEvent","(D)V").getFirst(),List.of(vm.mirrorOf(Double.parseDouble(args[2]))),ObjectReference.INVOKE_SINGLE_THREADED);
                     call(screen,"handleInput","()V");
+                    if (args[0].equals("input-wheel")) {
+                        // Tinkers polls the global wheel while drawing, not just in handleInput.
+                        // Finish this frame under the synthetic hover before restoring the real cursor,
+                        // or the same delta can scroll a different inventory on the next frame.
+                        ObjectReference wheelFrame = make("net.minecraftforge.client.event.GuiScreenEvent$DrawScreenEvent$Pre",
+                            "(Lnet/minecraft/client/gui/GuiScreen;IIF)V",screen,vm.mirrorOf(x),vm.mirrorOf(y),vm.mirrorOf(0f));
+                        if (!((BooleanValue)call(bus,"post","(Lcpw/mods/fml/common/eventhandler/Event;)Z",wheelFrame)).value()) {
+                            call(screen,"drawScreen","(IIF)V",vm.mirrorOf(x),vm.mirrorOf(y),vm.mirrorOf(0f));
+                            call(bus,"post","(Lcpw/mods/fml/common/eventhandler/Event;)Z",make("net.minecraftforge.client.event.GuiScreenEvent$DrawScreenEvent$Post",
+                                "(Lnet/minecraft/client/gui/GuiScreen;IIF)V",screen,vm.mirrorOf(x),vm.mirrorOf(y),vm.mirrorOf(0f)));
+                        }
+                        mouse.invokeMethod(thread,methods(mouse,"getDWheel","()I").getFirst(),List.of(),ObjectReference.INVOKE_SINGLE_THREADED);
+                    }
                 } finally {
                     call(framebuffer,"unbindFramebuffer","()V");
                     for(var saved:previous.entrySet()) mouse.setValue(saved.getKey(),saved.getValue());
                 }
+                break;
+            }
+            case "chest-scroll": {
+                ObjectReference screen = field(client, "currentScreen");
+                if (!screen.referenceType().name().equals("tconstruct.tools.gui.CraftingStationGui"))
+                    throw new AssertionError("Native crafting station required");
+                ObjectReference slider = field(screen, "slider");
+                call(slider, "setSliderValue", "(I)I", vm.mirrorOf(args[1].equals("bottom") ? Integer.MAX_VALUE : 0));
+                call(screen, "updateChestSlots", "()V");
+                System.out.println("chestScroll=" + call(slider, "getValue", "()I"));
                 break;
             }
             case "scroll-info": {
@@ -526,6 +911,91 @@ public class StorageHarness {
                 }
                 break;
             }
+            case "assert-transfer-probe": {
+                // Read-only conservation check after native clicks/packets in a disposable world.
+                act(new String[]{"require-qualification"});
+                ObjectReference container = field(player, "openContainer"), inventory = field(player, "inventory");
+                if (call(inventory, "getItemStack", "()Lnet/minecraft/item/ItemStack;") != null)
+                    throw new AssertionError("Transfer probe is still on cursor");
+                ArrayReference slots = (ArrayReference) call(field(container, "inventorySlots"), "toArray", "()[Ljava/lang/Object;");
+                int total = 0, stacks = 0;
+                Set<String> expected = Set.of(args[3].split(","));
+                for (int id = 0; id < slots.length(); id++) {
+                    ObjectReference slot = (ObjectReference) slots.getValue(id);
+                    ObjectReference stack = (ObjectReference) call(slot, "getStack", "()Lnet/minecraft/item/ItemStack;");
+                    if (stack == null) continue;
+                    ObjectReference tag = (ObjectReference) call(stack, "getTagCompound", "()Lnet/minecraft/nbt/NBTTagCompound;");
+                    if (tag == null || !args[1].equals(((StringReference) call(tag, "getString", "(Ljava/lang/String;)Ljava/lang/String;", vm.mirrorOf("dinv_batch"))).value())) continue;
+                    int count = ((IntegerValue) stack.getValue(fieldInfo(stack.referenceType(), "stackSize"))).value();
+                    int raw = ((IntegerValue) call(slot, "getSlotIndex", "()I")).value();
+                    String role = !inventory.equals(field(slot, "inventory")) ? "machine" : raw < 9 ? "hotbar" : raw > 36 ? "extra" : "storage";
+                    if (!expected.contains(role)) throw new AssertionError("Unexpected probe destination: " + id + " " + role);
+                    ObjectReference typed = (ObjectReference) call(tag, "getCompoundTag", "(Ljava/lang/String;)Lnet/minecraft/nbt/NBTTagCompound;", vm.mirrorOf("typed"));
+                    if (((ByteValue) call(typed, "getByte", "(Ljava/lang/String;)B", vm.mirrorOf("byte"))).value() != 1
+                        || ((LongValue) call(typed, "getLong", "(Ljava/lang/String;)J", vm.mirrorOf("long"))).value() != 17)
+                        throw new AssertionError("Typed probe NBT changed");
+                    total += count;
+                    stacks++;
+                    System.out.println("PROBE slot=" + id + " role=" + role + " count=" + count);
+                }
+                if (total != Integer.parseInt(args[2]) || stacks != (args.length > 4 ? Integer.parseInt(args[4]) : 1))
+                    throw new AssertionError("Probe conservation failed: " + total + " items in " + stacks + " stacks");
+                break;
+            }
+            case "registered-blocks": {
+                // Read the real registry so smoke tests do not guess renamed/disabled pack blocks.
+                ClassType blocks = type("net.minecraft.block.Block");
+                ObjectReference registry = (ObjectReference) blocks.getValue(fieldInfo(blocks, "blockRegistry"));
+                ObjectReference keys = (ObjectReference) call(registry, "getKeys", "()Ljava/util/Set;");
+                ArrayReference entries = (ArrayReference) call(keys, "toArray", "()[Ljava/lang/Object;");
+                for (Value entry : entries.getValues()) {
+                    String name = ((StringReference) call((ObjectReference) entry, "toString", "()Ljava/lang/String;")).value();
+                    for (int i = 1; i < args.length; i++) if (name.toLowerCase(Locale.ROOT).contains(args[i].toLowerCase(Locale.ROOT))) {
+                        System.out.println(name);
+                        break;
+                    }
+                }
+                break;
+            }
+            case "paired-ui-state": {
+                act(new String[]{"require-qualification"});
+                act(new String[]{"gate-state", "ready"});
+                act(new String[]{"ui-binding"});
+                ObjectReference server = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
+                ObjectReference manager = (ObjectReference) call(server, "getConfigurationManager", "()Lnet/minecraft/server/management/ServerConfigurationManager;");
+                ObjectReference serverPlayer = (ObjectReference) call(manager, "func_152612_a", "(Ljava/lang/String;)Lnet/minecraft/entity/player/EntityPlayerMP;",
+                    call(player, "getCommandSenderName", "()Ljava/lang/String;"));
+                ObjectReference local = field(player, "openContainer"), remote = field(serverPlayer, "openContainer");
+                if (!local.referenceType().name().equals(remote.referenceType().name())
+                    || !local.getValue(fieldInfo(local.referenceType(), "windowId")).equals(remote.getValue(fieldInfo(remote.referenceType(), "windowId"))))
+                    throw new AssertionError("Server/client host or window differs");
+                int localCount = ((IntegerValue) call(field(local, "inventorySlots"), "size", "()I")).value();
+                int remoteCount = ((IntegerValue) call(field(remote, "inventorySlots"), "size", "()I")).value();
+                if (localCount != remoteCount) throw new AssertionError("Server/client slot count differs");
+                if (call(field(player,"inventory"), "getItemStack", "()Lnet/minecraft/item/ItemStack;") != null
+                    || call(field(serverPlayer,"inventory"), "getItemStack", "()Lnet/minecraft/item/ItemStack;") != null)
+                    throw new AssertionError("Finish the cursor move before comparing peers");
+                for (int i = 0; i < localCount; i++) {
+                    String[] state = new String[2];
+                    boolean occupied = false;
+                    for (int side = 0; side < 2; side++) {
+                        ObjectReference slot = (ObjectReference) call(side == 0 ? local : remote, "getSlot", "(I)Lnet/minecraft/inventory/Slot;", vm.mirrorOf(i));
+                        ObjectReference stack = (ObjectReference) call(slot, "getStack", "()Lnet/minecraft/item/ItemStack;");
+                        occupied |= stack != null;
+                        if (stack == null) {
+                            state[side] = "null";
+                            continue;
+                        }
+                        ObjectReference nbt = make("net.minecraft.nbt.NBTTagCompound", "()V");
+                        call(stack, "writeToNBT", "(Lnet/minecraft/nbt/NBTTagCompound;)Lnet/minecraft/nbt/NBTTagCompound;", nbt);
+                        state[side] = canonicalNbt(nbt);
+                    }
+                    if (!state[0].equals(state[1])) throw new AssertionError("Peer stack/NBT differs at slot " + i + ": " + Arrays.toString(state));
+                    if (occupied) System.out.println("slot=" + i + " " + state[0]);
+                }
+                System.out.println("PASS paired host/window, all " + localCount + " slot stacks/NBT and empty cursors");
+                break;
+            }
             case "slot-info": {
                 ObjectReference container = field(player, "openContainer");
                 ObjectReference cursor = (ObjectReference) call(field(player,"inventory"), "getItemStack", "()Lnet/minecraft/item/ItemStack;");
@@ -550,7 +1020,9 @@ public class StorageHarness {
                 ObjectReference message = make("cpw.mods.fml.common.network.handshake.FMLHandshakeMessage$ModList", "(Ljava/util/List;)V", mods);
                 ObjectReference map = (ObjectReference) call(message, "modList", null);
                 String wire = ((StringReference) call(map, "get", "(Ljava/lang/Object;)Ljava/lang/Object;", vm.mirrorOf("dynamicinventory"))).value();
-                if (!wire.matches("[^;]+;protocol=3;storage=" + layoutInt("storageSlots") + ";adapters=[0-9a-f]{64}"))
+                ClassType uiProtocol = type("dev.gilbe.dynamicinventory.api.InventoryUiProtocol");
+                int protocolVersion = ((IntegerValue) uiProtocol.getValue(uiProtocol.fieldByName("WIRE_VERSION"))).value();
+                if (!wire.matches("[^;]+;protocol=" + protocolVersion + ";storage=" + layoutInt("storageSlots") + ";adapters=[0-9a-f]{64}"))
                     throw new AssertionError("Outbound capacity and adapter protocol were not advertised: " + wire);
                 String base = wire.substring(0, wire.indexOf(';'));
                 String candidate = wire.replaceFirst(";storage=[0-9]+;", ";storage=" + target + ";");
@@ -606,7 +1078,7 @@ public class StorageHarness {
                 ObjectReference inventory = field(player, "inventory");
                 ArrayReference main = (ArrayReference) inventory.getValue(fieldInfo(inventory.referenceType(), "mainInventory"));
                 int count = ((IntegerValue) call(slots, "size", "()I")).value();
-                int ordinary = layoutInt("mainSlots");
+                int ordinary = ownedLayoutInt(inventory, "mainSlots");
                 boolean offhand = main.length() == ordinary + 1;
                 int[] ids = new int[ordinary]; Arrays.fill(ids, -1);
                 for (int id = 0; id < count; id++) {
@@ -646,7 +1118,7 @@ public class StorageHarness {
                 ObjectReference container = field(player, "openContainer");
                 ObjectReference slots = field(container, "inventorySlots");
                 int count = ((IntegerValue) call(slots, "size", "()I")).value();
-                if (count != layoutInt("mainSlots")) throw new AssertionError("Unexpected MUI2 slot count " + count);
+                if (count != ownedLayoutInt(field(player, "inventory"), "mainSlots")) throw new AssertionError("Unexpected MUI2 slot count " + count);
                 for (int id = 0; id < count; id++) {
                     ObjectReference slot = (ObjectReference) call(slots, "get", "(I)Ljava/lang/Object;", vm.mirrorOf(id));
                     int main = ((IntegerValue) call(slot, "getSlotIndex", "()I")).value();
@@ -663,6 +1135,38 @@ public class StorageHarness {
             case "background": {
                 ObjectReference settings = field(client, "gameSettings");
                 settings.setValue(fieldInfo(settings.referenceType(), "pauseOnLostFocus"), vm.mirrorOf(false));
+                break;
+            }
+            case "fixture-peaceful": {
+                ObjectReference server = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
+                if (server == null || !((StringReference) call(server, "getFolderName", "()Ljava/lang/String;")).value().startsWith("DI-Baseline-"))
+                    throw new IllegalStateException("Disposable integrated world required");
+                ClassType difficulty = type("net.minecraft.world.EnumDifficulty");
+                ObjectReference settings = field(client, "gameSettings");
+                settings.setValue(fieldInfo(settings.referenceType(), "difficulty"), difficulty.getValue(fieldInfo(difficulty, "PEACEFUL")));
+                break;
+            }
+            case "native-layout-set":
+            case "native-layout-clear": {
+                ObjectReference screen = field(client, "currentScreen");
+                ClassType patches = type("dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches");
+                ObjectReference patch = null;
+                if (args[0].equals("native-layout-set")) {
+                    patch = (ObjectReference) patches.invokeMethod(thread, patches.methodsByName("defaults").getFirst(),
+                        List.of(screen), ObjectReference.INVOKE_SINGLE_THREADED);
+                    // Use a transient production editor draft, never overwrite a user's saved family layout.
+                    for (int field = 0; field < 2; field++) {
+                        int before = ((IntegerValue) call(patch, "value", "(I)I", vm.mirrorOf(field))).value();
+                        patch = (ObjectReference) call(patch, "adjust", "(II)Ldev/gilbe/dynamicinventory/client/editor/NativeLayoutPatch;",
+                            vm.mirrorOf(field), vm.mirrorOf(Integer.parseInt(args[field + 1]) - before));
+                    }
+                }
+                patches.invokeMethod(thread, patches.methodsByName("draft").getFirst(), Arrays.asList(screen, patch),
+                    ObjectReference.INVOKE_SINGLE_THREADED);
+                int width = ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "width"))).value();
+                int height = ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "height"))).value();
+                call(screen, "setWorldAndResolution", "(Lnet/minecraft/client/Minecraft;II)V", client,
+                    vm.mirrorOf(width), vm.mirrorOf(height));
                 break;
             }
             case "layout-set": {
@@ -807,6 +1311,37 @@ public class StorageHarness {
                 System.out.println("Invoked creative pick-block at " + x + "," + y + "," + z);
                 break;
             }
+            case "entity-open": {
+                act(new String[]{"require-qualification"});
+                ObjectReference entities = field(field(client, "theWorld"), "loadedEntityList");
+                ArrayReference entries = (ArrayReference) call(entities, "toArray", "()[Ljava/lang/Object;");
+                ObjectReference selected = null;
+                for (Value entry : entries.getValues()) {
+                    ObjectReference entity = (ObjectReference) entry;
+                    StringReference name = (StringReference) call(entity, "getCommandSenderName", "()Ljava/lang/String;");
+                    if ((name != null && name.value().equals(args[1])) || entity.referenceType().name().equals(args[1])) selected = entity;
+                }
+                if (selected == null) throw new AssertionError("Named fixture entity is not loaded: " + args[1]);
+                // Send the same interaction packet as vanilla, leaving entity GUI selection to the server.
+                ClassType action = type("net.minecraft.network.play.client.C02PacketUseEntity$Action");
+                ObjectReference packet = make("net.minecraft.network.play.client.C02PacketUseEntity",
+                    "(Lnet/minecraft/entity/Entity;Lnet/minecraft/network/play/client/C02PacketUseEntity$Action;)V",
+                    selected, action.getValue(fieldInfo(action, "INTERACT")));
+                call(field(player, "sendQueue"), "addToSendQueue", "(Lnet/minecraft/network/Packet;)V", packet);
+                break;
+            }
+            case "use-held": {
+                ObjectReference server = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
+                if (server == null) throw new IllegalStateException("Disposable integrated fixture required");
+                String folder = ((StringReference) call(server, "getFolderName", "()Ljava/lang/String;")).value();
+                if (!folder.startsWith("DI-Baseline-") || !folder.endsWith("Qualification")) throw new IllegalStateException("Disposable qualification world required");
+                Value held = call(player, "getHeldItem", "()Lnet/minecraft/item/ItemStack;");
+                if (held == null) throw new IllegalStateException("No held fixture item");
+                call(field(client, "playerController"), "sendUseItem",
+                    "(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;Lnet/minecraft/item/ItemStack;)Z",
+                    player, field(client, "theWorld"), held);
+                break;
+            }
             case "block-open": {
                 if (player == null) throw new IllegalStateException("No player");
                 ObjectReference server = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
@@ -856,6 +1391,41 @@ public class StorageHarness {
                 } finally {
                     reason.enableCollection();
                 }
+                break;
+            }
+            case "resize-state": {
+                // Read the actual actor's shape, never the process-wide startup default.
+                ObjectReference inventory = field(player, "inventory");
+                ClassType layout = type("dev.gilbe.dynamicinventory.inventory.InventoryLayout");
+                ObjectReference shape = (ObjectReference) layout.invokeMethod(thread,
+                    layout.methodsByName("of", "(Lnet/minecraft/entity/player/InventoryPlayer;)Ldev/gilbe/dynamicinventory/inventory/InventoryShape;").getFirst(),
+                    List.of(inventory), ObjectReference.INVOKE_SINGLE_THREADED);
+                int storage = ((IntegerValue) call(shape, "storageSlots", "()I")).value();
+                int raw = ((IntegerValue) call(shape, "rawMainSlots", "()I")).value();
+                if (storage != Integer.parseInt(args[1]) || ((ArrayReference) field(inventory, "mainInventory")).length() != raw)
+                    throw new AssertionError("Unexpected owned capacity: " + storage + "/" + raw);
+                ObjectReference handler = field(player, "sendQueue");
+                ObjectReference gate = (ObjectReference) call(handler, "dynamicinventory$resizeGate", "()Ldev/gilbe/dynamicinventory/client/ClientInventoryResizeGate;");
+                if (!((BooleanValue) call(gate, "allowsInput", "(Lnet/minecraft/entity/player/EntityPlayer;)Z", player)).value())
+                    throw new AssertionError("Capacity synchronization has not released input");
+                ClassType protocol = type("dev.gilbe.dynamicinventory.network.InventoryResizeProtocol");
+                protocol.invokeMethod(thread, protocol.methodsByName("describe").getFirst(), List.of(player), ObjectReference.INVOKE_SINGLE_THREADED);
+                System.out.println("PASS live capacity " + storage + ", raw " + raw + ", revision " + call(shape, "revision", "()J"));
+                break;
+            }
+            case "reload-test-settings": {
+                // After restoring backed-up files, refresh their in-memory copies too.
+                // Otherwise a later ordinary game shutdown would overwrite the restored files.
+                if (player != null) act(new String[]{"resume"});
+                call(field(client, "gameSettings"), "loadOptions", "()V");
+                ObjectReference settingsFile = make("java.io.File", "(Ljava/io/File;Ljava/lang/String;)V",
+                    field(client, "mcDataDir"), vm.mirrorOf("config/dynamicinventory-client.cfg"));
+                ClassType settings = type("dev.gilbe.dynamicinventory.client.InventoryViewSettings");
+                settings.invokeMethod(thread, settings.methodsByName("initialize").getFirst(),
+                    List.of(settingsFile), ObjectReference.INVOKE_SINGLE_THREADED);
+                int width = ((IntegerValue) client.getValue(fieldInfo(client.referenceType(), "displayWidth"))).value();
+                int height = ((IntegerValue) client.getValue(fieldInfo(client.referenceType(), "displayHeight"))).value();
+                call(client, "resize", "(II)V", vm.mirrorOf(width), vm.mirrorOf(height));
                 break;
             }
             case "resume":
@@ -1012,6 +1582,7 @@ public class StorageHarness {
                     + ((IntegerValue) view.getValue(fieldInfo(view.referenceType(), "columns"))).value() * 18 + 5
                     + ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "guiLeft"))).value();
                 int y = ((IntegerValue) view.getValue(fieldInfo(view.referenceType(), "visibleRows"))).value() * 18 + 82
+                    + ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "tabSpace"))).value()
                     + ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "guiTop"))).value();
                 call(screen, "mouseClicked", "(III)V", vm.mirrorOf(x), vm.mirrorOf(y), vm.mirrorOf(0));
                 call(screen, "mouseMovedOrUp", "(III)V", vm.mirrorOf(x), vm.mirrorOf(y), vm.mirrorOf(0));
@@ -1041,7 +1612,7 @@ public class StorageHarness {
                 }
                 int offset = ((IntegerValue) screen.getValue(fieldInfo(screen.referenceType(), "scrollRow"))).value();
                 int visible = 0;
-                int ordinary = layoutInt("mainSlots");
+                int ordinary = ownedLayoutInt(field(player, "inventory"), "mainSlots");
                 ArrayReference main = (ArrayReference) field(player, "inventory").getValue(fieldInfo(field(player, "inventory").referenceType(), "mainInventory"));
                 boolean backhand = main.length() == ordinary + 1;
                 int ordinaryEnd = ordinary + (backhand ? 10 : 9);
@@ -1179,6 +1750,7 @@ public class StorageHarness {
                                 loader = hit.location().declaringType().classLoader();
                                 try {
                                     act(args);
+                                    if (awaitingGraveSeed) continue;
                                 } catch (InvocationException failure) {
                                     ObjectReference cause = failure.exception();
                                     System.err.println("Target failure: " + cause.referenceType().name() + ": " +

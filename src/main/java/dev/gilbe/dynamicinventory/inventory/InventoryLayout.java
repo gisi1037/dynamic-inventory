@@ -1,16 +1,33 @@
 package dev.gilbe.dynamicinventory.inventory;
 
+import net.minecraft.entity.player.InventoryPlayer;
+
 import dev.gilbe.dynamicinventory.compat.BackhandCompatibility;
 
 /** Logical main indices are stable; armor API indices follow the main array. */
 public final class InventoryLayout {
 
-    public static final int HOTBAR_SLOTS = 9;
-    public static final int LEGACY_MAIN_SLOTS = 36;
-    public static final int ARMOR_SLOTS = 4;
-    public static final int OFFHAND_INDEX = 36;
+    public static final int HOTBAR_SLOTS = InventoryShape.HOTBAR_SLOTS;
+    public static final int LEGACY_MAIN_SLOTS = InventoryShape.LEGACY_MAIN_SLOTS;
+    public static final int ARMOR_SLOTS = InventoryShape.ARMOR_SLOTS;
+    public static final int OFFHAND_INDEX = InventoryShape.OFFHAND_INDEX;
 
     private InventoryLayout() {}
+
+    /** Startup defaults construct a NEW inventory. Runtime code must use of(theActualInventory). */
+    public static InventoryShape initialShape() {
+        return new InventoryShape(InventoryCapacity.storageSlots(), BackhandCompatibility.enabled(), 0);
+    }
+
+    public static InventoryShape of(InventoryPlayer inventory) {
+        if (inventory == null) throw new NullPointerException("inventory");
+        InventoryShape shape = ((ExpandedInventoryAccess) inventory).dynamicinventory$getShape();
+        if (shape == null) throw new IllegalStateException("Inventory shape is not initialized");
+        return shape;
+    }
+
+    // Compatibility helpers for startup fixtures and callers without an inventory.
+    // They describe the startup DEFAULT, not a particular player's live capacity.
 
     public static int mainSlots() {
         return InventoryCapacity.storageSlots() + HOTBAR_SLOTS;

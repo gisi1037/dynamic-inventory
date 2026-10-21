@@ -3,9 +3,18 @@ package dev.gilbe.dynamicinventory.compat;
 import java.lang.reflect.Method;
 import java.util.List;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+
+import org.lwjgl.opengl.GL11;
 
 import cpw.mods.fml.common.Loader;
+import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
+import dev.gilbe.dynamicinventory.client.InventoryGuiTheme;
+import dev.gilbe.dynamicinventory.client.NativePanelFrame;
+import dev.gilbe.dynamicinventory.client.PlayerInventoryScreen;
 
 /** Optional native tab registry: TiC owns registration, visibility, icons and clicks. */
 public final class InventoryTabsCompatibility {
@@ -18,6 +27,25 @@ public final class InventoryTabsCompatibility {
     private static Method visible;
 
     private InventoryTabsCompatibility() {}
+
+    /** Replace only the frame on our inventory screens; native tabs still own icons, state and clicks. */
+    public static boolean drawTabFrame(GuiButton tab, int x, int y, int width, int height) {
+        GuiScreen screen = Minecraft.getMinecraft().currentScreen;
+        if (!(screen instanceof PlayerInventoryScreen) && !(screen instanceof ContainerPanelAccess
+            && ((ContainerPanelAccess) screen).dynamicinventory$panel() != null)) return false;
+        NativePanelFrame.draw(x, y, width, height, 2, null);
+        if (!tab.enabled) {
+            // The selected tab overlaps the panel by four pixels. Leave that seam open,
+            // instead of drawing a second bottom bevel across the panel's top edge.
+            GL11.glPushAttrib(GL11.GL_CURRENT_BIT | GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT);
+            try {
+                Gui.drawRect(x, y + height - 4, x + width, y + height, InventoryGuiTheme.get().panelFill);
+            } finally {
+                GL11.glPopAttrib();
+            }
+        }
+        return true;
+    }
 
     private static boolean available() {
         if (!PackCompatibility.enabled() || !Loader.isModLoaded("TConstruct")) return false;

@@ -12,7 +12,7 @@ import baubles.common.BaublesConfig;
 import baubles.common.container.InventoryBaubles;
 import baubles.common.container.SlotBauble;
 import baubles.common.lib.PlayerHandler;
-import dev.gilbe.dynamicinventory.mixins.SlotInventoryAccess;
+import dev.gilbe.dynamicinventory.mixins.minecraft.SlotInventoryAccess;
 
 /** Native Baubles storage and validation; no copied equipment inventory or new save format. */
 public final class BaublesInventoryBridge {
@@ -29,6 +29,11 @@ public final class BaublesInventoryBridge {
 
     public static int slotCount() {
         return BaubleExpandedSlots.slotsCurrentlyUsed();
+    }
+
+    /** Resolve constructor placeholders before comparing backing-inventory aliases across peers. */
+    public static void bind(Slot slot) {
+        if (slot instanceof BoundSlot bound) bound.bind();
     }
 
     public static boolean visible(Slot slot) {

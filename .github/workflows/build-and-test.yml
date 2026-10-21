@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ isolated, rc2-backhand, rc2-integration ]
+        profile: [ isolated, rc2-backhand, rc2-integration, daily-2026-10-19 ]
     steps:
       - uses: actions/checkout@v5
       - name: Check tracked files for local-only data
@@ -44,7 +44,7 @@ jobs:
           if [[ "${{ matrix.profile }}" != "isolated" ]]; then
             tasks+=(rc2CompatClasses backhandTestClasses)
           fi
-          if [[ "${{ matrix.profile }}" == "rc2-integration" ]]; then
+          if [[ "${{ matrix.profile }}" == "rc2-integration" || "${{ matrix.profile }}" == "daily-2026-10-19" ]]; then
             tasks+=(packTestClasses)
           fi
           ./gradlew --no-daemon "${tasks[@]}" -PinventoryProfile=${{ matrix.profile }} -PinventoryStorageTests
@@ -83,6 +83,7 @@ jobs:
           .\scripts\testing\test-fixture-artifacts.ps1
           .\scripts\testing\test-qualification-validator.ps1
           .\scripts\testing\test-inventory-artifact.ps1
+          .\scripts\testing\test-inventory-shapes.ps1
       - name: Test headless qualification checks in Windows PowerShell 5.1
         shell: powershell
         run: |

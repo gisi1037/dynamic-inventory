@@ -5,12 +5,12 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('inventory-artifact-test-' + [guid
 New-Item -ItemType Directory -Path $temp | Out-Null
 $checks = 0
 $resources = @(
-    'mcmod.info', 'mixins.dynamicinventory.early.json', 'mixins.dynamicinventory.json',
+    'mcmod.info', 'integration-profiles.properties', 'mixins.dynamicinventory.early.json', 'mixins.dynamicinventory.json',
     'mixins.dynamicinventory.late.json', 'mixins.dynamicinventory.refmap.json'
 )
 
 function New-TestJar([string] $Path, [hashtable] $Classes, [string[]] $Resources = $script:resources,
-    [switch] $MissingTinkersForegroundMapping) {
+    [switch] $MissingTinkersForegroundMapping, [switch] $MissingOpenBlocksRestoreMapping) {
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::Open($Path, [IO.Compression.ZipArchiveMode]::Create)
@@ -26,7 +26,12 @@ function New-TestJar([string] $Path, [hashtable] $Classes, [string[]] $Resources
                     if (-not $MissingTinkersForegroundMapping) {
                         $selectorMap['drawGuiContainerForegroundLayer'] = 'Ltconstruct/tools/gui/CraftingStationGui;func_146979_b(II)V'
                     }
-                    $mappings['dev/gilbe/dynamicinventory/mixins/CraftingStationGuiMixin'] = $selectorMap
+                    $mappings['dev/gilbe/dynamicinventory/mixins/tconstruct/CraftingStationGuiMixin'] = $selectorMap
+                    if (-not $MissingOpenBlocksRestoreMapping) {
+                        $mappings['dev/gilbe/dynamicinventory/mixins/openblocks/OpenBlocksInventoryRestoreMixin'] = @{
+                            'Lnet/minecraft/inventory/IInventory;getSizeInventory()I' = 'Lnet/minecraft/inventory/IInventory;func_70302_i_()I'
+                        }
+                    }
                     $body = @{mappings=$mappings} | ConvertTo-Json -Depth 6 -Compress
                 }
                 $data = [Text.Encoding]::UTF8.GetBytes($body)
@@ -46,11 +51,14 @@ function New-TestJar([string] $Path, [hashtable] $Classes, [string[]] $Resources
     } finally { $archive.Dispose() }
 }
 
-function Invoke-Scanner([string] $Name, [hashtable] $Classes, [switch] $MissingTinkersForegroundMapping) {
+function Invoke-Scanner([string] $Name, [hashtable] $Classes, [switch] $MissingTinkersForegroundMapping,
+    [switch] $MissingOpenBlocksRestoreMapping,
+    [string[]] $Resources = $script:resources) {
     $prod = Join-Path $temp "$Name-prod.jar"
     $dev = Join-Path $temp "$Name-dev.jar"
     $evidence = Join-Path $temp "$Name-evidence.json"
-    New-TestJar $prod $Classes -MissingTinkersForegroundMapping:$MissingTinkersForegroundMapping
+    New-TestJar $prod $Classes -Resources $Resources -MissingTinkersForegroundMapping:$MissingTinkersForegroundMapping `
+        -MissingOpenBlocksRestoreMapping:$MissingOpenBlocksRestoreMapping
     New-TestJar $dev @{ 'dev/gilbe/dynamicinventory/Development.class' = 52 }
     $failed = $false
     try { & $scanner -ProductionJar $prod -DevelopmentJar $dev -EvidencePath $evidence | Out-Null }
@@ -67,21 +75,21 @@ function Assert-Check([bool] $Condition, [string] $Name) {
 try {
     $valid = Invoke-Scanner 'valid' @{
         'dev/gilbe/dynamicinventory/api/InventoryUi.class' = 52
-        'dev/gilbe/dynamicinventory/mixins/PickBlockSlotMixin.class' = 52
+        'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class' = 52
     }
     Assert-Check (-not $valid.failed -and $valid.report.success -and -not $valid.report.fullPackQualified -and
         $valid.report.classCount -eq 2 -and $valid.report.publicApiClassCount -eq 1 -and $valid.report.pickBlockSlotMixinIncluded) 'valid Java 8 production artifact passes with counts and explicit non-qualification'
 
     $badMajor = Invoke-Scanner 'bad-major' @{
         'dev/gilbe/dynamicinventory/api/InventoryUi.class' = 61
-        'dev/gilbe/dynamicinventory/mixins/PickBlockSlotMixin.class' = 52
+        'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class' = 52
     }
     Assert-Check ($badMajor.failed -and -not $badMajor.report.success -and $badMajor.report.status -eq 'failed' -and
         $badMajor.report.nonJava8Classes.Count -eq 1 -and $badMajor.report.nonJava8Classes[0].majorVersion -eq 61) 'non-Java-8 class is rejected and reported'
 
     $fixture = Invoke-Scanner 'fixture' @{
         'dev/gilbe/dynamicinventory/api/InventoryUi.class' = 52
-        'dev/gilbe/dynamicinventory/mixins/PickBlockSlotMixin.class' = 52
+        'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class' = 52
         'dev/gilbe/dynamicinventory/qualification/Fixture.class' = 52
     }
     Assert-Check ($fixture.failed -and -not $fixture.report.success -and $fixture.report.fixtureClasses -contains 'dev/gilbe/dynamicinventory/qualification/Fixture.class') 'fixture class is rejected and reported'
@@ -93,12 +101,32 @@ try {
 
     $missingTinkersMap = Invoke-Scanner 'missing-tinkers-map' @{
         'dev/gilbe/dynamicinventory/api/InventoryUi.class' = 52
-        'dev/gilbe/dynamicinventory/mixins/PickBlockSlotMixin.class' = 52
+        'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class' = 52
     } -MissingTinkersForegroundMapping
     Assert-Check ($missingTinkersMap.failed -and -not $missingTinkersMap.report.success -and
         $missingTinkersMap.report.failure -match 'CraftingStationGui foreground selector') 'unmapped Tinkers foreground selector is rejected'
 
+    $restoreClasses = @{
+        'dev/gilbe/dynamicinventory/api/InventoryUi.class' = 52
+        'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class' = 52
+        'dev/gilbe/dynamicinventory/mixins/openblocks/OpenBlocksInventoryRestoreMixin.class' = 52
+    }
+    $restore = Invoke-Scanner 'openblocks-map' $restoreClasses
+    Assert-Check (!$restore.failed -and $restore.report.openBlocksRestoreRefmap.passed) 'OpenBlocks restore selector mapping is checked'
+    $missingRestore = Invoke-Scanner 'missing-openblocks-map' $restoreClasses -MissingOpenBlocksRestoreMapping
+    Assert-Check ($missingRestore.failed -and $missingRestore.report.failure -match 'OpenBlocks restore size selector') 'unmapped OpenBlocks restore selector is rejected'
+
+    $missingProfiles = Invoke-Scanner 'missing-profiles' @{
+        'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class' = 52
+    } -Resources @($resources | Where-Object { $_ -ne 'integration-profiles.properties' })
+    Assert-Check ($missingProfiles.failed -and $missingProfiles.report.failure -match 'integration-profiles.properties') 'missing startup profile resource is rejected'
+
     Write-Host "PASS: $checks inventory artifact scanner regression checks"
 } finally {
-    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+    # Restrict recursive cleanup to the uniquely named directory this run created.
+    $cleanupPath = [IO.Path]::GetFullPath($temp)
+    if ((Split-Path $cleanupPath -Parent) -eq [IO.Path]::GetTempPath().TrimEnd('\','/') -and
+        (Split-Path $cleanupPath -Leaf) -match '^inventory-artifact-test-[a-f0-9]{32}$') {
+        Remove-Item -LiteralPath $cleanupPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

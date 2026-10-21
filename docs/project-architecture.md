@@ -18,13 +18,19 @@ to container IDs. Preserve existing native slot IDs; append added player slots.
 
 ## Capacity and persistence
 
-`InventoryCapacity` reads the startup storage count and negotiates capacity during
-login. Default storage is 72, supported range 27–216, with nine hotbar slots.
+`InventoryCapacity` supplies a startup default; immutable per-player `InventoryShape`
+records actual capacity, offhand mapping and revision. Live resizing uses a server
+transaction and a separate `DI|Size` agreement before input and contents are released.
+Default storage is 72, supported range 27-216, with nine hotbar slots.
 Armor and mod equipment retain their own ownership.
 
-`InventoryCodec` keeps legacy items in their usual representation and stores added
-items in namespaced, versioned data. Shrinking capacity retains displaced stacks
-in recovery data; increasing it restores them when their original slots are free.
+`InventoryCodec` preserves legacy item representation and writes additional items
+in namespaced versioned data. Saved live overrides retain effective capacity.
+Startup capacity reductions quarantine displaced stacks in recovery data; live
+shrinks instead refuse occupied removed slots. `InventoryUpgrades` separately owns
+permanent base capacity and the consumed-module count in Forge's `PlayerPersisted`
+tag. Equipment bonuses are derived from actual Baubles slots, avoiding double grants.
+
 Standalone inventory NBT roundtrips use a metadata record at unused byte slot 255.
 Nested item NBT is copied to preserve snapshot independence.
 

@@ -5,7 +5,8 @@ param(
     [string] $WorldName='DI-Baseline-Containers-RC2-Qualification',
     [string] $EvidenceDirectory='docs/qualification/opening-gate/integrated',
     [string] $PeerMetadataPath='',
-    [string] $ServerLaunchManifest=''
+    [string] $ServerLaunchManifest='',
+    [ValidateSet('rc2-integration','daily-2026-10-19')] [string] $Profile='rc2-integration'
 )
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -13,7 +14,7 @@ Set-Location -LiteralPath $projectRoot
 . (Join-Path $PSScriptRoot 'qualification-evidence.ps1')
 New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
 $launchEvidence=Start-QualificationEvidence -ProjectRoot $projectRoot -Port $Port -GameDirectory $GameDirectory `
-    -Profile rc2-integration -EvidenceDirectory $EvidenceDirectory -PeerMetadataPath $PeerMetadataPath `
+    -Profile $Profile -EvidenceDirectory $EvidenceDirectory -PeerMetadataPath $PeerMetadataPath `
     -ServerGameDirectory $ServerGameDirectory -ServerLaunchManifest $ServerLaunchManifest
 $clientDiagnostics=Join-Path $GameDirectory 'diagnostics/dynamicinventory'
 $serverDiagnostics=if($ServerGameDirectory){Join-Path $ServerGameDirectory 'diagnostics/dynamicinventory'}else{$clientDiagnostics}

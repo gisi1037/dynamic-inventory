@@ -2,35 +2,48 @@ package dev.gilbe.dynamicinventory.compat;
 
 import cpw.mods.fml.common.Loader;
 
-/** Exact RC-2 adapters are qualified independently of the full pack. */
+/** Exact named fixtures are checked independently; selecting a daily does not qualify it. */
 public final class PackCompatibility {
 
     private PackCompatibility() {}
 
     public static boolean enabled() {
-        return "rc2-integration".equals(System.getProperty("dynamicinventory.profile"));
+        return IntegrationProfile.selected()
+            .usesPackAdapters();
     }
 
     public static void verifyVersions() {
         if (!enabled()) return;
-        require("backhand", BackhandCompatibility.SUPPORTED_VERSION);
-        require("Baubles", "2.2.25-GTNH");
-        require("NotEnoughItems", "2.8.155-GTNH");
-        require("bogosorter", "1.3.54-GTNH");
-        if (Loader.isModLoaded("craftingtweaks")) require("craftingtweaks", "1.0.3");
-        if (Loader.isModLoaded("TConstruct")) require("TConstruct", "1.14.118-GTNH");
-        if (Loader.isModLoaded("modularui")) require("modularui", "1.3.4");
-        if (Loader.isModLoaded("modularui2")) require("modularui2", "2.3.92-1.7.10");
-        if (Loader.isModLoaded("GalacticraftCore")) require("GalacticraftCore", "3.4.34-GTNH");
+        require("backhand", "Backhand");
+        require("Baubles", "Baubles-Expanded");
+        require("NotEnoughItems", "NotEnoughItems");
+        require("bogosorter", "InventoryBogoSorter");
+        if (Loader.isModLoaded("craftingtweaks")) require("craftingtweaks", "GregoryTweaksForCrafting");
+        if (Loader.isModLoaded("TConstruct")) require("TConstruct", "TinkersConstruct");
+        if (Loader.isModLoaded("modularui")) require("modularui", "ModularUI");
+        if (Loader.isModLoaded("modularui2")) require("modularui2", "ModularUI2");
+        if (Loader.isModLoaded("GalacticraftCore")) require("GalacticraftCore", "Galacticraft");
+        if (Loader.isModLoaded("IronChest")) require("IronChest", "IronChest");
+        if (Loader.isModLoaded("etfuturum")) require("etfuturum", "EtFuturum");
+        // These integrations are optional, but their loaded versions must match the fixture.
+        if (Loader.isModLoaded("avaritiaddons")) require("avaritiaddons", "Avaritiaddons");
+        if (Loader.isModLoaded("dreamcraft")) require("dreamcraft", "NewHorizonsCoreMod");
+        if (Loader.isModLoaded("OpenBlocks")) {
+            require("OpenBlocks", "OpenBlocks");
+            require("OpenMods", "OpenModsLib");
+        }
     }
 
-    private static void require(String id, String version) {
+    // The late loader also checks a required bridge before applying its optional GUI mixin.
+    static void require(String id, String project) {
+        IntegrationProfile profile = IntegrationProfile.selected();
+        String version = profile.version(project);
         if (!Loader.isModLoaded(id) || !version.equals(
             Loader.instance()
                 .getIndexedModList()
                 .get(id)
                 .getVersion())) {
-            throw new IllegalStateException("The RC-2 integration fixture requires " + id + " " + version);
+            throw new IllegalStateException(profile.profileName() + " requires " + id + " " + version);
         }
     }
 }

@@ -22,6 +22,7 @@ $nonJava8Classes = [Collections.Generic.List[object]]::new()
 $classCount = 0
 $publicApiClassCount = 0
 $craftingStationForegroundRefmap = $null
+$openBlocksRestoreRefmap = $null
 $productionPath = $null
 $developmentPath = $null
 try {
@@ -39,6 +40,7 @@ try {
         foreach ($entry in $entries) { [void]$entryNames.Add($entry.FullName) }
         $requiredResources = @(
             'mcmod.info',
+            'integration-profiles.properties',
             'mixins.dynamicinventory.early.json',
             'mixins.dynamicinventory.json',
             'mixins.dynamicinventory.late.json',
@@ -52,17 +54,29 @@ try {
         try { $refmap = $reader.ReadToEnd() | ConvertFrom-Json }
         catch { throw "Production JAR refmap is not valid JSON: $($_.Exception.Message)" }
         finally { $reader.Dispose() }
-        $guiMixin = $refmap.mappings.PSObject.Properties['dev/gilbe/dynamicinventory/mixins/CraftingStationGuiMixin']
+        $guiMixin = $refmap.mappings.PSObject.Properties['dev/gilbe/dynamicinventory/mixins/tconstruct/CraftingStationGuiMixin']
         $foregroundSelector = if ($null -ne $guiMixin) { $guiMixin.Value.PSObject.Properties['drawGuiContainerForegroundLayer'] } else { $null }
         $expectedForegroundMapping = 'Ltconstruct/tools/gui/CraftingStationGui;func_146979_b(II)V'
         if ($null -eq $foregroundSelector -or [string]$foregroundSelector.Value -cne $expectedForegroundMapping) {
             throw "Tinkers CraftingStationGui foreground selector must map to $expectedForegroundMapping."
         }
         $craftingStationForegroundRefmap = [ordered]@{
-            mixin = 'dev/gilbe/dynamicinventory/mixins/CraftingStationGuiMixin'
+            mixin = 'dev/gilbe/dynamicinventory/mixins/tconstruct/CraftingStationGuiMixin'
             selector = 'drawGuiContainerForegroundLayer'
             target = [string]$foregroundSelector.Value
             passed = $true
+        }
+        $restoreMixin = 'dev/gilbe/dynamicinventory/mixins/openblocks/OpenBlocksInventoryRestoreMixin'
+        if ($entryNames.Contains("$restoreMixin.class")) {
+            # A missing remap silently misses the obfuscated interface call in a real pack.
+            $restoreSelector = 'Lnet/minecraft/inventory/IInventory;getSizeInventory()I'
+            $restoreTarget = 'Lnet/minecraft/inventory/IInventory;func_70302_i_()I'
+            $restoreMap = $refmap.mappings.PSObject.Properties[$restoreMixin]
+            $mapped = if ($null -ne $restoreMap) { $restoreMap.Value.PSObject.Properties[$restoreSelector] } else { $null }
+            if ($null -eq $mapped -or [string]$mapped.Value -cne $restoreTarget) {
+                throw "OpenBlocks restore size selector must map to $restoreTarget."
+            }
+            $openBlocksRestoreRefmap = @{mixin=$restoreMixin; selector=$restoreSelector; target=$restoreTarget; passed=$true}
         }
 
         $pickBlockIncluded = $false
@@ -75,7 +89,7 @@ try {
             if ($entry.FullName -match '(?i)(^|/)(fixtures?|qualification|storageTest|packTest|backhandTest|tests?)(/|$)|(?:Test|Tests|Fixture|Fixtures|Qualification)(?:\$[^/]*)?\.class$|(?:StorageTestCommand|CapacityTestCommand|QualificationCommand)\.class$') {
                 $fixtureClasses.Add($entry.FullName)
             }
-            if ($entry.FullName -eq 'dev/gilbe/dynamicinventory/mixins/PickBlockSlotMixin.class') { $pickBlockIncluded = $true }
+            if ($entry.FullName -eq 'dev/gilbe/dynamicinventory/mixins/minecraft/PickBlockSlotMixin.class') { $pickBlockIncluded = $true }
             $stream = $entry.Open()
             try {
                 $bytes = New-Object byte[] 8
@@ -117,6 +131,7 @@ try {
         requiredResources = $requiredResources
         pickBlockSlotMixinIncluded = $true
         craftingStationForegroundRefmap = $craftingStationForegroundRefmap
+        openBlocksRestoreRefmap = $openBlocksRestoreRefmap
         capturedAtUtc = [datetime]::UtcNow.ToString('o')
     }
     $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $evidenceFullPath -Encoding UTF8
@@ -136,6 +151,7 @@ try {
         fixtureClasses = @($fixtureClasses.ToArray())
         nonJava8Classes = @($nonJava8Classes.ToArray())
         craftingStationForegroundRefmap = $craftingStationForegroundRefmap
+        openBlocksRestoreRefmap = $openBlocksRestoreRefmap
         failure = $_.Exception.Message
         capturedAtUtc = [datetime]::UtcNow.ToString('o')
     }

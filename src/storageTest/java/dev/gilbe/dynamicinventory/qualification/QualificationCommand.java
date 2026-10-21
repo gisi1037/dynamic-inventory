@@ -69,6 +69,53 @@ public final class QualificationCommand extends CommandBase {
                 .getCurrentPlayerCount());
         try {
             switch (action) {
+                case "resize-check": {
+                    var shape = InventoryLayout.of(player.inventory);
+                    check(shape.storageSlots() == Integer.parseInt(args[1]), "server-owned capacity");
+                    check(player.inventory.mainInventory.length == shape.rawMainSlots(), "server backing length");
+                    check(dev.gilbe.dynamicinventory.api.InventoryUi.isOpeningReady(player), "resize gate released");
+                    dev.gilbe.dynamicinventory.network.InventoryResizeProtocol.describe(player);
+                    NBTTagCompound saved = new NBTTagCompound();
+                    player.writeToNBT(saved);
+                    // Reload into a detached actor, so this check cannot replace live arrays or listeners.
+                    EntityPlayer detached = dev.gilbe.dynamicinventory.StorageTestCommand.detachedPlayer(player);
+                    detached.readFromNBT(saved);
+                    check(
+                        InventoryLayout.of(detached.inventory)
+                            .storageSlots() == shape.storageSlots(),
+                        "saved override");
+                    check(
+                        InventoryLayout.of(detached.inventory)
+                            .revision() == shape.revision(),
+                        "saved revision");
+                    for (int i = 0; i < shape.rawMainSlots(); i++) check(
+                        ItemStack
+                            .areItemStacksEqual(player.inventory.mainInventory[i], detached.inventory.mainInventory[i]),
+                        "saved contents " + i);
+                    break;
+                }
+                case "resize-refuse": {
+                    var before = InventoryLayout.of(player.inventory);
+                    ItemStack[] backing = player.inventory.mainInventory;
+                    ItemStack[] copies = new ItemStack[backing.length];
+                    for (int i = 0; i < backing.length; i++) copies[i] = ItemStack.copyItemStack(backing[i]);
+                    var container = player.inventoryContainer;
+                    boolean refused = false;
+                    try {
+                        dev.gilbe.dynamicinventory.inventory.InventoryResizing
+                            .resize(player, Integer.parseInt(args[1]));
+                    } catch (IllegalArgumentException | IllegalStateException expected) {
+                        refused = true;
+                    }
+                    check(refused, "unsafe resize refused");
+                    check(
+                        InventoryLayout.of(player.inventory) == before && player.inventory.mainInventory == backing
+                            && player.inventoryContainer == container,
+                        "refusal leaves live references untouched");
+                    for (int i = 0; i < backing.length; i++)
+                        check(ItemStack.areItemStacksEqual(backing[i], copies[i]), "refusal preserves contents " + i);
+                    break;
+                }
                 case "seed":
                     seed(player);
                     break;

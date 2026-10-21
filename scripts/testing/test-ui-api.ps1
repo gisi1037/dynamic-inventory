@@ -4,9 +4,10 @@ param(
     [string] $GameDirectory = 'run/rc2-integration/client-developer',
     [string] $ServerGameDirectory = '',
     [string] $EvidenceDirectory = 'docs/qualification/ui-api/integrated',
-    [ValidateSet('isolated','rc2-integration')] [string] $Profile = 'rc2-integration',
+    [ValidateSet('isolated','rc2-integration','daily-2026-10-19')] [string] $Profile = 'rc2-integration',
     [string] $PeerMetadataPath = '',
-    [string] $ServerLaunchManifest = ''
+    [string] $ServerLaunchManifest = '',
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -58,7 +59,7 @@ function SaveView([string] $Label) {
     Copy-Item (Join-Path $GameDirectory "screenshots/step3-ui-api-$Label.png") (Join-Path $EvidenceDirectory "$Label.png") -Force
 }
 if ($ServerGameDirectory) { Harness require-dedicated | Out-Null }
-else { Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null }
+else { Harness require-qualification $WorldName | Out-Null }
 # The real-input checks below click the final storage row; give the test a known viewport.
 Harness window 1280 960 | Out-Null
 Harness background | Out-Null

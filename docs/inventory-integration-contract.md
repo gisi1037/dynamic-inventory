@@ -34,9 +34,12 @@ of ordinary storage. Do not include equipment in ordinary storage transfers.
 
 ## Capacity, layout, and host ownership
 
-Capacity is selected at server startup and agreed during login. The current
-default is 72 storage slots plus nine hotbar slots, with supported storage capacity
-27–216. This contract does not promise live or per-player capacity changes.
+The startup setting supplies the initial default: 72 storage slots plus nine
+hotbar slots, with supported storage capacity 27-216. Experimental live resizing
+is per player. A server transaction rebuilds both persistent containers and agrees
+the new slot map before input is released. Bindings and widgets must capture the
+owning player's shape/revision, rather than the process-wide startup default.
+See [live resizing](live-inventory-resizing.md) and [upgrades](inventory-upgrades.md).
 
 Layout changes positions, viewport size, and visible rows; it does not change
 capacity, item identity, slot rules, or server authority. Auto/Compact/Wide/Tall
@@ -45,11 +48,14 @@ that divides the storage count. For example, 72 fits 9×8, 12×6, or 18×4; 73 c
 form a compact complete rectangle. Use scrolling or an explicitly documented
 fallback when a valid rectangle cannot fit. Do not silently add storage or omit
 the last slots to make a picture fit. The current attached-chest implementation
-selects exact divisors; a common cross-framework policy is not implemented.
+uses the available panel width and permits inactive artwork padding in its final
+row; that padding adds no usable slots. Player-grid rectangle fitting remains a
+separate policy. A common cross-framework policy is still planned.
 
 The host is the container/screen integration that owns the surrounding controls.
 For new integrations it should supply the player region's bounds and say whether
-that region may grow or must scroll. Explicit shared host-bounds support is not exposed; existing integrations use framework-specific geometry.
+that region may grow or must scroll. Explicit shared host-bounds support is the
+next API step; existing integrations currently use framework-specific geometry.
 Exactly one native or framework path owns item rendering, hit testing, input, and
 synchronization. A decorative overlay must not add a second layer of live slots.
 
@@ -93,7 +99,7 @@ client prediction stays locked until the initial cursor/slot batch is complete.
 Both peers block window clicks while pending. A refused
 binding, differing slot map, malformed exchange, timeout, or buffer overflow closes
 the affected window and discards its pending updates. It does not disconnect the
-player or change canonical capacity. Startup protocol 3 rejects older peers that
+player or change canonical capacity. Startup protocol 4 rejects older peers that
 lack this gate.
 
 Server `EntityPlayerMP` actors with a null play network handler, including Forge's
@@ -165,5 +171,5 @@ needs a bridge or a refused unsupported profile; a GUI fallback cannot contain i
    final/offscreen storage, cursor and nested NBT conservation, and GUI resizing.
 4. Test integrated and dedicated server behavior, including a deliberately refused
    opening on either peer. A local refusal test does not prove safe network abort.
-5. Retain exact artifact/profile evidence for compatibility or release claims.
+5. Retain exact artifact/profile evidence and run the full audit before a Git push.
    Early visual previews remain explicitly unqualified.

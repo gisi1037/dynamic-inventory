@@ -28,6 +28,7 @@ public final class PlayerInventoryEvents {
     public void afterInit(GuiScreenEvent.InitGuiEvent.Post event) {
         if (!(event.gui instanceof GuiContainer)) return;
         GuiContainer gui = (GuiContainer) event.gui;
+        AutomaticScrollPresentation.prepare(gui);
         if (ContainerInventoryRegion.of(gui.inventorySlots) != null
             && InventoryUi.findLayout(gui.inventorySlots, gui.getClass()) != null)
             ((ContainerPanelAccess) gui).dynamicinventory$panel(new NativeInventoryPanel(gui));

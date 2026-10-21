@@ -3,9 +3,10 @@ param(
     [string] $GameDirectory = 'run/rc2-integration/client-developer',
     [string] $ServerGameDirectory = '',
     [string] $EvidenceDirectory = 'docs/qualification/ui-api/mui2-integrated',
-    [ValidateSet('isolated','rc2-integration')] [string] $Profile = 'rc2-integration',
+    [ValidateSet('isolated','rc2-integration','daily-2026-10-19')] [string] $Profile = 'rc2-integration',
     [string] $PeerMetadataPath = '',
-    [string] $ServerLaunchManifest = ''
+    [string] $ServerLaunchManifest = '',
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -42,7 +43,8 @@ function MainSignature($State) {
     return ($State.mainInventory | Select-Object inventoryIndex,item,count,damage,nbtCanonical | ConvertTo-Json -Depth 12 -Compress)
 }
 if ($ServerGameDirectory) { Harness require-dedicated | Out-Null }
-else { Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null }
+else { Harness require-qualification $WorldName | Out-Null }
+if (!$ServerGameDirectory) { Harness fixture-peaceful | Out-Null }
 Harness background | Out-Null
 Harness resume | Out-Null
 Harness window 1920 1080 | Out-Null

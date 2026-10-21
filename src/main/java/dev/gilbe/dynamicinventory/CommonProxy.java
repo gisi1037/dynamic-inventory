@@ -20,6 +20,17 @@ import dev.gilbe.dynamicinventory.inventory.InventoryCapacity;
 
 public class CommonProxy {
 
+    /** Optional local viewer for actor-less widget factories. Server code should pass the owner explicitly. */
+    public net.minecraft.entity.player.InventoryPlayer getClientInventory() {
+        return null;
+    }
+
+    /** Presentation-only fallback lives on the client; a dedicated server never loads GUI classes. */
+    public dev.gilbe.dynamicinventory.api.NativeUiLayout automaticLayout(net.minecraft.inventory.Container container,
+        Class<?> guiClass) {
+        return null;
+    }
+
     public boolean isClientOpeningReady(EntityPlayer player) {
         return false;
     }
@@ -27,22 +38,26 @@ public class CommonProxy {
     // Validate the selected compatibility profile before any player inventory can be constructed.
     public void preInit(FMLPreInitializationEvent event) {
         if (Loader.isModLoaded("backhand")
-            && (!BackhandCompatibility.enabled() || !BackhandCompatibility.SUPPORTED_VERSION.equals(
-                Loader.instance()
-                    .getIndexedModList()
-                    .get("backhand")
-                    .getVersion()))) {
+            && (!BackhandCompatibility.enabled() || !BackhandCompatibility.supportedVersion()
+                .equals(
+                    Loader.instance()
+                        .getIndexedModList()
+                        .get("backhand")
+                        .getVersion()))) {
             throw new IllegalStateException(
-                "Backhand support requires a pinned rc2-backhand or rc2-integration fixture with Backhand 1.8.16.");
+                "Backhand requires an explicit matching integration profile; expected "
+                    + BackhandCompatibility.supportedVersion());
         }
         if (BackhandCompatibility.enabled() && !Loader.isModLoaded("backhand")) {
             throw new IllegalStateException("The offhand inventory layout requires Backhand on both sides");
         }
         if (BackhandCompatibility.enabled() && Loader.isModLoaded("bogosorter") && !PackCompatibility.enabled())
-            throw new IllegalStateException("Backhand with BogoSorter requires the rc2-integration equipment layout");
+            throw new IllegalStateException("Backhand with BogoSorter requires a pinned full integration profile");
         InventoryCapacity.configuredStorageSlots();
         PackCompatibility.verifyVersions();
         BaselineDiagnostics.initialize(event.getModConfigurationDirectory());
+        dev.gilbe.dynamicinventory.upgrades.UpgradeSettings.load(event.getModConfigurationDirectory());
+        dev.gilbe.dynamicinventory.upgrades.InventoryUpgrades.register();
 
         DynamicInventory.LOG.info(
             "Dynamic Inventory {}: configured {} storage slots; adapter registration closes after startup",
@@ -57,6 +72,9 @@ public class CommonProxy {
         FMLCommonHandler.instance()
             .bus()
             .register(new BaselineServerEvents());
+        FMLCommonHandler.instance()
+            .bus()
+            .register(new dev.gilbe.dynamicinventory.upgrades.InventoryUpgrades());
     }
 
     // Record the actual loaded dependency versions for the selected qualification profile.
@@ -69,5 +87,6 @@ public class CommonProxy {
     // Commands are attached to each new server, while adapters remain fixed for the process lifetime.
     public void serverStarting(FMLServerStartingEvent event) {
         event.registerServerCommand(new BaselineCommand());
+        event.registerServerCommand(new dev.gilbe.dynamicinventory.inventory.InventorySizeCommand());
     }
 }

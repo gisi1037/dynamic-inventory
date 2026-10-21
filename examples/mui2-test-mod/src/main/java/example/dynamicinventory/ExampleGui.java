@@ -68,7 +68,7 @@ public final class ExampleGui extends AbstractUIFactory<GuiData> implements IGui
         // Integration step 2: use the public live-slot factory instead of hardcoding 36 player slots.
         // MUI2 handles clicks and shift-clicks; the factory supplies responsive storage and the hotbar.
         return panel.child(
-            Mui2InventoryWidgets.playerInventory((logicalIndex, slot) -> slot)
+            Mui2InventoryWidgets.playerInventory((logicalIndex, slot) -> slot, data.getPlayer().inventory)
                 .pos(8, 112));
     }
 

@@ -1,5 +1,6 @@
 package dev.gilbe.dynamicinventory.persistence;
 
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
@@ -10,6 +11,7 @@ import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.compat.BackhandCompatibility;
 import dev.gilbe.dynamicinventory.inventory.ExpandedInventoryAccess;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 
 /** Startup-capacity schema. No live inventory array is temporarily swapped during serialization. */
 public final class InventoryCodec {
@@ -36,14 +38,42 @@ public final class InventoryCodec {
     }
 
     public static void readInventory(InventoryPlayer inventory, NBTTagList list) {
+        readCapacity(inventory, list, new NBTTagCompound());
         readLegacy(inventory, list);
         readInventoryData(inventory, list, new NBTTagCompound());
     }
 
     /** Read the legacy array and exactly one extra schema, even if a foreign writer saved both forms. */
     public static void readPlayerInventory(InventoryPlayer inventory, NBTTagList list, NBTTagCompound playerTag) {
+        readCapacity(inventory, list, playerTag);
         readLegacy(inventory, list);
         readInventoryData(inventory, list, playerTag);
+    }
+
+    /** Only loading/detached snapshots adopt overrides. Live backup restore keeps its target capacity. */
+    private static void readCapacity(InventoryPlayer inventory, NBTTagList list, NBTTagCompound playerTag) {
+        if (inventory.player != null && inventory.player.inventory == inventory
+            && ((inventory.player instanceof EntityPlayerMP
+                && ((EntityPlayerMP) inventory.player).playerNetServerHandler != null)
+                || (inventory.player.worldObj != null && inventory.player.worldObj.isRemote)))
+            return;
+        NBTBase selected = playerTag.getTag(ROOT_TAG);
+        if (selected == null) for (int i = 0; i < list.tagCount(); i++) {
+            NBTTagCompound entry = list.getCompoundTagAt(i);
+            if (isInventoryData(entry)) {
+                selected = entry.getTag(ROOT_TAG);
+                break;
+            }
+        }
+        if (!(selected instanceof NBTTagCompound)) return;
+        NBTTagCompound data = (NBTTagCompound) selected;
+        if (!isSupportedData(data) || !data.hasKey("capacityOverride", 3)) return;
+        access(inventory).dynamicinventory$setShape(
+            new InventoryShape(
+                data.getInteger("capacityOverride"),
+                BackhandCompatibility.enabled(),
+                data.getLong("capacityRevision")));
+        access(inventory).dynamicinventory$setCapacityOverride(true);
     }
 
     private static void readInventoryData(InventoryPlayer inventory, NBTTagList list, NBTTagCompound playerTag) {
@@ -127,10 +157,25 @@ public final class InventoryCodec {
     public static void writeExtra(InventoryPlayer inventory, NBTTagCompound playerTag) {
         NBTTagCompound data = new NBTTagCompound();
         data.setInteger("schemaVersion", SCHEMA_VERSION);
-        data.setInteger("mainSlots", InventoryLayout.mainSlots());
+        data.setInteger(
+            "mainSlots",
+            InventoryLayout.of(inventory)
+                .mainSlots());
+        if (access(inventory).dynamicinventory$hasCapacityOverride()) {
+            data.setInteger(
+                "capacityOverride",
+                InventoryLayout.of(inventory)
+                    .storageSlots());
+            data.setLong(
+                "capacityRevision",
+                InventoryLayout.of(inventory)
+                    .revision());
+        }
         NBTTagList items = new NBTTagList();
-        for (int i = InventoryLayout.LEGACY_MAIN_SLOTS; i < InventoryLayout.mainSlots(); i++) {
-            ItemStack stack = inventory.mainInventory[InventoryLayout.rawIndex(i)];
+        for (int i = InventoryLayout.LEGACY_MAIN_SLOTS; i < InventoryLayout.of(inventory)
+            .mainSlots(); i++) {
+            ItemStack stack = inventory.mainInventory[InventoryLayout.of(inventory)
+                .rawIndex(i)];
             if (stack == null) continue;
             NBTTagCompound entry = new NBTTagCompound();
             stack.writeToNBT(entry);
@@ -176,12 +221,16 @@ public final class InventoryCodec {
             NBTTagCompound entry = items.getCompoundTagAt(i);
             int index = entry.getInteger("Slot");
             ItemStack stack = decode(entry);
-            if (entry.hasKey("Slot", 3) && InventoryLayout.isExtra(index)
+            if (entry.hasKey("Slot", 3) && InventoryLayout.of(inventory)
+                .isExtra(index)
                 && index < data.getInteger("mainSlots")
                 && stack != null
-                && inventory.mainInventory[InventoryLayout.rawIndex(index)] == null) {
-                inventory.mainInventory[InventoryLayout.rawIndex(index)] = stack;
-            } else if (entry.hasKey("Slot", 3) && index >= InventoryLayout.mainSlots()
+                && inventory.mainInventory[InventoryLayout.of(inventory)
+                    .rawIndex(index)] == null) {
+                inventory.mainInventory[InventoryLayout.of(inventory)
+                    .rawIndex(index)] = stack;
+            } else if (entry.hasKey("Slot", 3) && index >= InventoryLayout.of(inventory)
+                .mainSlots()
                 && index >= InventoryLayout.LEGACY_MAIN_SLOTS
                 && index < data.getInteger("mainSlots")
                 && stack != null) {
@@ -196,7 +245,17 @@ public final class InventoryCodec {
             && data.hasKey("mainSlots", 3)
             && data.getInteger("mainSlots") >= InventoryLayout.LEGACY_MAIN_SLOTS
             && data.hasKey("extraItems", 9)
-            && isCompoundList(data.getTag("extraItems"));
+            && isCompoundList(data.getTag("extraItems"))
+            && validCapacityOverride(data);
+    }
+
+    private static boolean validCapacityOverride(NBTTagCompound data) {
+        if (!data.hasKey("capacityOverride") && !data.hasKey("capacityRevision")) return true;
+        return data.hasKey("capacityOverride", 3) && data.hasKey("capacityRevision", 4)
+            && data.getInteger("capacityOverride") >= InventoryShape.MIN_STORAGE
+            && data.getInteger("capacityOverride") <= InventoryShape.MAX_STORAGE
+            && data.getInteger("mainSlots") == data.getInteger("capacityOverride") + InventoryLayout.HOTBAR_SLOTS
+            && data.getLong("capacityRevision") >= 0;
     }
 
     /** Retain saved opaque data and any legacy entries rejected earlier in this same load. */
@@ -233,9 +292,12 @@ public final class InventoryCodec {
             NBTTagCompound entry = record.getCompoundTag("entry");
             int index = entry.getInteger("Slot");
             ItemStack stack = "capacity".equals(record.getString("origin")) && entry.hasKey("Slot", 3)
-                && InventoryLayout.isExtra(index) ? decode(entry) : null;
-            if (stack != null && inventory.mainInventory[InventoryLayout.rawIndex(index)] == null)
-                inventory.mainInventory[InventoryLayout.rawIndex(index)] = stack;
+                && InventoryLayout.of(inventory)
+                    .isExtra(index) ? decode(entry) : null;
+            if (stack != null && inventory.mainInventory[InventoryLayout.of(inventory)
+                .rawIndex(index)] == null)
+                inventory.mainInventory[InventoryLayout.of(inventory)
+                    .rawIndex(index)] = stack;
             else retained.appendTag(record.copy());
         }
         if (retained.tagCount() == 0) recovery.removeTag("items");
@@ -260,8 +322,10 @@ public final class InventoryCodec {
             ItemStack stack = source.mainInventory[i];
             int ordinary = BackhandCompatibility.enabled() ? (i < offhand ? i : i - 1) : i;
             if (i == offhand) destination.mainInventory[InventoryLayout.OFFHAND_INDEX] = ItemStack.copyItemStack(stack);
-            else if (ordinary >= 0 && ordinary < InventoryLayout.mainSlots())
-                destination.mainInventory[InventoryLayout.rawIndex(ordinary)] = ItemStack.copyItemStack(stack);
+            else if (ordinary >= 0 && ordinary < InventoryLayout.of(destination)
+                .mainSlots())
+                destination.mainInventory[InventoryLayout.of(destination)
+                    .rawIndex(ordinary)] = ItemStack.copyItemStack(stack);
             else if (stack != null) {
                 NBTTagCompound entry = new NBTTagCompound();
                 stack.writeToNBT(entry);
@@ -279,7 +343,8 @@ public final class InventoryCodec {
     }
 
     private static void allocate(InventoryPlayer inventory) {
-        inventory.mainInventory = new ItemStack[InventoryLayout.rawMainSlots()];
+        inventory.mainInventory = new ItemStack[InventoryLayout.of(inventory)
+            .rawMainSlots()];
     }
 
     private static ItemStack decode(NBTTagCompound entry) {

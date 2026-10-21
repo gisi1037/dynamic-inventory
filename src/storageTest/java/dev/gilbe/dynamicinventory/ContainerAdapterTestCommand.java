@@ -85,23 +85,45 @@ public final class ContainerAdapterTestCommand extends CommandBase {
                 else {
                     net.minecraft.inventory.Slot output = null;
                     for (net.minecraft.inventory.Slot slot : player.openContainer.inventorySlots)
-                        if (slot.inventory != player.inventory) output = slot;
+                        if (!playerSlot(slot, player) && !slot.isItemValid(new ItemStack(Items.iron_ingot))) {
+                            check(output == null, "fixture has exactly one machine output");
+                            output = slot;
+                        }
                     check(output != null, "fixture machine output found");
                     output.putStack(new ItemStack(Items.diamond, 7));
+                    check(
+                        player.inventory.mainInventory[InventoryLayout.rawIndex(InventoryLayout.mainSlots() - 1)]
+                            == null,
+                        "output fixture never seeds the target player slot");
                     report.addProperty("outputId", output.slotNumber);
                 }
                 player.inventory.markDirty();
                 player.openContainer.detectAndSendChanges();
             } else if (args[0].equals("stress-check") || args[0].equals("output-check")) {
                 boolean output = args[0].equals("output-check");
-                check(
+                boolean rejectedByMachine = !output && player.openContainer.getClass()
+                    .getName()
+                    .equals("com.cleanroommc.modularui.screen.ModularContainer");
+                if (rejectedByMachine) {
+                    // MUI2 has one player transfer group: hotbar quick-move targets the machine,
+                    // whose input accepts iron only. An emerald must stay put, not bypass its filter
+                    // by moving to another slot in the same player group. Output still tests the last slot below.
+                    check(
+                        item(player, 0, Items.emerald, 5),
+                        "MUI2 machine filter rejects emerald without consuming source");
+                    check(
+                        player.inventory.mainInventory[InventoryLayout.rawIndex(InventoryLayout.mainSlots() - 1)]
+                            == null,
+                        "MUI2 rejected quick-move does not reroute into player storage");
+                } else check(
                     item(
                         player,
                         InventoryLayout.mainSlots() - 1,
                         output ? Items.diamond : Items.emerald,
                         output ? 7 : 5),
                     "native transfer reaches last offscreen expanded slot");
-                if (!output) check(player.inventory.mainInventory[0] == null, "hotbar source consumed exactly once");
+                if (!output && !rejectedByMachine)
+                    check(player.inventory.mainInventory[0] == null, "hotbar source consumed exactly once");
                 report.add(
                     "inventory",
                     dev.gilbe.dynamicinventory.diagnostics.BaselineDiagnostics.snapshot(player, "server", args[0]));
@@ -148,6 +170,21 @@ public final class ContainerAdapterTestCommand extends CommandBase {
             throw new IllegalStateException(e);
         }
         sender.addChatMessage(new ChatComponentText("Adapters " + args[0] + ": " + report.get("success")));
+    }
+
+    /** Modular slots use a dummy Slot.inventory; inspect their handler before classifying them as machine slots. */
+    private static boolean playerSlot(net.minecraft.inventory.Slot slot, EntityPlayer player) {
+        if (slot.inventory == player.inventory) return true;
+        try {
+            Object handler = slot.getClass()
+                .getMethod("getItemHandler")
+                .invoke(slot);
+            return handler.getClass()
+                .getMethod("getInventoryPlayer")
+                .invoke(handler) == player.inventory;
+        } catch (ReflectiveOperationException notPlayerWrapper) {
+            return false;
+        }
     }
 
     private void selftest(EntityPlayer owner) {

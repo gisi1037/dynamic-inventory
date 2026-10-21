@@ -1,0 +1,12 @@
+{
+  "version": "2.9.0-nightly-2026-10-19",
+  "build": 795,
+  "profile": "daily-2026-10-19",
+  "archiveUrl": "https://github.com/GTNewHorizons/GTNH-Daily-Builds/releases/download/daily-2026-10-19%2B795/GTNH-daily-2026-10-19%2B795-mmcprism-java17-26.zip",
+  "archiveSha256": "178D45D2C9F67D408B387A0A9ACE98B1D4EF0BC069A09020A373F595AC3D1612",
+  "manifestSourceCommit": "79f4f6251ca06c31108de67258aff60e120f1886",
+  "manifestSha256": "2888C016017E77CF88582DC59D13155CD7CC97DD08CAF8D74E8E5391AEE74A54",
+  "instanceId": "GTNH-Dynamic-Inventory-Daily-2026-10-19-795",
+  "memoryMiB": 4096,
+  "instanceName": "GTNH daily 795 - Dynamic Inventory Test"
+}

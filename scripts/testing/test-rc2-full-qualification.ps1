@@ -92,7 +92,7 @@ function Reuse-Report([string] $Relative, [switch] $AttachedChest) {
     $file = Get-Item -LiteralPath $path
     $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     if ($report.success -ne $true -or $report.jarSha256 -ne $expectedJarHash -or $file.LastWriteTimeUtc -lt $evidenceSinceUtc) { return $false }
-    if ($AttachedChest -and ($report.checkCount -ne 410 -or @($report.views).Count -ne 16)) { return $false }
+    if ($AttachedChest -and ($report.checkCount -lt 410 -or @($report.views).Count -ne 16)) { return $false }
     $reusedReports.Add($Relative)
     $runReport.reusedReports = @($reusedReports.ToArray())
     Write-Host "REUSE passed report from the matched earlier attempt: $Relative"

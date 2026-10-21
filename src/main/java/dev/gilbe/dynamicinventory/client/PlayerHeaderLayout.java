@@ -6,7 +6,8 @@ public final class PlayerHeaderLayout {
     public static final int ARMOR_X = 8;
     public static final int PLAYER_X = 52;
     public static final int OFFHAND_X = 80;
-    public static final int OFFHAND_Y = 62;
+    // Leave two clear pixels between the 18px crafting, offhand and storage frames.
+    public static final int OFFHAND_Y = 64;
     public static final int BAUBLES_X = 100;
     public static final int BAUBLES_ROWS = 4;
     public final int craftingX;

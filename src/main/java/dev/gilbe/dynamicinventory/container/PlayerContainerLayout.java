@@ -1,5 +1,7 @@
 package dev.gilbe.dynamicinventory.container;
 
+import net.minecraft.entity.player.InventoryPlayer;
+
 import dev.gilbe.dynamicinventory.compat.BackhandCompatibility;
 import dev.gilbe.dynamicinventory.compat.BaublesInventoryBridge;
 import dev.gilbe.dynamicinventory.compat.PackCompatibility;
@@ -25,6 +27,21 @@ public final class PlayerContainerLayout {
         return EXTRA_START + InventoryLayout.mainSlots() - InventoryLayout.LEGACY_MAIN_SLOTS;
     }
 
+    public static int slotCount(InventoryPlayer inventory) {
+        return EXTRA_START + InventoryLayout.of(inventory)
+            .mainSlots() - InventoryLayout.LEGACY_MAIN_SLOTS;
+    }
+
+    public static int totalSlots(InventoryPlayer inventory) {
+        return slotCount(inventory) + (PackCompatibility.enabled() ? BaublesInventoryBridge.slotCount() : 0);
+    }
+
+    public static int hotbarY(InventoryPlayer inventory) {
+        return STORAGE_Y + ((InventoryLayout.of(inventory)
+            .storageSlots() + COLUMNS
+            - 1) / COLUMNS) * ROW_HEIGHT + 4;
+    }
+
     public static int storageRows() {
         return (InventoryLayout.storageSlots() + COLUMNS - 1) / COLUMNS;
     }
@@ -47,6 +64,22 @@ public final class PlayerContainerLayout {
         if (mainIndex < InventoryLayout.HOTBAR_SLOTS) return HOTBAR_START + mainIndex;
         if (mainIndex < InventoryLayout.LEGACY_MAIN_SLOTS) return mainIndex;
         return EXTRA_START + mainIndex - InventoryLayout.LEGACY_MAIN_SLOTS;
+    }
+
+    public static int containerId(InventoryPlayer inventory, int mainIndex) {
+        if (mainIndex < 0 || mainIndex >= InventoryLayout.of(inventory)
+            .mainSlots()) throw new IllegalArgumentException("mainIndex");
+        if (mainIndex < InventoryLayout.HOTBAR_SLOTS) return HOTBAR_START + mainIndex;
+        if (mainIndex < InventoryLayout.LEGACY_MAIN_SLOTS) return mainIndex;
+        return EXTRA_START + mainIndex - InventoryLayout.LEGACY_MAIN_SLOTS;
+    }
+
+    public static int mainIndex(InventoryPlayer inventory, int containerId) {
+        if (containerId >= LEGACY_STORAGE_START && containerId < HOTBAR_START) return containerId;
+        if (containerId >= HOTBAR_START && containerId < HOTBAR_END) return containerId - HOTBAR_START;
+        if (containerId >= EXTRA_START && containerId < slotCount(inventory))
+            return containerId - EXTRA_START + InventoryLayout.LEGACY_MAIN_SLOTS;
+        return -1;
     }
 
     public static int mainIndex(int containerId) {

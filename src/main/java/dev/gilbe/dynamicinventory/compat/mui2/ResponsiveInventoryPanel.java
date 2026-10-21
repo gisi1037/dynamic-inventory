@@ -15,7 +15,6 @@ import com.cleanroommc.modularui.widgets.slot.ItemSlot;
 
 import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.InventoryViewportLayout;
-import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 
 /** Resize live player-inventory branches and their ancestors; machine controls keep native sizes. */
 public final class ResponsiveInventoryPanel {
@@ -81,7 +80,7 @@ public final class ResponsiveInventoryPanel {
             if (!viewport.isAdaptive() || parents.get(viewport) != group) continue;
             ModularPanel panel = owners.get(group);
             int nextRows = InventoryViewportLayout.rows(
-                InventoryLayout.storageSlots(),
+                viewport.getStorageSlots(),
                 baseline(panel),
                 height,
                 InventoryViewSettings.expandMachineInventory);

@@ -14,6 +14,9 @@ import dev.gilbe.dynamicinventory.compat.BackhandCompatibility;
 @IFMLLoadingPlugin.MCVersion("1.7.10")
 public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
 
+    // Keep this bootstrap class at its stable manifest path. Mixin names below are
+    // relative to the JSON package and grouped by the integration they support.
+
     @Override
     public String[] getASMTransformerClass() {
         return new String[0];
@@ -50,37 +53,44 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
         BackhandCompatibility.configure(backhand);
         List<String> mixins = new ArrayList<>(
             Arrays.asList(
-                "CapacityHandshakeMixin",
-                "CapacityLoginMixin",
-                "InventoryPlayerMixin",
-                "EntityPlayerMixin",
-                "ContainerPlayerMixin",
-                "SlotInventoryAccess",
-                "ContainerRegionMixin",
-                "RegisteredInventoryClickMixin",
-                "InventoryOpeningServerMixin",
-                "WindowPacketMixins$Contents",
-                "WindowPacketMixins$Slot",
-                "WindowPacketMixins$Property",
-                "WindowPacketMixins$Transaction",
-                "WindowPacketMixins$ClientClose",
-                "WindowPacketMixins$ServerClose",
-                "VanillaContainerMixin"));
+                "forge.CapacityHandshakeMixin",
+                "forge.CapacityLoginMixin",
+                "minecraft.InventoryPlayerMixin",
+                "minecraft.EntityPlayerMixin",
+                "minecraft.ContainerPlayerMixin",
+                "minecraft.SlotInventoryAccess",
+                "minecraft.ContainerRegionMixin",
+                "minecraft.RegisteredInventoryClickMixin",
+                "minecraft.InventoryOpeningServerMixin",
+                "minecraft.WindowPacketMixins$Contents",
+                "minecraft.WindowPacketMixins$Slot",
+                "minecraft.WindowPacketMixins$Property",
+                "minecraft.WindowPacketMixins$Transaction",
+                "minecraft.WindowPacketMixins$ClientClose",
+                "minecraft.WindowPacketMixins$ServerClose",
+                "minecraft.VanillaContainerMixin",
+                "minecraft.VanillaMerchantOpeningMixin"));
         boolean nei = getClass().getClassLoader()
             .getResource("codechicken/nei/asm/NEICorePlugin.class") != null;
-        if (nei) mixins.add("WorkbenchCapacityMixin");
+        if (nei) mixins.add("nei.WorkbenchCapacityMixin");
         if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
             .isClient()) {
             mixins.addAll(
                 Arrays.asList(
-                    "PendingInventoryInputMixin",
-                    "GuiContainerRegionMixin",
-                    "InventoryOpeningClientMixin",
-                    "InventoryOpeningPredictionMixin",
-                    "GuiScreenWheelMixin",
-                    "GuiBackgroundClipMixin",
-                    "PickBlockSlotMixin"));
-            if (nei) mixins.add("NeiContainerWheelMixin");
+                    "minecraft.PendingInventoryInputMixin",
+                    "minecraft.InventoryEditorInputMixin",
+                    "minecraft.NativeInventoryLabelMixin",
+                    "minecraft.GuiContainerRegionMixin",
+                    "minecraft.InventoryOpeningClientMixin",
+                    "minecraft.InventoryOpeningPredictionMixin",
+                    "minecraft.GuiScreenWheelMixin",
+                    "minecraft.GuiBackgroundClipMixin",
+                    "minecraft.VanillaRepairGuiMixin",
+                    "minecraft.VanillaMerchantGuiMixin",
+                    "minecraft.VanillaEnchantmentGuiMixin",
+                    "minecraft.VanillaBeaconGuiMixin",
+                    "minecraft.PickBlockSlotMixin"));
+            if (nei) mixins.add("nei.NeiContainerWheelMixin");
         }
         return mixins;
     }

@@ -1,12 +1,16 @@
 param(
     [int] $Port = 5005,
+    [ValidateRange(27,216)][int] $ExpectedStorageSlots = 72,
     [string] $GameDirectory = "$env:APPDATA/PrismLauncher/instances/GTNH-Dynamic-Inventory-Dev-RC2/.minecraft",
-    [string] $EvidenceDirectory = 'docs/qualification/startup-capacity/full-pack'
+    [string] $EvidenceDirectory = 'docs/qualification/startup-capacity/full-pack',
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent)
 $java = 'C:/Program Files/Java/jdk-25/bin/java.exe'
 $diagnostics = Join-Path $GameDirectory 'diagnostics/dynamicinventory'
+$marker = Join-Path (Split-Path $GameDirectory -Parent) '.dynamicinventory-dev-instance'
+$packTarget = (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).version
 New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
 $checks = [Collections.Generic.List[string]]::new()
 function Harness {
@@ -37,15 +41,16 @@ function Block([string] $Specification) {
     Harness command "/setblock 2 4 0 $Specification" | Out-Null
     Harness block-open 2 4 0 | Out-Null
 }
-Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null
+Harness require-qualification $WorldName | Out-Null
 Harness background | Out-Null
 Harness resume | Out-Null
 Harness window 854 480 | Out-Null
 Harness command '/difficulty peaceful' | Out-Null
 Harness command '/gamerule doMobSpawning false' | Out-Null
-Harness command '/tp 0 4 0' | Out-Null
+Harness command '/tp @p 0 4 0' | Out-Null
 $families = @(
     @{name='chest';block='minecraft:chest 0';count=108},
+    @{name='baby-chest';block='dreamcraft:BabyChest 0';count=82},
     @{name='double-chest';block='minecraft:chest 0';count=135},
     @{name='workbench';block='minecraft:crafting_table 0';count=91},
     @{name='furnace';block='minecraft:furnace 0';count=84},
@@ -66,10 +71,10 @@ foreach ($family in $families) {
         Harness tab-click micdoodle8.mods.galacticraft.core.client.gui.screen.InventoryTabGalacticraft | Out-Null
     } else { Block $family.block }
     $mapping=Harness foreign-check
-    Check ($mapping -match 'ordinaryIds=\[([^\]]+)\]') "$name exposes 81 canonical ordinary slots"
+    Check ($mapping -match 'ordinaryIds=\[([^\]]+)\]') "$name exposes $($ExpectedStorageSlots + 9) canonical ordinary slots"
     $ids=@($Matches[1].Split(',') | ForEach-Object { [int] $_.Trim() })
     $before=Snapshot "$name-before"
-    Check ($before.activeContainer.slotCount -eq $family.count) "$name retains native slots and appends the expected capacity"
+    Check ($before.activeContainer.slotCount -eq ($family.count + $ExpectedStorageSlots - 72)) "$name retains native slots and appends the expected capacity"
     foreach ($scale in @(1,2,3,0)) {
         Harness scale $scale | Out-Null
         Harness foreign-check | Out-Null
@@ -82,7 +87,7 @@ foreach ($family in $families) {
                 Harness input-click $ids[0] | Out-Null
                 Harness input-click $ids[-1] | Out-Null
                 $last=Snapshot "$name-final-row-placed"
-                Check (!$last.cursorOccupied -and $last.mainInventory[81].item -eq $before.mainInventory[0].item) "$name accepts real placement in the expanded final row"
+                Check (!$last.cursorOccupied -and $last.mainInventory[-1].item -eq $before.mainInventory[0].item) "$name accepts real placement in the expanded final row"
                 Harness input-click $ids[-1] | Out-Null
                 Harness input-click $ids[0] | Out-Null
                 $restored=Snapshot "$name-final-row-returned"
@@ -109,8 +114,8 @@ foreach ($family in $families) {
     Copy-Item (Join-Path $GameDirectory "screenshots/step3-full-$name.png") (Join-Path $EvidenceDirectory "$name.png") -Force
 }
 Harness resume | Out-Null
-@{success=$true;prototype='0.8.0-dev';packTarget='2.9.0-RC-2';checks=$checks;
+@{success=$true;prototype='0.8.0-dev';packTarget=$packTarget;checks=$checks;
     jarSha256=(Get-FileHash (Join-Path $GameDirectory 'mods/dynamicinventory-0.8.0-dev.jar') -Algorithm SHA256).Hash;
-    scope='Actual native RC-2 block/tab opening, canonical slots, queued mouse pickup/placement, GUI scales and recipe geometry; framework transfer stress is qualified separately'} |
+    scope='Actual marked pack block/tab opening, canonical slots, queued mouse pickup/placement, GUI scales and recipe geometry; framework transfer stress is qualified separately'} |
     ConvertTo-Json -Depth 10 | Set-Content (Join-Path $EvidenceDirectory 'verification.json')
 Write-Host "PASS full-pack native containers: $($checks.Count) checks."

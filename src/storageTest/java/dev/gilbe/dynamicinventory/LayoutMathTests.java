@@ -42,6 +42,16 @@ public final class LayoutMathTests {
                         if (header.craftingX < 88 || header.resultX + 16 > layout.width
                             || header.layoutButtonX + 16 > layout.width)
                             throw new AssertionError("Header controls overlap the player or panel edge");
+                        // Slot frames extend one pixel beyond each 16px item area.
+                        // At compact width the offhand lies partly beneath the crafting grid.
+                        int offhandRight = PlayerHeaderLayout.OFFHAND_X + 17;
+                        int offhandTop = PlayerHeaderLayout.OFFHAND_Y - 1;
+                        int craftingLeft = header.craftingX - 1;
+                        int craftingBottom = 26 + 18 + 17;
+                        if (craftingLeft - offhandRight < 2 && offhandTop - craftingBottom < 2)
+                            throw new AssertionError("Offhand and crafting frames need two clear pixels");
+                        if (84 - 1 - (PlayerHeaderLayout.OFFHAND_Y + 17) < 2)
+                            throw new AssertionError("Offhand and storage frames need two clear pixels");
                         if (header.inlineBaublesFits
                             && (PlayerHeaderLayout.BAUBLES_X + header.baublesColumns * 18 > header.craftingX - 8
                                 || header.baublesColumns * 4 < equipment))

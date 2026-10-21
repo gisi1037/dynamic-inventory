@@ -42,6 +42,9 @@ if (-not (Test-Path -LiteralPath $marker)) {
     if (-not (Test-Path -LiteralPath (Join-Path $target 'mmc-pack.json'))) { throw 'Archive does not contain a Prism instance.' }
     $cfg = Join-Path $target 'instance.cfg'
     $text = Get-Content -LiteralPath $cfg -Raw
+    # Pack archives may omit Qt's section header. Prism imports those archives
+    # itself, but needs the header when we prepare an instance directory directly.
+    if ($text -notmatch '(?m)^\[General\]\s*$') { $text = "[General]`n" + $text }
     $text = [regex]::Replace($text, '(?m)^name=.*', "name=$($pack.instanceName)")
     $text = [regex]::Replace($text, '(?m)^OverrideJavaLocation=.*', 'OverrideJavaLocation=true')
     $text = [regex]::Replace($text, '(?m)^OverrideMemory=.*', 'OverrideMemory=true')
@@ -68,7 +71,19 @@ if ($PrepareOnly) {
 $runtimeJava = 'C:\Program Files\Java\jdk-25\bin\javaw.exe'
 if (!(Test-Path -LiteralPath $runtimeJava)) { throw 'The qualified Oracle Java 25 game runtime was not found.' }
 
-if ($pack.version -ne '2.9.0-RC-2') { throw 'The experimental adapter is pinned to GTNH 2.9.0-RC-2.' }
+# Pack downloads and runtime adapter selection are separate identities. A daily must
+# be selected explicitly; never infer compatible adapters from a similar version string.
+$profile = switch ([string]$pack.version) {
+    '2.9.0-RC-2' { 'rc2-integration' }
+    '2.9.0-nightly-2026-10-19' { 'daily-2026-10-19' }
+    default { throw 'No reviewed integration profile exists for this pack version.' }
+}
+if ($pack.PSObject.Properties['profile'] -and [string]$pack.profile -ne $profile) {
+    throw 'Pack config profile does not match its reviewed target.'
+}
+if ($profile -ne 'rc2-integration' -and !$VisualPreview) {
+    throw 'The daily is an unqualified test target. Use -VisualPreview until its full-pack qualification is implemented.'
+}
 if (!$VisualPreview) {
     $qualificationPath = if ([IO.Path]::IsPathRooted($QualificationManifest)) { $QualificationManifest }
         else { Join-Path $projectRoot $QualificationManifest }
@@ -76,12 +91,14 @@ if (!$VisualPreview) {
     $qualificationStage = if ([string]$qualificationHeader.qualificationStage -eq 'preflight') { 'preflight' } else { 'full-pack' }
     $qualified = & (Join-Path $PSScriptRoot 'validate-qualification.ps1') -ManifestPath $qualificationPath -Stage $qualificationStage
 }
-$reference = Get-Content (Join-Path $projectRoot 'pack-compatibility-rc2.json') -Raw | ConvertFrom-Json
+$referenceFile = if ($profile -eq 'rc2-integration') { 'pack-compatibility-rc2.json' }
+    else { 'pack-compatibility-daily-2026-10-19.json' }
+$reference = Get-Content (Join-Path $projectRoot $referenceFile) -Raw | ConvertFrom-Json
 foreach ($entry in $reference.installedFiles) {
     $installedMod = Join-Path $target ('.minecraft/mods/' + $entry.file)
     if (!(Test-Path -LiteralPath $installedMod) -or
         (Get-FileHash -LiteralPath $installedMod -Algorithm SHA256).Hash -ne $entry.sha256) {
-        throw "Installed RC-2 component differs from the pinned baseline: $($entry.file)"
+        throw "Installed component differs from the $profile baseline: $($entry.file)"
     }
 }
 $mods = Join-Path $target '.minecraft/mods'
@@ -89,7 +106,7 @@ foreach ($old in Get-ChildItem -LiteralPath $mods -Filter 'dynamicinventory-*.ja
     try { $handle = [IO.File]::Open($old.FullName, 'Open', 'Read', 'None'); $handle.Dispose() }
     catch { throw 'Close the running test game before replacing its inventory mod JAR.' }
 }
-& (Join-Path $PSScriptRoot 'gradle.ps1') build writeFixtureClientLaunch -PinventoryProfile=rc2-integration -PinventoryStorageTests --no-daemon --no-configuration-cache
+& (Join-Path $PSScriptRoot 'gradle.ps1') build writeFixtureClientLaunch "-PinventoryProfile=$profile" -PinventoryStorageTests --no-daemon --no-configuration-cache
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $jar = Join-Path $projectRoot 'build\libs\dynamicinventory-0.8.0-dev.jar'
 if (-not (Test-Path -LiteralPath $jar)) { throw "Built mod jar was not found: $jar" }
@@ -109,13 +126,13 @@ $modPath = Join-Path $mods 'dynamicinventory-0.8.0-dev.jar'
 Copy-Item -LiteralPath $jar -Destination $modPath -Force
 if ((Get-FileHash -LiteralPath $modPath -Algorithm SHA256).Hash -ne $builtHash) { throw 'Deployed jar checksum mismatch.' }
 # A preview records what was installed without claiming that runtime qualification passed.
-@{jarSha256=$builtHash; visualPreview=[bool]$VisualPreview; qualificationManifest=if($VisualPreview){$null}else{$qualificationPath};
+@{jarSha256=$builtHash; profile=$profile; packTarget=$pack.version; visualPreview=[bool]$VisualPreview; qualificationManifest=if($VisualPreview){$null}else{$qualificationPath};
     installedAtUtc=[datetime]::UtcNow.ToString('o')} | ConvertTo-Json |
     Set-Content -LiteralPath (Join-Path $target '.dynamicinventory-last-deployment.json') -Encoding UTF8
 foreach ($old in $previous) {
     if ($old.FullName -ne $modPath) { Remove-Item -LiteralPath $old.FullName }
 }
-# Preserve existing instance/global user JVM arguments while adding the explicit RC-2 mode.
+# Preserve existing instance/global user JVM arguments while adding the explicit profile.
 $text = Get-Content -LiteralPath $cfg -Raw
 $text = [regex]::Replace($text, '(?m)^OverrideJavaLocation=.*', 'OverrideJavaLocation=true')
 $javaSetting = 'JavaPath=' + $runtimeJava.Replace('\', '/')
@@ -136,7 +153,7 @@ if ($jvm.StartsWith('"') -and $jvm.EndsWith('"')) {
 }
 $jvm = [regex]::Replace($jvm, '(?:^|\s)-Ddynamicinventory\.profile=\S+', '').Trim()
 $jvm = [regex]::Replace($jvm, '(?:^|\s)-agentlib:jdwp=\S+', '').Trim()
-$jvm += ' -Ddynamicinventory.profile=rc2-integration'
+$jvm += " -Ddynamicinventory.profile=$profile"
 if ($DebugPort -gt 0) { $jvm += " -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:$DebugPort" }
 $text = [regex]::Replace($text, '(?m)^OverrideJavaArgs=.*', 'OverrideJavaArgs=true')
 $encodedJvm = '"' + $jvm.Trim().Replace('\', '\\').Replace('"', '\"') + '"'

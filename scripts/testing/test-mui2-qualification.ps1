@@ -110,14 +110,21 @@ Intermediate split @{$splitSlot=4;$payloadSlot=3}
 Harness click $splitSlot 0 0
 Harness click $payloadSlot 0 0
 Contents split-merge
-# Shift between expanded storage and hotbar, then return the payload by ordinary clicks.
+# All ordinary player slots share one MUI2 transfer group. Without a machine group,
+# native quick-move leaves its source alone. The API machine suite covers destinations.
 Harness click $payloadSlot 0 1
-Intermediate shift-to-hotbar @{0=7;$payloadSlot=0}
+Intermediate shift-without-machine @{0=0;$payloadSlot=7}
+Harness click $payloadSlot 0 0
+Harness click 0 0 0
+Intermediate pickup-to-hotbar @{0=7;$payloadSlot=0}
 Harness click 0 0 1
-Intermediate shift-to-storage @{0=0;10=7;$payloadSlot=0}
+Intermediate hotbar-shift-without-machine @{0=7;10=0;$payloadSlot=0}
+Harness click 0 0 0
+Harness click 10 0 0
+Intermediate pickup-to-storage @{0=0;10=7;$payloadSlot=0}
 Harness click 10 0 0
 Harness click $payloadSlot 0 0
-Contents shift-transfer
+Contents player-transfer
 # Number-key swap to hotbar index 2, then back.
 Harness click $payloadSlot 2 2
 Intermediate hotbar-swap @{2=7;$payloadSlot=0}
@@ -128,6 +135,6 @@ Copy-Item "$GameDirectory/screenshots/step3-mui2-fixture.png" (Join-Path $Eviden
 Harness resume
 Server verify | Out-Null
 Copy-Item "$diagnostics/runtime.json" (Join-Path $EvidenceDirectory 'runtime.json') -Force
-@{success=$true; bindings=$ordinarySlots; tests=@('canonical-storage','client-server-NBT','exactly-once-ticks','split-merge','shift-transfer','number-key-swap','close-preserves-items')} |
+@{success=$true; bindings=$ordinarySlots; tests=@('canonical-storage','client-server-NBT','exactly-once-ticks','split-merge','no-machine-shift-refusal','pickup-hotbar-roundtrip','number-key-swap','close-preserves-items')} |
     ConvertTo-Json -Depth 8 | Set-Content (Join-Path $EvidenceDirectory 'mui2-verification.json')
 Write-Host 'PASS MUI2 canonical storage, synchronization, ticking and transfers.'

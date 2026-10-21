@@ -1,7 +1,8 @@
 param(
     [int] $Port = 5005,
     [string] $GameDirectory = "$env:APPDATA/PrismLauncher/instances/GTNH-Dynamic-Inventory-Dev-RC2/.minecraft",
-    [string] $EvidenceDirectory = 'docs/qualification/glass-ui/container-frames'
+    [string] $EvidenceDirectory = 'docs/qualification/glass-ui/container-frames',
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -10,6 +11,8 @@ $java = 'C:/Program Files/Java/jdk-25/bin/java.exe'
 $diagnostics = Join-Path $GameDirectory 'diagnostics/dynamicinventory'
 $screenshots = Join-Path $GameDirectory 'screenshots'
 $clientConfig = Join-Path $GameDirectory 'config/dynamicinventory-client.cfg'
+$marker = Join-Path (Split-Path $GameDirectory -Parent) '.dynamicinventory-dev-instance'
+$packTarget = (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).version
 New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
 $checks = [Collections.Generic.List[string]]::new()
 
@@ -129,6 +132,18 @@ function Test-Family([string] $Family, [string] $Mode) {
         $afterScale = Snapshot "$Family-$Mode-scale-$scale"
         Check (!$afterScale.cursorOccupied -and (MainSignature $afterScale) -eq (MainSignature $before)) `
             "$Family scale $scale preserves exact player contents and empty cursor in $Mode mode"
+        if ($Family -eq 'galacticraft' -and $Mode -eq 'full-box') {
+            $output = Harness button-geometry
+            $match = [regex]::Match($output, '(?m)^buttonGeometry=(\{.+\})$')
+            if (!$match.Success) { throw 'Missing Galacticraft tab geometry' }
+            $geometry = $match.Groups[1].Value | ConvertFrom-Json
+            $tabs = @($geometry.buttons | Where-Object { $_.visible -and $_.class -match 'InventoryTab|de\.eydamos\.backpack\.gui\.tab\.' })
+            Check ($tabs.Count -ge 2) "Galacticraft exposes its native tabs at scale $scale"
+            for ($tab=0; $tab -lt $tabs.Count; $tab++) {
+                Check ($tabs[$tab].xPosition -eq $geometry.guiLeft + $tab*28 -and $tabs[$tab].yPosition -eq $geometry.guiTop) `
+                    "Galacticraft tab $tab follows the expanded outer frame at scale $scale"
+            }
+        }
         if ($Family -eq 'tinkers-compressed') {
             $chestSlots = @($afterScale.activeContainer.slots | Where-Object {
                 $_.slotClass -match 'ChestSlot' -and $_.inventoryIndex -eq 0
@@ -176,10 +191,10 @@ function Test-Family([string] $Family, [string] $Mode) {
     Harness resume | Out-Null
 }
 
-Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null
+Harness require-qualification $WorldName | Out-Null
 Harness background | Out-Null
 Harness resume | Out-Null
-Harness command '/tp 0 4 0' | Out-Null
+Harness command '/tp @p 0 4 0' | Out-Null
 Harness command '/setblock 1 4 0 minecraft:air' | Out-Null
 Harness command '/setblock 2 4 0 minecraft:air' | Out-Null
 
@@ -200,7 +215,7 @@ if (!(Test-Path -LiteralPath $installedJar)) { throw "Missing installed producti
 @{
     success = $true
     prototype = '0.8.0-dev'
-    packTarget = '2.9.0-RC-2'
+    packTarget = $packTarget
     modes = @('full-box', 'compact')
     families = $families
     scales = @(1, 2, 3, 0)

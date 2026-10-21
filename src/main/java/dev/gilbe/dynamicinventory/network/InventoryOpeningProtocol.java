@@ -36,7 +36,12 @@ public final class InventoryOpeningProtocol {
         if (adapter == null) return null;
         PlayerInventoryBinding binding = InventoryUi.attachRegistered(container, owner);
         if (binding == null || binding.getPlayerInventory() != owner) return null;
-        if (binding.getOrdinarySlotCount() != InventoryLayout.mainSlots()
+        if (binding.getOrdinarySlotCount() != InventoryLayout.of(owner)
+            .mainSlots() || binding.getCapacityRevision()
+                != InventoryLayout.of(owner)
+                    .revision()
+            || owner.mainInventory.length != InventoryLayout.of(owner)
+                .rawMainSlots()
             || container.inventorySlots.size() > Short.MAX_VALUE) return null;
         // A host can modify slots after its constructor hook. A cached binding must still describe LIVE slots.
         for (int logical = 0; logical < binding.getOrdinarySlotCount(); logical++) {
@@ -44,13 +49,16 @@ public final class InventoryOpeningProtocol {
             if (id < 0 || id >= container.inventorySlots.size()) return null;
             Slot slot = container.getSlot(id);
             if (slot.slotNumber != id || slot.inventory != owner
-                || slot.getSlotIndex() != InventoryLayout.rawIndex(logical)) return null;
+                || slot.getSlotIndex() != InventoryLayout.of(owner)
+                    .rawIndex(logical))
+                return null;
         }
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(bytes);
             out.writeUTF(adapter.getId());
             out.writeInt(adapter.getCompatibilityRevision());
+            out.writeLong(binding.getCapacityRevision());
             out.writeUTF(
                 container.getClass()
                     .getName());

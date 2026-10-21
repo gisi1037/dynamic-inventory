@@ -1,18 +1,27 @@
 # Dynamic Inventory
 
 An experimental Forge 1.7.10 mod for larger player inventories in GT New Horizons.
-The current compatibility target is **GTNH 2.9.0-RC-2**. This is a development
+The pinned compatibility targets are **GTNH 2.9.0-RC-2** and
+**daily-2026-10-19 build 795**; other nightlies require requalification. This is a development
 snapshot, not a stable release or a claim of support for every interface in the pack.
 
-The default is **72 storage slots plus the nine-slot hotbar**. Capacity is selected
-at server startup; client layout preferences change the arrangement and visible
-rows without changing item ownership. Player storage uses the canonical inventory,
-with versioned persistence and recovery data when capacity shrinks.
+The default is **72 storage slots plus the nine-slot hotbar**. The server selects
+initial capacity at startup; experimental live resizing safely rebuilds and agrees
+the slot map before releasing contents or input. Client layout preferences change
+presentation without creating another inventory.
 
-Native container adapters and shared MUI1/MUI2 bindings expose that inventory in
-supported interfaces. Unknown native containers are not automatically augmented.
-Standard MUI2 integration is intended to be small; custom synchronization, equipment,
-crafting results, and transfer rules still require explicit review.
+An **Inventory Capacity Module** permanently adds storage, and an optional Baubles
+**Inventory Expansion Belt** adds temporary storage while equipped. Both default to
+nine slots. Server configuration controls bonuses, limits and enablement; pack
+authors supply recipes. Occupied slots are never discarded when removing a bonus.
+See [inventory upgrades](docs/inventory-upgrades.md) and
+[live resizing](docs/live-inventory-resizing.md).
+
+Native container adapters and shared MUI1/MUI2 bindings expose the canonical player
+inventory in supported interfaces. A conservative scroll presentation can reuse
+reviewed vanilla storage hosts; unknown container handling still requires review.
+Custom synchronization, equipment, crafting results and transfer rules remain native.
+The in-game editor adjusts presentation, not item ownership or compatibility rules.
 
 ## Build
 

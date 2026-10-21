@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('isolated','rc2-integration')] [string] $Profile = 'rc2-integration',
+    [ValidateSet('isolated','rc2-integration','daily-2026-10-19')] [string] $Profile = 'rc2-integration',
     [ValidateRange(1,65535)] [int] $DebugPort = 5009
 )
 $ErrorActionPreference = 'Stop'

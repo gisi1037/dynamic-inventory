@@ -105,6 +105,8 @@ public final class ServerInventoryGate {
     }
 
     public boolean allowsInput(EntityPlayerMP player, int packetWindow) {
+        if (!ServerInventoryResizeGate.of(player)
+            .allowsInput(player)) return false;
         refresh(player);
         Container active = player.openContainer;
         if (packetWindow != active.windowId) return false;

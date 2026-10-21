@@ -2,7 +2,8 @@ param(
     [int] $Port = 5007,
     [string] $GameDirectory = 'run/rc2-integration/client-developer',
     [string] $EvidenceDirectory = 'docs/qualification/startup-capacity/machine-modes',
-    [switch] $FullPack
+    [switch] $FullPack,
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -145,6 +146,14 @@ function Test-Family([string] $Family, [string] $Mode, [bool] $Expanded) {
     Harness resume | Out-Null
 }
 
+if ($FullPack) {
+    Harness require-qualification $WorldName | Out-Null
+    Harness resume | Out-Null
+    # This suite owns its disposable fixture; do not depend on a previous suite leaving a GT buffer here.
+    Harness command '/tp @p 0 4 2' | Out-Null
+    Harness command '/setblock 1 4 0 minecraft:air' | Out-Null
+    Harness command '/setblock 2 4 0 gregtech:gt.blockmachines 0 replace {mID:9231}' | Out-Null
+}
 Harness background | Out-Null
 Harness resume | Out-Null
 Harness window 854 480 | Out-Null

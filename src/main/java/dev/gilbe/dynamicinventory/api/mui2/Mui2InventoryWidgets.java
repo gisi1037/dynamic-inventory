@@ -1,11 +1,15 @@
 package dev.gilbe.dynamicinventory.api.mui2;
 
+import net.minecraft.entity.player.InventoryPlayer;
+
 import com.cleanroommc.modularui.widgets.SlotGroupWidget;
 import com.cleanroommc.modularui.widgets.slot.ItemSlot;
 
+import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.compat.mui2.InventoryScrollWidget;
 import dev.gilbe.dynamicinventory.compat.mui2.PlayerInventoryWidgetGroup;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 
 /**
  * Factories for Dynamic Inventory's MUI2 player inventory widgets.
@@ -37,7 +41,18 @@ public final class Mui2InventoryWidgets {
      */
     public static SlotGroupWidget playerInventory(SlotGroupWidget.SlotConsumer slotConsumer) {
         if (slotConsumer == null) throw new NullPointerException("slotConsumer");
-        return create(slotConsumer, COLUMNS, VISIBLE_ROWS, true, true);
+        return create(slotConsumer, COLUMNS, VISIBLE_ROWS, true, true, viewerShape());
+    }
+
+    /** Explicit owner for common-side builders and per-player capacity. Does not bind or resize storage. */
+    public static SlotGroupWidget playerInventory(SlotGroupWidget.SlotConsumer slotConsumer, InventoryPlayer owner) {
+        if (slotConsumer == null) throw new NullPointerException("slotConsumer");
+        return create(slotConsumer, COLUMNS, VISIBLE_ROWS, true, true, InventoryLayout.of(owner));
+    }
+
+    private static InventoryShape viewerShape() {
+        InventoryPlayer viewer = DynamicInventory.proxy == null ? null : DynamicInventory.proxy.getClientInventory();
+        return viewer == null ? InventoryLayout.initialShape() : InventoryLayout.of(viewer);
     }
 
     /**
@@ -61,17 +76,26 @@ public final class Mui2InventoryWidgets {
         if (columns < 3 || columns > 18) throw new IllegalArgumentException("columns must be between 3 and 18");
         if (visibleRows < 1 || visibleRows > 12)
             throw new IllegalArgumentException("visibleRows must be between 1 and 12");
-        return create(slotConsumer, columns, visibleRows, false, false);
+        return create(slotConsumer, columns, visibleRows, false, false, viewerShape());
+    }
+
+    /** Fixed presentation using an explicit inventory owner on either logical side. */
+    public static SlotGroupWidget playerInventory(SlotGroupWidget.SlotConsumer slotConsumer, int columns,
+        int visibleRows, InventoryPlayer owner) {
+        if (slotConsumer == null) throw new NullPointerException("slotConsumer");
+        if (columns < 3 || columns > 18 || visibleRows < 1 || visibleRows > 12)
+            throw new IllegalArgumentException("Invalid inventory viewport dimensions");
+        return create(slotConsumer, columns, visibleRows, false, false, InventoryLayout.of(owner));
     }
 
     private static SlotGroupWidget create(SlotGroupWidget.SlotConsumer slotConsumer, int columns, int visibleRows,
-        boolean adaptive, boolean stockCoordinates) {
-        int storageRows = (InventoryLayout.storageSlots() + columns - 1) / columns;
+        boolean adaptive, boolean stockCoordinates, InventoryShape shape) {
+        int storageRows = (shape.storageSlots() + columns - 1) / columns;
         int rows = Math.min(visibleRows, storageRows);
         int groupWidth = Math.max(COLUMNS * ItemSlot.SIZE + 6, columns * ItemSlot.SIZE + 6);
         int viewportHeight = rows * ItemSlot.SIZE;
         int hotbarX = stockCoordinates ? 0 : (groupWidth - InventoryLayout.HOTBAR_SLOTS * ItemSlot.SIZE) / 2;
-        InventoryScrollWidget viewport = adaptive ? new InventoryScrollWidget() : new InventoryScrollWidget(columns);
+        InventoryScrollWidget viewport = new InventoryScrollWidget(columns, adaptive, shape.storageSlots());
         PlayerInventoryWidgetGroup group = new PlayerInventoryWidgetGroup(viewport, rows);
         group.name("player_inventory")
             .size(groupWidth, viewportHeight + 22);
@@ -82,7 +106,7 @@ public final class Mui2InventoryWidgets {
                 .name("slot_" + i));
 
         viewport.size(groupWidth, viewportHeight);
-        for (int i = InventoryLayout.HOTBAR_SLOTS; i < InventoryLayout.mainSlots(); i++) viewport.child(
+        for (int i = InventoryLayout.HOTBAR_SLOTS; i < shape.mainSlots(); i++) viewport.child(
             slotConsumer.apply(i, new ItemSlot())
                 .syncHandler("player", i)
                 .pos(

@@ -128,7 +128,10 @@ public final class BaselineDiagnostics {
         report.addProperty("dimension", player.dimension);
         report.addProperty("screen", screen);
         report.addProperty("mainSlots", player.inventory.mainInventory.length);
-        report.addProperty("ordinarySlots", InventoryLayout.mainSlots());
+        report.addProperty(
+            "ordinarySlots",
+            InventoryLayout.of(player.inventory)
+                .mainSlots());
         report.addProperty("offhandIndex", BackhandCompatibility.enabled() ? InventoryLayout.OFFHAND_INDEX : -1);
         report.addProperty("armorSlots", player.inventory.armorInventory.length);
         report.addProperty("inventoryApiSlots", player.inventory.getSizeInventory());
@@ -138,7 +141,10 @@ public final class BaselineDiagnostics {
         for (int i = 0; i < player.inventory.mainInventory.length; i++) {
             JsonObject entry = new JsonObject();
             entry.addProperty("inventoryIndex", i);
-            entry.addProperty("ordinaryIndex", InventoryLayout.ordinaryIndex(i));
+            entry.addProperty(
+                "ordinaryIndex",
+                InventoryLayout.of(player.inventory)
+                    .ordinaryIndex(i));
             describeItem(entry, player.inventory.mainInventory[i]);
             main.add(entry);
         }
@@ -147,7 +153,12 @@ public final class BaselineDiagnostics {
             "hasRecoveryData",
             !((ExpandedInventoryAccess) player.inventory).dynamicinventory$getRecovery()
                 .hasNoTags());
-        report.addProperty("storagePrototypeLayoutMatches", matchesLayout(player, InventoryLayout.mainSlots()));
+        report.addProperty(
+            "storagePrototypeLayoutMatches",
+            matchesLayout(
+                player,
+                InventoryLayout.of(player.inventory)
+                    .mainSlots()));
         report.addProperty("expandedPlayerLayoutMatches", matchesExpandedLayout(player));
         report.add("playerContainer", container(player, player.inventoryContainer));
         report.add("activeContainer", container(player, player.openContainer));
@@ -225,7 +236,8 @@ public final class BaselineDiagnostics {
             if (index >= 0 && index < 9) return "hotbar";
             if (index >= 9 && index < 36) return "storage";
             if (BackhandCompatibility.enabled() && index == InventoryLayout.OFFHAND_INDEX) return "offhand";
-            if (InventoryLayout.ordinaryIndex(index) >= 36) return "additional-storage";
+            if (InventoryLayout.of(player.inventory)
+                .ordinaryIndex(index) >= 36) return "additional-storage";
             int armor = index - player.inventory.mainInventory.length;
             if (armor >= 0 && armor < player.inventory.armorInventory.length) return "armor-" + armor;
             return "player-unclassified";
@@ -241,18 +253,19 @@ public final class BaselineDiagnostics {
 
     private static boolean matchesExpandedLayout(EntityPlayer player) {
         Container container = player.inventoryContainer;
-        if (player.inventory.mainInventory.length != InventoryLayout.rawMainSlots()
-            || player.inventory.armorInventory.length != InventoryLayout.ARMOR_SLOTS
-            || slotCount(container) != PlayerContainerLayout.totalSlots()) return false;
-        for (int id = 0; id < PlayerContainerLayout.slotCount(); id++) {
+        if (player.inventory.mainInventory.length != InventoryLayout.of(player.inventory)
+            .rawMainSlots() || player.inventory.armorInventory.length != InventoryLayout.ARMOR_SLOTS
+            || slotCount(container) != PlayerContainerLayout.totalSlots(player.inventory)) return false;
+        for (int id = 0; id < PlayerContainerLayout.slotCount(player.inventory); id++) {
             Slot slot = container.getSlot(id);
             if (slot.slotNumber != id) return false;
             if (id == 0 && !(slot.inventory instanceof InventoryCraftResult)) return false;
             if (id >= 1 && id < 5 && (!(slot.inventory instanceof InventoryCrafting) || slot.getSlotIndex() != id - 1))
                 return false;
             if (id >= 5 && id < 9
-                && (slot.inventory != player.inventory || slot.getSlotIndex() != InventoryLayout.rawMainSlots() + 8 - id
-                    || slot.getSlotStackLimit() != 1))
+                && (slot.inventory != player.inventory || slot.getSlotIndex() != InventoryLayout.of(player.inventory)
+                    .rawMainSlots() + 8
+                    - id || slot.getSlotStackLimit() != 1))
                 return false;
             if (id >= 9) {
                 if (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND) {
@@ -263,11 +276,11 @@ public final class BaselineDiagnostics {
                         return false;
                     continue;
                 }
-                int main = PlayerContainerLayout.mainIndex(id);
-                if (slot.inventory != player.inventory || slot.getSlotIndex() != InventoryLayout.rawIndex(main))
-                    return false;
+                int main = PlayerContainerLayout.mainIndex(player.inventory, id);
+                if (slot.inventory != player.inventory || slot.getSlotIndex() != InventoryLayout.of(player.inventory)
+                    .rawIndex(main)) return false;
                 int x = main < InventoryLayout.HOTBAR_SLOTS ? 8 + main * 18 : PlayerContainerLayout.storageX(main);
-                int y = main < InventoryLayout.HOTBAR_SLOTS ? PlayerContainerLayout.hotbarY()
+                int y = main < InventoryLayout.HOTBAR_SLOTS ? PlayerContainerLayout.hotbarY(player.inventory)
                     : PlayerContainerLayout.storageY(main);
                 if (!player.worldObj.isRemote && (slot.xDisplayPosition != x || slot.yDisplayPosition != y))
                     return false;

@@ -1,6 +1,6 @@
 param(
     [ValidateSet('Developer','Observer')] [string] $PlayerName = 'Developer',
-    [ValidateSet('isolated','rc2-mui2','rc2-backhand','rc2-integration')] [string] $Profile = 'rc2-mui2',
+    [ValidateSet('isolated','rc2-mui2','rc2-backhand','rc2-integration','daily-2026-10-19')] [string] $Profile = 'rc2-mui2',
     [string] $PeerMetadataPath
 )
 $ErrorActionPreference = 'Stop'

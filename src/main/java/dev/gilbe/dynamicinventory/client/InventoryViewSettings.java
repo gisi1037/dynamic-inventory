@@ -14,6 +14,7 @@ public final class InventoryViewSettings {
     public static boolean expandMachineInventory = true;
     public static boolean compactNativePanels = false;
     public static boolean mui2Presentation = false;
+    public static boolean automaticStorageScroll = true;
     private static Configuration configuration;
 
     private InventoryViewSettings() {}
@@ -57,6 +58,12 @@ public final class InventoryViewSettings {
                 false,
                 "Experimental MUI2 panel and slot-background widgets. Native containers and item input remain in use.")
             .getBoolean(false);
+        automaticStorageScroll = configuration.get(
+            "layout",
+            "automaticStorageScroll",
+            true,
+            "Use a compact scroll panel for simple drawing-only GUIs backed by an already integrated vanilla storage container.")
+            .getBoolean(true);
         if (legacyDefault && columns == 18 && rows == 3) {
             // Only migrate the original, unversioned default. Saved modern/custom
             // preferences remain the user's choice when the factory default changes.

@@ -2,10 +2,24 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $ManifestPath,
     [ValidateSet('preflight', 'full-pack')]
-    [string] $Stage = 'full-pack'
+    [string] $Stage = 'full-pack',
+    [ValidateSet('rc2-integration', 'daily-2026-10-19')]
+    [string] $Profile = 'rc2-integration'
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Keep qualification target selection on the same exact pins as Gradle/runtime.
+# This deliberately does not accept a moving nightly alias or arbitrary profile.
+$pinPrefix = if ($Profile -eq 'rc2-integration') { 'rc2' } else { $Profile }
+$pinPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'src/main/resources/integration-profiles.properties'
+$targetKey = "$pinPrefix.target"
+$targetPins = @(Get-Content -LiteralPath $pinPath | Where-Object {
+    $_ -match ('^' + [regex]::Escape($targetKey) + '=')
+})
+if ($targetPins.Count -ne 1) { throw "Expected one pinned qualification target: $targetKey" }
+$packTarget = ($targetPins[0] -split '=', 2)[1].Trim()
+if ([string]::IsNullOrWhiteSpace($packTarget)) { throw "Qualification target is empty: $targetKey" }
 
 $preflightReports = @(
     'artifact-verification.json',
@@ -65,8 +79,12 @@ $manifest = Read-JsonObject $manifestFullPath
 if ($manifest.success -ne $true -or $manifest.fullPackSmokeTestAllowed -ne $true) {
     throw 'Qualification manifest does not allow the local full-pack test launch.'
 }
-if ($manifest.prototype -ne '0.8.0-dev' -or $manifest.packTarget -ne '2.9.0-RC-2') {
-    throw 'Qualification manifest prototype or pack target is not the pinned RC-2 build.'
+if ($manifest.prototype -ne '0.8.0-dev' -or $manifest.packTarget -ne $packTarget) {
+    throw "Qualification manifest prototype or pack target is not the pinned $Profile build ($packTarget)."
+}
+Assert-MatchesWhenPresent $manifest @('profile', 'inventoryProfile') $Profile $manifestFullPath
+if ($Profile -ne 'rc2-integration' -and [string]$manifest.profile -ne $Profile) {
+    throw 'Daily qualification requires an explicit matching manifest profile.'
 }
 if ([string]$manifest.jarSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
     throw 'Qualification manifest must contain a valid production jarSha256.'
@@ -134,6 +152,10 @@ foreach ($relative in $expectedReports) {
 
     Assert-MatchesWhenPresent $report @('prototype') ([string]$manifest.prototype) $relative
     Assert-MatchesWhenPresent $report @('packTarget') ([string]$manifest.packTarget) $relative
+    if ($Profile -ne 'rc2-integration' -and
+        ([string]$report.profile -ne $Profile -or [string]$report.packTarget -ne $packTarget)) {
+        throw "Daily qualification report must identify its pinned profile and pack target: $relative"
+    }
     foreach ($identity in @(@('profile', 'profile'), @('inventoryProfile', 'inventoryProfile'), @('suite', 'suite'))) {
         $manifestProperty = $manifest.PSObject.Properties[[string]$identity[1]]
         $reportProperty = $report.PSObject.Properties[[string]$identity[0]]

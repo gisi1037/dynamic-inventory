@@ -69,3 +69,10 @@ matching artifact hashes. Removing archived evidence does not bypass that gate.
 For broader compatibility, test actual pickup/ticking/death/respawn, equipment,
 grave and backup/restore behavior, and item/cursor conservation. The presence of
 fixture source is not proof those scenarios passed on a particular artifact.
+
+
+Upgrade checks: `UpgradeCapacityFixtures` exercises configurable limits and caps.
+`test-inventory-upgrades.ps1` drives actual right-click module consumption, Baubles
+removal guards, forced removal, persistence and death in a fresh disposable upgrade
+world. Launch an RC-2 integration fixture first; its default debugger is 5015.
+See the script parameters and [upgrade behavior](inventory-upgrades.md).

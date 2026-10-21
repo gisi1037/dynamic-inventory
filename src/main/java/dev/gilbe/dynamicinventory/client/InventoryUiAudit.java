@@ -116,7 +116,9 @@ public final class InventoryUiAudit {
             Integer count = counts.get(index);
             if (count == null || count == 0) missing.add(new JsonPrimitive(index));
         }
-        for (int index = 0; index < InventoryLayout.mainSlots(); index++)
+        for (int index = 0; index < (canonical == null ? 36
+            : InventoryLayout.of(canonical)
+                .mainSlots()); index++)
             if (counts.containsKey(index) && counts.get(index) > 1) duplicates.add(new JsonPrimitive(index));
         root.add("missingLegacyIndices", missing);
         root.add("duplicateOrdinaryIndices", duplicates);
@@ -147,7 +149,8 @@ public final class InventoryUiAudit {
     private static SlotMapping mapPlayerSlot(Slot slot, InventoryPlayer canonical) {
         if (canonical != null && slot.inventory == canonical) {
             int raw = slot.getSlotIndex();
-            int ordinary = InventoryLayout.ordinaryIndex(raw);
+            int ordinary = InventoryLayout.of(canonical)
+                .ordinaryIndex(raw);
             return new SlotMapping(raw, ordinary);
         }
         Object handler = invokeNoArg(slot, "getItemHandler");
@@ -162,11 +165,18 @@ public final class InventoryUiAudit {
         if (!(index instanceof Number)) return null;
         if (name.equals("dev.gilbe.dynamicinventory.compat.mui2.Mui2PlayerInventory")) {
             int raw = ((Number) index).intValue();
-            return new SlotMapping(raw, InventoryLayout.ordinaryIndex(raw));
+            return new SlotMapping(
+                raw,
+                InventoryLayout.of(canonical)
+                    .ordinaryIndex(raw));
         }
         int ordinary = ((Number) index).intValue();
-        if (ordinary < 0 || ordinary >= InventoryLayout.mainSlots()) return null;
-        int raw = InventoryLayout.rawIndex(ordinary);
+        if (ordinary < 0 || ordinary >= (canonical == null ? 36
+            : InventoryLayout.of(canonical)
+                .mainSlots()))
+            return null;
+        int raw = InventoryLayout.of(canonical)
+            .rawIndex(ordinary);
         return new SlotMapping(raw, ordinary);
     }
 

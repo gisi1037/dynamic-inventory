@@ -138,7 +138,7 @@ public final class PackFixtures {
 
         @Override
         public String getCommandUsage(ICommandSender sender) {
-            return "/dinvpack selftest|bogogroups|seed|state|lock|unlock|rebind";
+            return "/dinvpack selftest|bogogroups|openblocks|seed|state|lock|unlock|rebind";
         }
 
         @Override
@@ -159,7 +159,14 @@ public final class PackFixtures {
             JsonObject report = new JsonObject();
             try {
                 if (args[0].equals("selftest")) selftest(player);
-                else if (args[0].equals("bogogroups")) {
+                else if (args[0].equals("openblocks")) {
+                    JsonObject backup = OpenBlocksCompatibilityFixtures
+                        .run((net.minecraft.entity.player.EntityPlayerMP) player);
+                    check(
+                        backup.get("success")
+                            .getAsBoolean(),
+                        "OpenBlocks disk backup consumer");
+                } else if (args[0].equals("bogogroups")) {
                     if (!cpw.mods.fml.common.Loader.isModLoaded("TConstruct")) throw new IllegalStateException(
                         "Requires TConstruct at runtime; the minimal source profile only provides its compile API");
                     for (String check : BogoInventoryFixtures.run(player)) passed.add(new JsonPrimitive(check));

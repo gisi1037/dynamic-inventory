@@ -1,13 +1,6 @@
 package dev.gilbe.dynamicinventory.compat;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.crafting.FurnaceRecipes;
-import net.minecraft.tileentity.TileEntityFurnace;
-
-import dev.gilbe.dynamicinventory.api.InventoryTransfers;
-import dev.gilbe.dynamicinventory.api.InventoryUi;
-import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
-import dev.gilbe.dynamicinventory.api.NativeUiLayout;
+import cpw.mods.fml.common.Loader;
 
 /** Built-in integrations use the same registration contract available to other mods. */
 public final class BuiltinInventoryUiAdapters {
@@ -15,67 +8,36 @@ public final class BuiltinInventoryUiAdapters {
     private BuiltinInventoryUiAdapters() {}
 
     public static void initialize() {
-        InventoryUi.register(
-            InventoryUiAdapter.builder("dynamicinventory:chest", "net.minecraft.inventory.ContainerChest")
-                .gui("net.minecraft.client.gui.inventory.GuiChest")
-                .nativeTransfers()
-                .build());
-        InventoryUi.register(
-            InventoryUiAdapter.builder("dynamicinventory:workbench", "net.minecraft.inventory.ContainerWorkbench")
-                .gui("net.minecraft.client.gui.inventory.GuiCrafting")
-                .extraTransfers(InventoryTransfers.toHotbar())
-                .build());
-        InventoryUi.register(
-            InventoryUiAdapter.builder("dynamicinventory:furnace", "net.minecraft.inventory.ContainerFurnace")
-                .gui("net.minecraft.client.gui.inventory.GuiFurnace")
-                .extraTransfers((container, player, id, binding) -> {
-                    ItemStack stack = container.getSlot(id)
-                        .getStack();
-                    if (stack == null) return null;
-                    if (FurnaceRecipes.smelting()
-                        .getSmeltingResult(stack) != null)
-                        return InventoryTransfers.toSlots(0)
-                            .transfer(container, player, id, binding);
-                    if (TileEntityFurnace.isItemFuel(stack)) return InventoryTransfers.toSlots(1)
-                        .transfer(container, player, id, binding);
-                    return InventoryTransfers.toHotbar()
-                        .transfer(container, player, id, binding);
-                })
-                .build());
+        VanillaInventoryCompatibility.registerInventoryAdapters();
         if (!PackCompatibility.enabled()) return;
-        InventoryUi.register(
-            InventoryUiAdapter
-                .builder("dynamicinventory:tinkers_station", "tconstruct.tools.inventory.CraftingStationContainer")
-                .compatibilityRevision(2)
-                .gui("tconstruct.tools.gui.CraftingStationGui")
-                .nativeTransfers()
-                .build());
-        InventoryUi.register(
-            InventoryUiAdapter
-                .builder(
-                    "dynamicinventory:galacticraft_equipment",
-                    "micdoodle8.mods.galacticraft.core.inventory.ContainerExtendedInventory")
-                .gui("micdoodle8.mods.galacticraft.core.client.gui.container.GuiExtendedInventory")
-                .layout(
-                    NativeUiLayout.builder()
-                        .topPadding(28)
-                        .build())
-                .nativeTransfers()
-                .build());
-        InventoryUi.register(
-            InventoryUiAdapter
-                .builder(
-                    "dynamicinventory:discovered/guicompressedchest",
-                    "wanion.avaritiaddons.block.chest.compressed.ContainerCompressedChest")
-                .gui("wanion.avaritiaddons.block.chest.compressed.GuiCompressedChest")
-                .layout(
-                    NativeUiLayout.builder()
-                        .topPadding(0) // TODO measure tab/header padding.
-                        .minimumHeaderHeight(0) // TODO measure native header geometry.
-                        .backgroundInset(0) // TODO choose per-frame clipping after inspection.
-                        .build())
-                .extraTransfers(InventoryTransfers.toNativeSlots())
-                .build());
+        // Optional mods must not contribute adapters (or trigger API class loading)
+        // when absent. Keep version checks and the opening handshake separate.
+        if (Loader.isModLoaded("TConstruct")) TinkersConstructCompatibility.registerInventoryAdapters();
+        if (Loader.isModLoaded("GalacticraftCore")) GalacticraftCompatibility.registerInventoryAdapters();
+        if (Loader.isModLoaded("IronChest")) IronChestCompatibility.registerInventoryAdapters();
+        if (Loader.isModLoaded("etfuturum")) EtFuturumCompatibility.registerInventoryAdapters();
+        if (Loader.isModLoaded("avaritiaddons")) AvaritiaddonsCompatibility.registerInventoryAdapters();
+        if (Loader.isModLoaded("dreamcraft")) DreamcraftCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("alchgrate"))
+            AlchemicalGrateCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("Avaritia")) AvaritiaCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("FloodLights"))
+            FloodLightsCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("TwilightForest"))
+            TwilightForestCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("harvestcraft"))
+            HarvestCraftCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("Thaumcraft"))
+            ThaumcraftCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("witchery")) WitcheryCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.profileVersion("SpiceOfLife", "SpiceOfLife"))
+            SpiceOfLifeCompatibility.registerInventoryAdapters();
+        registerGeneratedAdapters();
+    }
 
+    /** F9 suggestions stay separate until reviewed, then move into the owning mod's compatibility file. */
+    private static void registerGeneratedAdapters() {
+        // When enabling a suggestion, put it in its mod's file behind a version guard above.
+        // F9-SCAFFOLDS: New native adapter suggestions are inserted above this marker, fully commented.
     }
 }

@@ -18,8 +18,8 @@ import dev.gilbe.dynamicinventory.api.InventoryUiProtocol;
 public final class InventoryCapacity {
 
     public static final int DEFAULT_STORAGE = 72;
-    public static final int MIN_STORAGE = 27;
-    public static final int MAX_STORAGE = 216;
+    public static final int MIN_STORAGE = InventoryShape.MIN_STORAGE;
+    public static final int MAX_STORAGE = InventoryShape.MAX_STORAGE;
     private static final int CONFIGURED_STORAGE = load();
     private static volatile int storage = CONFIGURED_STORAGE;
     private static final Set<World> LIVE_WORLDS = Collections.newSetFromMap(new IdentityHashMap<World, Boolean>());

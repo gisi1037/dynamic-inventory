@@ -1,3 +1,13 @@
 key.categories.dynamicinventory=Dynamic Inventory Diagnostics
 key.dynamicinventory.baseline=Capture inventory baseline
 key.dynamicinventory.uiAudit=Capture inventory UI audit
+key.dynamicinventory.uiEditor=Edit inventory GUI layout
+item.dynamicinventory.capacity_module.name=Inventory Capacity Module
+item.dynamicinventory.inventory_belt.name=Inventory Expansion Belt
+dynamicinventory.module.tooltip=Right-click to permanently expand your inventory.
+dynamicinventory.belt.tooltip=Adds storage while worn in a Baubles belt slot. Does not stack.
+dynamicinventory.belt.remove=Clear the extra slots before removing the belt.
+dynamicinventory.upgrade.rules=Bonuses and limits are set by the server. Maximum: 216 storage slots.
+dynamicinventory.upgrade.busy=Wait for inventory synchronization, then try again.
+dynamicinventory.upgrade.applied=Inventory expanded to %s storage slots plus the hotbar.
+dynamicinventory.upgrade.refused=Inventory upgrade waiting/refused: %s

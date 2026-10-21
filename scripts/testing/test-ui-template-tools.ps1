@@ -84,7 +84,7 @@ $java = @(Get-ChildItem -LiteralPath $output -Filter '*.java' -Recurse -File)
 Check ($java.Count -eq 2) 'Native registration and MUI2 player-section Java templates are generated; MUI1 gets review notes'
 $nativeJava = $java | Where-Object Name -like '*NativeGui*'
 $muiJava = $java | Where-Object Name -like '*GuiContainerWrapper*'
-Check ((Get-Content $nativeJava.FullName -Raw) -match '// InventoryUi.register\(') 'Native registration stays commented and inactive'
+Check ((Get-Content $nativeJava.FullName -Raw) -match '(?s)/\*\s*// TODO.*?InventoryUi\.register\(.*?\*/') 'Native registration stays inside one block comment and inactive'
 Check ((Get-Content $muiJava.FullName -Raw) -match 'Mui2InventoryWidgets.playerInventory' -and
     (Get-Content $muiJava.FullName -Raw) -match 'sync.bindPlayerInventory') 'MUI2 template uses the public live-slot factory and matching binding'
 Check (@($receipts | Where-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).activated }).Count -eq 0) 'Every exported bundle is explicitly inactive'
@@ -123,9 +123,9 @@ Check ($LASTEXITCODE -eq 0) 'PowerShell 7 generated templates compile for Java 8
 $activatedDirectory = Join-Path $root 'activated-native-fixture'
 New-Item -ItemType Directory -Force -Path $activatedDirectory | Out-Null
 $nativeSource = Get-Content -LiteralPath $nativeJava.FullName -Raw
-$expression = [regex]::Match($nativeSource, '(?ms)^\s*// InventoryUi\.register\(.*?//\s*\.build\(\)\);')
+$expression = [regex]::Match($nativeSource, '(?ms)^        /\*\r?\n.*?InventoryUi\.register\(.*?\.build\(\)\);\r?\n        \*/')
 Check $expression.Success 'Native scaffold contains the expected complete registration expression'
-$activatedExpression = [regex]::Replace($expression.Value, '(?m)^(\s*)// ?', '$1')
+$activatedExpression = $expression.Value -replace '(?m)^        /\*\r?\n|^        \*/', ''
 $activatedExpression = [regex]::Replace($activatedExpression, '(?m)^(\s*)//\s*\.nativeTransfers\(\)', '$1.nativeTransfers()')
 $activated = $nativeSource.Replace($expression.Value, $activatedExpression)
 $activated = [regex]::Replace($activated, '(?m)^(package [^;]+;)', '$1' + "`nimport dev.gilbe.dynamicinventory.api.*;")
@@ -175,6 +175,54 @@ $blocked = $false
 try { & $watcher -AuditDirectory $audits -OutputDirectory (Join-Path $projectRoot 'src/generated-template-test') -Once }
 catch { $blocked = $true }
 Check $blocked 'Watcher rejects output under the production source tree'
+
+# Exercise opt-in source insertion on disposable Java files, never on the real registry.
+foreach ($shell in @($windowsPowerShell.Source, $powerShell7.Source)) {
+    $fixtureRoot = Join-Path $root ('source-insert-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+    $registration = Join-Path $fixtureRoot 'RegistrationFixture.java'
+    $initial = "public final class RegistrationFixture {`n    static void initialize() {`n" +
+        "        // F9-SCAFFOLDS: New native adapter suggestions are inserted above this marker, fully commented.`n    }`n}`n"
+    [IO.File]::WriteAllText($registration, $initial, [Text.UTF8Encoding]::new($false))
+    $capture = Join-Path $fixtureRoot 'audit.json'
+    [IO.File]::WriteAllText($capture, $nativeText, [Text.UTF8Encoding]::new($false))
+    $generated = Join-Path $fixtureRoot 'generated'
+    & $shell -NoProfile -ExecutionPolicy Bypass -File $generator -AuditPath $capture -OutputDirectory $generated -InsertIntoSource -RegistrationFile $registration | Out-Null
+    Check ($LASTEXITCODE -eq 0) "$shell inserts the native suggestion into source"
+    $inserted = [IO.File]::ReadAllText($registration)
+    Check ($inserted -match '(?s)/\*\s*// TODO.*?InventoryUi\.register\(.*?\*/') 'Source contains a complete block-commented registration expression'
+    $activeSource = $inserted -replace '(?s)/\*.*?\*/', '' -replace '(?m)//[^\r\n]*', '' -replace '\s', ''
+    $initialActiveSource = $initial -replace '(?m)//[^\r\n]*', '' -replace '\s', ''
+    Check ($activeSource -eq $initialActiveSource) 'Insertion changes comments only; no active code or loader behavior'
+    & $shell -NoProfile -ExecutionPolicy Bypass -File $generator -AuditPath $capture -OutputDirectory $generated -InsertIntoSource -RegistrationFile $registration -Force | Out-Null
+    Check ($LASTEXITCODE -eq 0 -and [IO.File]::ReadAllText($registration) -ceq $inserted) 'Repeated captures do not duplicate source registrations'
+    # A declaration can move into a mod-specific file without making F9 register it twice.
+    $modularRoot = Join-Path $fixtureRoot 'modular'
+    $moduleDirectory = Join-Path $modularRoot 'owners'
+    New-Item -ItemType Directory -Path $moduleDirectory | Out-Null
+    $modularRegistration = Join-Path $modularRoot 'RegistrationFixture.java'
+    [IO.File]::WriteAllText($modularRegistration, $initial, [Text.UTF8Encoding]::new($false))
+    $existingContainer = ($nativeText | ConvertFrom-Json).containerClass
+    $module = Join-Path $moduleDirectory 'ModCompatibility.java'
+    [IO.File]::WriteAllText($module, '// Reviewed adapter target: "' + $existingContainer + '"')
+    & $shell -NoProfile -ExecutionPolicy Bypass -File $generator -AuditPath $capture -OutputDirectory $generated -InsertIntoSource -RegistrationFile $modularRegistration -Force | Out-Null
+    Check ($LASTEXITCODE -eq 0 -and [IO.File]::ReadAllText($modularRegistration) -ceq $initial) 'A container declared in a mod file does not generate a duplicate central adapter'
+    [IO.File]::WriteAllText($module, '// Unrelated target: "another.mod.Container"')
+    & $shell -NoProfile -ExecutionPolicy Bypass -File $generator -AuditPath $capture -OutputDirectory $generated -InsertIntoSource -RegistrationFile $modularRegistration -Force | Out-Null
+    Check ($LASTEXITCODE -eq 0 -and [IO.File]::ReadAllText($modularRegistration) -match '(?s)/\*\s*// TODO.*?InventoryUi\.register\(.*?\*/') 'Unrelated mod files do not block a new adapter suggestion'
+    $invalid = $nativeText | ConvertFrom-Json
+    $invalid.containerClass = "invalid.Class`n// injected"
+    $invalid | ConvertTo-Json -Depth 12 | Set-Content $capture -Encoding UTF8
+    $savedErrorPreference = $ErrorActionPreference
+    try {
+        # PowerShell 5 promotes native stderr to terminating errors under Stop, even for this expected rejection.
+        $ErrorActionPreference = 'Continue'
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $generator -AuditPath $capture -OutputDirectory $generated -InsertIntoSource -RegistrationFile $registration -Force 2>&1 | Out-Null
+    } finally { $ErrorActionPreference = $savedErrorPreference }
+    Check ($LASTEXITCODE -ne 0 -and [IO.File]::ReadAllText($registration) -ceq $inserted) 'Malformed capture cannot edit project source'
+    & $javaRuntime.Javac --release 8 -proc:none -d $classes $registration
+    Check ($LASTEXITCODE -eq 0) 'Source with inserted comments remains valid Java 8'
+}
 $parseErrors = @()
 foreach ($file in @($watcher, $generator, $PSCommandPath)) {
     $tokens=$null; $errors=$null

@@ -19,6 +19,9 @@ import org.lwjgl.opengl.GL11;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.NativeUiLayout;
 import dev.gilbe.dynamicinventory.api.client.NativeUiAnchors;
+import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
+import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
+import dev.gilbe.dynamicinventory.compat.InventoryTabsCompatibility;
 import dev.gilbe.dynamicinventory.compat.PackClientCompatibility;
 import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
@@ -64,6 +67,7 @@ public final class NativeInventoryPanel extends Gui {
 
     private static final ResourceLocation TEXTURE = new ResourceLocation("textures/gui/container/inventory.png");
     private static NativeInventoryPanel drawingBackground;
+    private static NativeInventoryPanel drawingForeground;
     private final GuiContainer gui;
     private final ContainerPanelAccess access;
     private final ContainerInventoryRegion region;
@@ -77,38 +81,70 @@ public final class NativeInventoryPanel extends Gui {
     private final Map<GuiButton, Point> buttonOffsets = new IdentityHashMap<>();
     private final int nativeWidth;
     private final int nativeHeight;
-    private final int panelTop;
+    private final int viewportWidth, viewportHeight;
+    private int panelTop;
     private final int nativeStorageTop;
-    private final int headerX;
-    private final int headerY;
+    private int headerX;
+    private int headerY;
     private final int tabPadding;
     private final int columns;
     private final int rows;
-    private final int gridX;
+    private int gridX;
+    private final int playerX, playerY, shiftX, shiftY;
+    private final int nativeClipLeft, nativeClipRight, nativeClipTop, nativeClipBottom;
+    private final int nativeContentBottom;
+    private final int measuredHeaderBoundary;
+    private final int sectionGap;
+    private final boolean nativeSectionMoved;
+    private final int frameStyle;
+    private final int borderWidth;
     private final int panelHeight;
     private final int panelWidth;
     private final int[] headerOrigins;
     private final AttachedChestAccess attachedChest;
     private final AttachedChestLayout chestLayout;
-    private final int chestOffsetX, chestOffsetY;
+    private int chestOffsetX, chestOffsetY;
     private int scroll;
-    private int frameLeft, frameTop, frameWidth;
+    private int frameLeft, frameTop;
 
     /** Native drawing temporarily substitutes the crafting bounds; retain the actual outer panel bounds. */
     public void drawAttachedChestFrame() {
-        attachedChest
-            .dynamicinventory$drawFrame(frameLeft, frameTop, frameWidth, attachedChest.dynamicinventory$chestHeight());
+        if (frameStyle != 0) NativePanelFrame.draw(
+            frameLeft + shiftX,
+            frameTop + shiftY,
+            chestLayout.width,
+            attachedChest.dynamicinventory$chestHeight(),
+            frameStyle,
+            borderWidth,
+            null);
+        else attachedChest.dynamicinventory$drawFrame(
+            frameLeft + shiftX,
+            frameTop + shiftY,
+            chestLayout.width,
+            attachedChest.dynamicinventory$chestHeight());
     }
 
     public NativeInventoryPanel(GuiContainer gui) {
         this.gui = gui;
+        viewportWidth = gui.width;
+        viewportHeight = gui.height;
         access = (ContainerPanelAccess) gui;
         region = ContainerInventoryRegion.of(gui.inventorySlots);
-        layout = InventoryUi.findLayout(gui.inventorySlots, gui.getClass());
-        if (layout == null)
+        if (InventoryUi.findLayout(gui.inventorySlots, gui.getClass()) == null)
             throw new IllegalArgumentException("No registered native presentation for " + gui.getClass());
+        NativeLayoutPatch patch = NativeLayoutPatches.resolve(gui);
+        frameStyle = patch.value(12);
+        borderWidth = patch.value(16);
+        nativeSectionMoved = patch.value(9) != 0 || patch.value(10) != 0;
+        layout = patch.hints();
+        int availableHeight = NativeScreenMargins.availableHeight(gui.height, patch.value(14), patch.value(15));
+        if (gui instanceof AttachedChestAccess chest && chest.dynamicinventory$splitChest()) {
+            // Recompute the native chest too: shrinking only the player grid left a tall chest
+            // pinned to its old height and made live margin controls appear ineffective.
+            chest.dynamicinventory$refreshChestLayout();
+        }
         presentation = new InventoryPresentation(gui);
-        for (int logical = 0; logical < InventoryLayout.mainSlots(); logical++)
+        for (int logical = 0; logical < region.getOrdinarySlotCount(); logical++)
             playerSlots.add(gui.inventorySlots.getSlot(region.id(logical)));
         nativeWidth = access.dynamicinventory$width();
         nativeHeight = access.dynamicinventory$height();
@@ -136,22 +172,33 @@ public final class NativeInventoryPanel extends Gui {
                 machineBottom = Math.max(machineBottom, slot.yDisplayPosition + 16);
                 nativeLeft = Math.min(nativeLeft, slot.xDisplayPosition - 8);
                 nativeRight = Math.max(nativeRight, slot.xDisplayPosition + 24);
-                nativeTop = Math.min(nativeTop, slot.yDisplayPosition - 18);
+                // A slot at y=8 already fits inside the native frame. Reserving 18px here invented
+                // a negative top edge and left Galacticraft's header/tab ten pixels below our frame.
+                nativeTop = Math.min(nativeTop, slot.yDisplayPosition - 8);
             }
         }
         nativeStorageTop = storageY - 4;
+        measuredHeaderBoundary = NativeSectionGeometry
+            .playerBoundary(nativeStorageTop, 0, machineBottom, patch.value(11));
+        sectionGap = patch.value(11) >= 0 ? patch.value(11)
+            : attachedChest != null ? AttachedChestLayout.GAP
+                : Math.min(128, Math.max(0, measuredHeaderBoundary - machineBottom - 2));
         tabPadding = layout.getTopPadding();
         chestLayout = attachedChest == null ? null
             : new AttachedChestLayout(
                 gui.width,
                 gui.height,
-                InventoryLayout.storageSlots(),
-                InventoryViewSettings.columns,
-                InventoryViewSettings.rows,
+                (region.getOrdinarySlotCount() - InventoryLayout.HOTBAR_SLOTS),
+                patch.value(0),
+                NativeLayoutPatches.requestedRows(gui, patch, 1),
                 attachedChest.dynamicinventory$hasDescription(),
                 attachedChest.dynamicinventory$chestWidth(),
                 attachedChest.dynamicinventory$chestHeight(),
-                chestSlots.size());
+                chestSlots.size(),
+                sectionGap,
+                patch.value(13),
+                patch.value(14),
+                patch.value(15));
         int totalWidth, totalHeight;
         if (chestLayout != null) {
             columns = chestLayout.columns;
@@ -168,14 +215,20 @@ public final class NativeInventoryPanel extends Gui {
             chestOffsetY = -headerOrigins[3];
             gridX = chestLayout.playerX + (panelWidth - columns * 18 - (maxScroll() > 0 ? 10 : 0)) / 2;
         } else {
-            panelTop = Math.max(layout.getMinimumHeaderHeight(), Math.max(nativeStorageTop, machineBottom + 8));
+            panelTop = NativeSectionGeometry
+                .playerBoundary(nativeStorageTop, layout.getMinimumHeaderHeight(), machineBottom, patch.value(11));
             headerY = tabPadding - nativeTop;
-            columns = Math.max(3, Math.min(InventoryViewSettings.columns, Math.min(18, (gui.width - 32) / 18)));
+            int fixedColumns = InventoryUi.findLayout(gui.inventorySlots, gui.getClass())
+                .getFixedPlayerColumns();
+            columns = fixedColumns > 0 ? fixedColumns
+                : Math.max(3, Math.min(patch.value(0), Math.min(18, (gui.width - 32) / 18)));
             rows = Math.max(
                 1,
                 Math.min(
-                    Math.min(InventoryViewSettings.rows, (InventoryLayout.storageSlots() + columns - 1) / columns),
-                    (gui.height - headerY - panelTop - 50) / 18));
+                    Math.min(
+                        NativeLayoutPatches.requestedRows(gui, patch, columns),
+                        ((region.getOrdinarySlotCount() - InventoryLayout.HOTBAR_SLOTS) + columns - 1) / columns),
+                    (availableHeight - headerY - panelTop - 50) / 18));
             panelWidth = Math.max(176, columns * 18 + 26);
             panelHeight = rows * 18 + 42;
             totalWidth = Math.max(nativeRight - nativeLeft, panelWidth);
@@ -185,21 +238,136 @@ public final class NativeInventoryPanel extends Gui {
             chestOffsetY = headerY;
             gridX = (totalWidth - columns * 18 - (maxScroll() > 0 ? 10 : 0)) / 2;
         }
-        int left = (gui.width - totalWidth) / 2;
-        int top = Math.max(0, (gui.height - totalHeight) / 2);
+        // At tiny scales a fixed native description may need more than the requested usable
+        // height. Retain that minimum rather than squeezing independently positioned sections together.
+        int sectionHeight = Math.max(availableHeight, totalHeight);
+        NativeSectionGeometry sections = new NativeSectionGeometry(
+            totalWidth,
+            chestLayout == null ? 0 : totalHeight,
+            headerX,
+            headerY,
+            chestLayout == null ? nativeLeft : -headerX,
+            chestLayout == null ? nativeRight : totalWidth - headerX,
+            chestLayout == null ? nativeTop : -headerY,
+            chestLayout == null ? nativeStorageTop : totalHeight - headerY,
+            chestLayout == null ? (totalWidth - panelWidth) / 2 : chestLayout.playerX,
+            headerY + panelTop,
+            panelWidth,
+            panelHeight,
+            chestLayout == null ? patch.value(9) : 0,
+            chestLayout == null
+                ? fittedOffset(headerY + nativeTop, headerY + nativeStorageTop, patch.value(10), sectionHeight)
+                : 0,
+            patch.value(7),
+            fittedOffset(headerY + panelTop, headerY + panelTop + panelHeight, patch.value(8), sectionHeight));
+        headerX = sections.headerX;
+        headerY = sections.headerY;
+        playerX = sections.playerX;
+        playerY = sections.playerY;
+        shiftX = sections.shiftX;
+        shiftY = sections.shiftY;
+        chestOffsetX += shiftX;
+        chestOffsetY += shiftY;
+        panelTop = playerY - headerY;
+        gridX = playerX + (panelWidth - columns * 18 - (maxScroll() > 0 ? 10 : 0)) / 2;
+        totalWidth = sections.width;
+        totalHeight = sections.height;
+        nativeClipLeft = nativeLeft;
+        nativeClipRight = nativeRight;
+        nativeClipTop = nativeTop;
+        // Never crop a live native slot. Blank artwork below it may be removed when the player band moves up.
+        nativeContentBottom = machineBottom + 2;
+        nativeClipBottom = Math.max(nativeContentBottom, Math.min(nativeStorageTop, playerY - headerY));
+        // Offsets are preferences relative to the centered layout. Keep the fitted panel on screen.
+        int left = Math
+            .max(0, Math.min(Math.max(0, gui.width - totalWidth), (gui.width - totalWidth) / 2 + patch.value(2)));
+        int top = NativeScreenMargins.top(gui.height, totalHeight, patch.value(3), patch.value(14), patch.value(15));
         for (Object entry : access.dynamicinventory$buttons()) {
             GuiButton button = (GuiButton) entry;
-            if (button.getClass()
-                .getName()
-                .equals("com.cleanroommc.bogosorter.common.sort.ButtonHandler$SortButton")
-                || button.getClass()
-                    .getName()
-                    .equals("net.blay09.mods.craftingtweaks.client.GuiTweakButton"))
-                continue;
+            if (!isNativeButton(button)) continue;
             buttons.put(button, new int[] { button.xPosition - oldLeft, button.yPosition - oldTop });
         }
         access.dynamicinventory$bounds(totalWidth, totalHeight, left, top);
         position();
+    }
+
+    /** Section offsets remain editable preferences, but cannot push a fitting section outside the viewport. */
+    private static int fittedOffset(int top, int bottom, int requested, int availableHeight) {
+        if (bottom - top >= availableHeight) return -top;
+        return Math.max(-top, Math.min(availableHeight - bottom, requested));
+    }
+
+    public int visibleColumns() {
+        return columns;
+    }
+
+    public int visibleRows() {
+        return rows;
+    }
+
+    /** Absolute origin shared by native controls which draw or handle clicks outside the normal layers. */
+    public int nativeHeaderLeft() {
+        return access.dynamicinventory$left() + (drawingBackground == this || drawingForeground == this ? 0 : headerX);
+    }
+
+    public int nativeHeaderTop() {
+        return access.dynamicinventory$top() + (drawingBackground == this || drawingForeground == this ? 0 : headerY);
+    }
+
+    /** Use the real viewport, even while background drawing temporarily substitutes native screen dimensions. */
+    public int nativeViewportOffsetX() {
+        return nativeHeaderLeft() - (viewportWidth - nativeWidth) / 2;
+    }
+
+    public int nativeViewportOffsetY() {
+        return nativeHeaderTop() - (viewportHeight - nativeHeight) / 2;
+    }
+
+    private static boolean isNativeButton(GuiButton button) {
+        String name = button.getClass()
+            .getName();
+        return !name.equals("com.cleanroommc.bogosorter.common.sort.ButtonHandler$SortButton")
+            && !name.equals("net.blay09.mods.craftingtweaks.client.GuiTweakButton");
+    }
+
+    /** Some vanilla screens add buttons after initGui; retain each new object's native offset exactly once. */
+    public void captureNewNativeButtons() {
+        for (GuiButton button : access.dynamicinventory$buttons()) {
+            if (isNativeButton(button) && !buttons.containsKey(button)) buttons.put(
+                button,
+                new int[] { button.xPosition - access.dynamicinventory$left(),
+                    button.yPosition - access.dynamicinventory$top() });
+        }
+        position();
+    }
+
+    public boolean hasAttachedChest() {
+        return attachedChest != null;
+    }
+
+    /** The header control is a floor, not an offset; expose the measured floor to explain small no-op changes. */
+    public int nativeHeaderBoundary() {
+        return measuredHeaderBoundary;
+    }
+
+    public int sectionGap() {
+        return sectionGap;
+    }
+
+    public int[] editorSectionBounds(int target) {
+        int x = access.dynamicinventory$left(), y = access.dynamicinventory$top();
+        if (target == 1) return new int[] { x + playerX, y + playerY, panelWidth, panelHeight };
+        if (target == 2) return new int[] { x + headerX + nativeClipLeft, y + headerY + nativeClipTop,
+            nativeClipRight - nativeClipLeft, nativeClipBottom - nativeClipTop };
+        return new int[] { x, y, access.dynamicinventory$width(), access.dynamicinventory$height() };
+    }
+
+    /** Drag coordinates use the same source preferences as the +/- controls. */
+    public boolean isPlayerSection(int x, int y) {
+        int localX = x - access.dynamicinventory$left(), localY = y - access.dynamicinventory$top();
+        return localX >= playerX && localX < playerX + panelWidth
+            && localY >= playerY
+            && localY < playerY + panelHeight;
     }
 
     public void restore() {
@@ -262,8 +430,9 @@ public final class NativeInventoryPanel extends Gui {
         if (y < originTop) return null;
         // The attached layout always has one shared lower frame. Remove the native crafting sheet's
         // outer bevel even when the global frame preference is Compact, while retaining its slot artwork.
-        int inset = panel.chestLayout == null && InventoryViewSettings.compactNativePanels ? 0
-            : panel.layout.getBackgroundInset();
+        int inset = panel.frameStyle != 0 ? Math.max(4, panel.layout.getBackgroundInset())
+            : panel.chestLayout == null && InventoryViewSettings.compactNativePanels ? 0
+                : panel.layout.getBackgroundInset();
         int topInset = y == originTop ? inset : 0;
         int clippedHeight = Math.min(height, Math.max(0, originTop + panel.nativeStorageTop - y));
         if (inset == 0 && clippedHeight == height) return null;
@@ -283,7 +452,8 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     public int maxScroll() {
-        return Math.max(0, (InventoryLayout.storageSlots() + columns - 1) / columns - rows);
+        return Math
+            .max(0, ((region.getOrdinarySlotCount() - InventoryLayout.HOTBAR_SLOTS) + columns - 1) / columns - rows);
     }
 
     public void scroll(int delta) {
@@ -293,14 +463,7 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     public boolean inPanel(int x, int y) {
-        if (chestLayout != null) return x >= access.dynamicinventory$left() + chestLayout.playerX
-            && x < access.dynamicinventory$left() + chestLayout.playerX + panelWidth
-            && y >= access.dynamicinventory$top() + chestLayout.playerY
-            && y < access.dynamicinventory$top() + chestLayout.playerY + panelHeight;
-        return x >= access.dynamicinventory$left()
-            && x < access.dynamicinventory$left() + access.dynamicinventory$width()
-            && y >= access.dynamicinventory$top() + headerY + panelTop
-            && y < access.dynamicinventory$top() + access.dynamicinventory$height();
+        return isPlayerSection(x, y);
     }
 
     public boolean scrollbar(int x, int y) {
@@ -328,8 +491,8 @@ public final class NativeInventoryPanel extends Gui {
                     translated[index] += chestOffsetX - headerX;
                     translated[index + 1] += chestOffsetY - headerY;
                 }
-                translated[4] = access.dynamicinventory$left() + chestLayout.descriptionX;
-                translated[5] = access.dynamicinventory$top() + chestLayout.descriptionY;
+                translated[4] = access.dynamicinventory$left() + chestLayout.descriptionX + shiftX;
+                translated[5] = access.dynamicinventory$top() + chestLayout.descriptionY + shiftY;
             }
             ((NativeUiAnchors) gui).positionHeaderOrigins(translated);
             if (attachedChest != null)
@@ -341,11 +504,10 @@ public final class NativeInventoryPanel extends Gui {
             slot.xDisplayPosition = origin[0] + (chest ? chestOffsetX : headerX);
             slot.yDisplayPosition = origin[1] + (chest ? chestOffsetY : headerY);
         }
-        for (int logical = 0; logical < InventoryLayout.mainSlots(); logical++) {
+        for (int logical = 0; logical < region.getOrdinarySlotCount(); logical++) {
             Slot slot = gui.inventorySlots.getSlot(region.id(logical));
             if (logical < 9) {
-                slot.xDisplayPosition = (chestLayout == null ? (access.dynamicinventory$width() - 162) / 2
-                    : chestLayout.playerX + (panelWidth - 162) / 2) + logical * 18;
+                slot.xDisplayPosition = playerX + (panelWidth - 162) / 2 + logical * 18;
                 slot.yDisplayPosition = headerY + panelTop + 18 + rows * 18;
             } else {
                 int cell = logical - 9;
@@ -358,12 +520,20 @@ public final class NativeInventoryPanel extends Gui {
             entry.getKey().xPosition = access.dynamicinventory$left() + headerX + entry.getValue()[0];
             entry.getKey().yPosition = access.dynamicinventory$top() + headerY + entry.getValue()[1];
         }
+        // Tabs belong to the visible frame, not the old 176px header centered inside a wider frame.
+        // Compact mode still keeps that native header frame, so retain its own anchor there.
+        boolean compactTabs = InventoryViewSettings.compactNativePanels && frameStyle == 0;
+        InventoryTabsCompatibility.positionTabs(
+            access.dynamicinventory$buttons(),
+            access.dynamicinventory$left() + (compactTabs ? headerX : 0),
+            access.dynamicinventory$top() + (compactTabs ? headerY : tabPadding));
         int tweak = 0;
         for (GuiButton button : access.dynamicinventory$buttons()) {
             if (!button.getClass()
                 .getName()
                 .equals("net.blay09.mods.craftingtweaks.client.GuiTweakButton")) continue;
-            button.xPosition = access.dynamicinventory$left() + headerX + (chestLayout == null ? -20 : 8);
+            // Anchor to the actual grid, not the old GUI edge. This also follows editor section movement.
+            button.xPosition = access.dynamicinventory$left() + gui.inventorySlots.getSlot(1).xDisplayPosition - 22;
             button.yPosition = access.dynamicinventory$top() + gui.inventorySlots.getSlot(1).yDisplayPosition
                 - 1
                 + tweak++ * 18;
@@ -384,27 +554,46 @@ public final class NativeInventoryPanel extends Gui {
         int left = access.dynamicinventory$left(), top = access.dynamicinventory$top();
         frameLeft = left;
         frameTop = top;
-        frameWidth = fullWidth;
         position();
-        boolean compact = InventoryViewSettings.compactNativePanels;
-        if (chestLayout != null) {
-            // The chest draws its own native upper border. Enclose player inventory and crafting in
-            // one lower rectangle, leaving the gap between the two panels open to the world.
-            attachedChest
-                .dynamicinventory$drawFrame(left, top + chestLayout.lowerY, fullWidth, chestLayout.lowerHeight);
-        } else if (!compact) drawMergedFrame(left, top + tabPadding, fullWidth, fullHeight - tabPadding);
+        boolean compact = InventoryViewSettings.compactNativePanels && frameStyle == 0;
         // Native textures frequently calculate their origin directly from screen dimensions.
         // Give them their original dimensions and an equivalent virtual viewport for this draw only.
         int screenWidth = gui.width, screenHeight = gui.height;
         ScaledResolution scaled = new ScaledResolution(mc, mc.displayWidth, mc.displayHeight);
         int factor = scaled.getScaleFactor();
+        // Scissor cropping also works for Tessellator/custom-drawn frames such as Avaritiaddons.
+        // The old drawTexturedModalRect hook alone could never affect those frames.
+        int inset = chestLayout == null && !compact
+            ? (frameStyle == 0 ? layout.getBackgroundInset() : Math.max(4, layout.getBackgroundInset()))
+            : 0;
+        int clipLeft = chestLayout == null && inset > 0 ? left + headerX + nativeClipLeft + inset : left;
+        int clipTop = chestLayout == null ? top + headerY + nativeClipTop + inset : top;
+        int clipRight = chestLayout == null && inset > 0 ? left + headerX + nativeClipRight - inset : left + fullWidth;
+        int clipBottom = chestLayout == null ? top + headerY + Math.max(nativeContentBottom, nativeClipBottom - inset)
+            : top + fullHeight;
+        if (chestLayout != null) {
+            int lowerTop = Math.min(chestLayout.lowerY + shiftY, playerY);
+            if (frameStyle == 0)
+                attachedChest.dynamicinventory$drawFrame(left, top + lowerTop, fullWidth, fullHeight - lowerTop);
+            else NativePanelFrame
+                .draw(left, top + lowerTop, fullWidth, fullHeight - lowerTop, frameStyle, borderWidth, null);
+        } else if (frameStyle != 0) {
+            NativePanelFrame.draw(
+                left,
+                top + tabPadding,
+                fullWidth,
+                fullHeight - tabPadding,
+                frameStyle,
+                borderWidth,
+                new int[] { clipLeft, clipTop, clipRight, clipBottom });
+        } else if (!compact) drawMergedFrame(left, top + tabPadding, fullWidth, fullHeight - tabPadding);
         GL11.glPushAttrib(GL11.GL_SCISSOR_BIT);
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
         GL11.glScissor(
-            left * factor,
-            Math.max(0, mc.displayHeight - (top + (chestLayout == null ? headerY + panelTop : fullHeight)) * factor),
-            fullWidth * factor,
-            (chestLayout == null ? headerY + panelTop : fullHeight) * factor);
+            clipLeft * factor,
+            Math.max(0, mc.displayHeight - clipBottom * factor),
+            Math.max(0, clipRight - clipLeft) * factor,
+            Math.max(0, clipBottom - clipTop) * factor);
         NativeInventoryPanel previousBackground = drawingBackground;
         try {
             access.dynamicinventory$bounds(nativeWidth, nativeHeight, left + headerX, top + headerY);
@@ -438,7 +627,7 @@ public final class NativeInventoryPanel extends Gui {
             access.dynamicinventory$buttons(),
             left,
             top,
-            (chestLayout == null ? fullWidth : chestLayout.playerX + panelWidth) - 46,
+            playerX + panelWidth - 46,
             headerY + panelTop + 2,
             true);
         if (PackCompatibility.enabled() && chestLayout != null) PackClientCompatibility.positionChestSortButtons(
@@ -447,6 +636,8 @@ public final class NativeInventoryPanel extends Gui {
             top,
             chestLayout.chestX + attachedChest.dynamicinventory$chestWidth() - 28,
             2);
+        if (PackCompatibility.enabled() && chestLayout == null && nativeSectionMoved)
+            PackClientCompatibility.positionMovedNativeSortButtons(access.dynamicinventory$buttons(), left, top);
         int panelY = top + headerY + panelTop;
         if (compact && chestLayout == null) {
             // Tall attached inventories must not expose the old player-grid texture beneath the crafting header.
@@ -485,7 +676,7 @@ public final class NativeInventoryPanel extends Gui {
         try {
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            if (!presentation.slots(playerSlots)) for (int i = 0; i < InventoryLayout.mainSlots(); i++) {
+            if (!presentation.slots(playerSlots)) for (int i = 0; i < region.getOrdinarySlotCount(); i++) {
                 Slot slot = gui.inventorySlots.getSlot(region.id(i));
                 if (slot.xDisplayPosition >= 0) drawTexturedModalRect(
                     left + slot.xDisplayPosition - 1,
@@ -500,8 +691,10 @@ public final class NativeInventoryPanel extends Gui {
         }
         if (maxScroll() > 0) {
             int x = left + gridX + columns * 18 + 2, y = panelY + 14;
-            int track = rows * 18,
-                thumb = Math.max(10, track * rows / ((InventoryLayout.storageSlots() + columns - 1) / columns));
+            int track = rows * 18, thumb = Math.max(
+                10,
+                track * rows
+                    / (((region.getOrdinarySlotCount() - InventoryLayout.HOTBAR_SLOTS) + columns - 1) / columns));
             int offset = (track - thumb) * scroll / maxScroll();
             drawRect(x, y, x + 8, y + track, InventoryGuiTheme.get().scrollTrack);
             drawRect(x + 1, y + offset, x + 7, y + offset + thumb, InventoryGuiTheme.get().scrollThumb);
@@ -512,19 +705,36 @@ public final class NativeInventoryPanel extends Gui {
         int w = access.dynamicinventory$width(), h = access.dynamicinventory$height();
         int x = access.dynamicinventory$left(), y = access.dynamicinventory$top();
         GL11.glPushMatrix();
+        NativeInventoryPanel previousForeground = drawingForeground;
         try {
+            drawingForeground = this;
             GL11.glTranslatef(headerX, headerY, 0);
             access.dynamicinventory$bounds(nativeWidth, nativeHeight, x + headerX, y + headerY);
             nativeDraw.run();
         } finally {
+            drawingForeground = previousForeground;
             access.dynamicinventory$bounds(w, h, x, y);
             GL11.glPopMatrix();
         }
         if (chestLayout != null) Minecraft.getMinecraft().fontRenderer.drawString(
             net.minecraft.client.resources.I18n.format("container.inventory"),
-            chestLayout.playerX + 8,
-            chestLayout.playerY + 4,
+            playerX + 8,
+            playerY + 4,
             InventoryGuiTheme.get().label);
+    }
+
+    /** Move only the native player-inventory caption, leaving all machine/chest text in its native section. */
+    public static int[] playerLabel(String text, int x, int y) {
+        NativeInventoryPanel panel = drawingForeground;
+        if (panel == null || panel.chestLayout != null
+            || y < panel.nativeStorageTop - 16
+            || y > panel.nativeStorageTop + 14
+            || !net.minecraft.client.resources.I18n.format("container.inventory")
+                .equals(text))
+            return null;
+        int targetX = panel.playerX + 8 - panel.headerX;
+        int targetY = panel.playerY + 4 - panel.headerY;
+        return targetX == x && targetY == y ? null : new int[] { targetX, targetY };
     }
 
     public String presentationStatus() {

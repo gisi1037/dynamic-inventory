@@ -13,6 +13,9 @@ public interface AttachedChestAccess extends NativeHeaderAccess {
 
     int dynamicinventory$chestHeight();
 
+    /** Refit the native viewport during an editor preview, preserving all container slot identities. */
+    void dynamicinventory$refreshChestLayout();
+
     boolean dynamicinventory$isChestSlot(Slot slot);
 
     void dynamicinventory$positionText(int craftingOriginX);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "purpose": "Pinned GTNH 2.9.0-RC-2 dependency artifacts for compatibility checks",
+  "purpose": "Reference inventory of installed RC-2 files; this does not enable a Gradle compatibility profile",
   "packVersion": "2.9.0-RC-2",
   "archiveSha256": "0C7DA79F4AC1982C8A7DBFDCC1F1AF6CF96AC5CB345A1C3387FB090D974B0A8D",
   "installedFiles": [
@@ -59,6 +59,14 @@
     {
       "file": "NotEnoughItems-2.8.155-GTNH.jar",
       "sha256": "2A3A2AE5A60DDD4A2A50EAD5EA6A00896440ED22D6F313E1ACA2AAF63498143D"
+    },
+    {
+      "file": "IronChest-6.1.13.jar",
+      "sha256": "EAADB2B27192D1EC086C59BDE8C216A7AABD967F7B84CA2D389B05989C096735"
+    },
+    {
+      "file": "OpenBlocks-1.12.22-GTNH.jar",
+      "sha256": "BF7DC845B023E72EA6DF24B70557CD42D6F3DF91C5BC978D2561C711C963CB52"
     },
     {
       "file": "TConstruct-1.14.118-GTNH.jar",

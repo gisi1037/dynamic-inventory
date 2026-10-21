@@ -5,7 +5,9 @@ param(
     [string] $EvidenceDirectory = 'docs/qualification/startup-capacity/integrated',
     [string] $ServerGameDirectory = '',
     [string] $ServerLaunchManifest = '',
-    [int] $StorageSlots = 72
+    [int] $StorageSlots = 72,
+    [ValidateSet('rc2-integration','daily-2026-10-19')] [string] $Profile = 'rc2-integration',
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -23,7 +25,7 @@ $verificationPath = Join-Path $evidenceFullPath 'verification.json'
 $serverManifestFullPath = ''
 if ($ServerGameDirectory) {
     if ([string]::IsNullOrWhiteSpace($ServerLaunchManifest)) {
-        $serverPeerPath = Join-Path $projectRoot '.setup/server-rc2-integration.json'
+        $serverPeerPath = Join-Path $projectRoot ".setup/server-$Profile.json"
         if (Test-Path -LiteralPath $serverPeerPath -PathType Leaf) {
             $serverPeer = Get-Content -LiteralPath $serverPeerPath -Raw | ConvertFrom-Json
             $ServerLaunchManifest = [string]$serverPeer.launchManifest
@@ -36,7 +38,7 @@ if ($ServerGameDirectory) {
         else { [IO.Path]::GetFullPath((Join-Path $projectRoot $ServerLaunchManifest)) }
 }
 $qualification = Start-QualificationEvidence -ProjectRoot $projectRoot -Port $Port `
-    -GameDirectory $GameDirectory -Profile 'rc2-integration' -EvidenceDirectory $evidenceFullPath `
+    -GameDirectory $GameDirectory -Profile $Profile -EvidenceDirectory $evidenceFullPath `
     -ServerGameDirectory $ServerGameDirectory -ServerLaunchManifest $serverManifestFullPath
 $checks = [Collections.Generic.List[string]]::new()
 function Harness {
@@ -82,7 +84,7 @@ function SaveView([string] $Name) {
     Copy-Item (Join-Path $GameDirectory "screenshots/step3-$Name.png") (Join-Path $EvidenceDirectory "$Name.png") -Force
 }
 if ($ServerGameDirectory) { Harness require-dedicated | Out-Null }
-else { Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null }
+else { Harness require-qualification $WorldName | Out-Null }
 Harness background | Out-Null
 Harness resume | Out-Null
 Harness window 1920 1080 | Out-Null
@@ -120,7 +122,7 @@ foreach ($script:family in @('mui1','mui2')) {
     Harness click $ids[0] 0 1 | Out-Null
     $stress = Server stress-check
     $client = Snapshot "$family-stress"
-    Check ((MainSignature $client) -eq (MainSignature $stress.inventory)) "$family hotbar-to-last-extra client/server contents agree"
+    Check ((MainSignature $client) -eq (MainSignature $stress.inventory)) "$family hotbar quick-move policy preserves exact client/server contents"
     $output = Server output-seed
     Harness click $output.outputId 0 1 | Out-Null
     $server = Server output-check

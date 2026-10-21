@@ -2,7 +2,10 @@ param(
     [int] $Port = 5005,
     [string] $GameDirectory = "$env:APPDATA/PrismLauncher/instances/GTNH-Dynamic-Inventory-Dev-RC2/.minecraft",
     [string] $EvidenceDirectory = 'docs/qualification/aligned-chest-default/attached-chest-layout',
-    [switch] $IncludeAlternateLayouts
+    [switch] $IncludeAlternateLayouts,
+    [string] $WorldName = 'DI-Baseline-Containers-RC2-Qualification',
+    [int] $StationX = 9,
+    [int] $StationZ = 0
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -61,19 +64,20 @@ function VisibleChest($State) {
         Group-Object x,y | Where-Object Count -eq 1 | ForEach-Object Group |
         Where-Object { $_.x -ge 0 -and $_.y -ge 0 })
 }
-function Check-StrictChestRectangle($State, [string] $Label) {
+function Check-ChestGrid($State, [string] $Label) {
     $visible = @(VisibleChest $State)
-    if ($visible.Count -ne 243) { throw "$Label must expose all 243 chest cells to check the native rectangular grid; found $($visible.Count)." }
+    if ($visible.Count -eq 0) { throw "$Label has no visible chest cells." }
     $rows = @($visible | Group-Object y | Sort-Object { [int]$_.Name })
     $columns = @($visible | Group-Object x | Sort-Object { [int]$_.Name })
-    Check ($rows.Count -gt 0 -and $rows.Count * $columns.Count -eq 243) "$Label chest cells form a strict rectangle with no partial row"
+    Check ($rows.Count -gt 0 -and $visible.Count -le $rows.Count * $columns.Count) "$Label chest cells stay within the rectangular viewport"
     $expectedX = @($columns | ForEach-Object { [int]$_.Name })
     for ($i = 1; $i -lt $expectedX.Count; $i++) {
         if ($expectedX[$i] - $expectedX[$i - 1] -ne 18) { throw "$Label chest columns are not evenly spaced by 18 pixels." }
     }
     for ($i = 0; $i -lt $rows.Count; $i++) {
         $rowSlots = @($rows[$i].Group | Sort-Object x)
-        if ($rowSlots.Count -ne $columns.Count) { throw "$Label chest row $i contains a partial row." }
+        # Native Tinkers pads unused cells in the last row. They are artwork, never extra slots.
+        if ($rowSlots.Count -ne $columns.Count -and $i -ne $rows.Count - 1) { throw "$Label chest has a partial interior row." }
         for ($column = 0; $column -lt $rowSlots.Count; $column++) {
             if ([int]$rowSlots[$column].x -ne $expectedX[$column]) { throw "$Label chest row $i does not share the same rectangular columns." }
         }
@@ -81,7 +85,7 @@ function Check-StrictChestRectangle($State, [string] $Label) {
             throw "$Label chest rows are not evenly spaced by 18 pixels."
         }
     }
-    Check $true "$Label all 243 native chest cells use complete, evenly spaced rectangular rows"
+    Check $true "$Label native chest rows stay aligned with padding confined to the final row"
 }
 function Overlap($First, $Second) {
     return $First.x -lt $Second.x + 16 -and $Second.x -lt $First.x + 16 -and
@@ -111,7 +115,7 @@ function Check-Mapping($Audit, [string] $Label) {
 }
 
 try {
-    Harness require-qualification DI-Baseline-Containers-RC2-Qualification | Out-Null
+    Harness require-qualification $WorldName | Out-Null
     Harness background | Out-Null
     Harness resume | Out-Null
     $initial = Snapshot 'initial'
@@ -119,11 +123,13 @@ try {
     $probe = @($initial.mainInventory | Where-Object { $_.inventoryIndex -lt 9 -and $_.item } | Select-Object -First 1)
     Check ($probe.Count -eq 1) 'Existing hotbar supplies a populated probe slot without giving or clearing items'
     $probeLogical = [int]$probe[0].inventoryIndex
-    Harness command "/tp $($initial.player) 9.5 4 2.5" | Out-Null
+    Harness command "/tp @p $($StationX + 0.5) 4 $($StationZ + 2.5)" | Out-Null
     # Reserved coordinates differ from the older x1/x2 fixture. Never overwrite existing blocks/data.
-    Harness command '/setblock 8 4 0 avaritiaddons:CompressedChest 0 keep' | Out-Null
-    Harness command '/setblock 9 4 0 TConstruct:CraftingStation 0 keep' | Out-Null
-    Harness block-open 9 4 0 | Out-Null
+    # An isolated location avoids a previously placed neighbouring inventory
+    # taking precedence in Tinkers' native attached-inventory discovery.
+    Harness command "/setblock $($StationX - 1) 4 $StationZ avaritiaddons:CompressedChest 0 keep" | Out-Null
+    Harness command "/setblock $StationX 4 $StationZ TConstruct:CraftingStation 0 keep" | Out-Null
+    Harness block-open $StationX 4 $StationZ | Out-Null
     $fixtureOpened = $true
     $before = Snapshot 'opened'
     Check ($before.screen -eq 'tconstruct.tools.gui.CraftingStationGui' -and
@@ -135,14 +141,16 @@ try {
     # A real chest-sort packet must act only on the chest group. Use one existing
     # hotbar stack, then put it back exactly; no fixture items are created or cleared.
     Harness window 1920 1080 | Out-Null
-    Harness layout-set 9 8 | Out-Null
+    Harness native-layout-set 9 8 | Out-Null
     Harness scale 1 | Out-Null
     $sortBefore = Snapshot 'sort-before'
     $allChest = @($sortBefore.activeContainer.slots | Where-Object slotClass -eq 'tconstruct.tools.gui.ChestSlot' | Sort-Object containerSlot)
     Check (@($allChest | Where-Object item).Count -eq 0) 'Reserved chest is empty before the reversible sort probe'
     $firstChest = $allChest[0].containerSlot
     $lastChest = $allChest[-1].containerSlot
-    Check ($allChest[-1].x -ge 0) 'Full-size sort fixture exposes its final native chest cell'
+    Harness chest-scroll bottom | Out-Null
+    $sortBottom = Snapshot 'sort-bottom'
+    Check (@(VisibleChest $sortBottom | Where-Object containerSlot -eq $allChest[-1].containerSlot).Count -eq 1) 'Native chest scrollbar exposes its final cell without widening the frame'
     $sortAudit = Audit 'sort-before'
     $sortButtonOutput = Harness button-geometry
     $sortButtonMatch = [regex]::Match($sortButtonOutput, '(?m)^buttonGeometry=(\{.+\})$')
@@ -158,11 +166,13 @@ try {
     $hotbarId = ($sortAudit.playerSlots | Where-Object ordinaryIndex -eq $probeLogical).containerSlot
     # Populate an appended player slot as a guard. An old server-side chest range
     # would pull this stack into the chest even if the client's buttons looked correct.
-    $guard = @($initial.mainInventory | Where-Object { $_.inventoryIndex -lt 9 -and $_.inventoryIndex -ne $probeLogical -and $_.item } | Select-Object -First 1)
-    Check ($guard.Count -eq 1 -and !$initial.mainInventory[81].item) 'Sort probe has a second existing hotbar stack and a vacant appended player slot'
-    $guardHotbarId = ($sortAudit.playerSlots | Where-Object ordinaryIndex -eq $guard[0].inventoryIndex).containerSlot
+    $guard = @($initial.mainInventory | Where-Object { $_.inventoryIndex -ne 36 -and $_.inventoryIndex -ne 81 -and $_.inventoryIndex -ne $probeLogical -and $_.item } | Select-Object -First 1)
+    Check ($guard.Count -eq 1 -and !$initial.mainInventory[81].item) 'Sort probe has a second existing ordinary stack and a vacant appended player slot'
+    $guardLogical = [int]$guard[0].inventoryIndex
+    if ($guardLogical -gt 36) { $guardLogical-- } # Backhand keeps raw index 36 for its offhand.
+    $guardSourceId = ($sortAudit.playerSlots | Where-Object ordinaryIndex -eq $guardLogical).containerSlot
     $guardStorageId = ($sortAudit.playerSlots | Where-Object ordinaryIndex -eq 80).containerSlot
-    Harness input-click $guardHotbarId | Out-Null
+    Harness input-click $guardSourceId | Out-Null
     Harness input-click $guardStorageId | Out-Null
     $guardPlaced = Snapshot 'sort-guard-placed'
     Check (!$guardPlaced.cursorOccupied -and $guardPlaced.mainInventory[81].item -eq $guard[0].item -and
@@ -182,10 +192,11 @@ try {
     } while ([datetime]::UtcNow -lt $sortDeadline)
     Check (!$sorted.cursorOccupied -and $sorted.activeContainer.slots[$firstChest].item -eq $probe[0].item -and
         !$sorted.activeContainer.slots[$lastChest].item -and (MainSignature $sorted) -eq (MainSignature $sortPlaced)) 'Actual chest sort moves the probe inside the chest and preserves every player slot'
+    Harness chest-scroll top | Out-Null
     Harness input-click $firstChest | Out-Null
     Harness input-click $hotbarId | Out-Null
     Harness input-click $guardStorageId | Out-Null
-    Harness input-click $guardHotbarId | Out-Null
+    Harness input-click $guardSourceId | Out-Null
     $sortReturned = Snapshot 'sort-returned'
     Check (!$sortReturned.cursorOccupied -and (ContainerSignature $sortReturned) -eq $contents -and
         (MainSignature $sortReturned) -eq (MainSignature $initial)) 'Chest sort round trip restores exact player, crafting and chest contents'
@@ -207,7 +218,7 @@ try {
     foreach ($window in @(@(1920,1080), @(854,480))) {
         Harness window $window[0] $window[1] | Out-Null
         foreach ($preset in $presets) {
-            Harness layout-set $preset.columns $preset.rows | Out-Null
+            Harness native-layout-set $preset.columns $preset.rows | Out-Null
             foreach ($scale in @(1,2,3,0)) {
                 $label = "$($window[0])x$($window[1])-$($preset.name)-scale-$scale"
                 # A maximized window or a manual resize can override DisplayMode.
@@ -220,7 +231,7 @@ try {
                 $state = Snapshot $label
                 Check (!$state.cursorOccupied -and (ContainerSignature $state) -eq $contents) "$label resizing preserves all player, crafting and chest contents"
                 if ($window[0] -eq 1920 -and $window[1] -eq 1080 -and $scale -eq 1) {
-                    Check-StrictChestRectangle $state $label
+                    Check-ChestGrid $state $label
                 }
                 $players = @(PlayerSlots $state | Where-Object { $_.x -ge 0 -and $_.y -ge 0 })
                 $chest = @(VisibleChest $state)
@@ -239,6 +250,8 @@ try {
                 if (!$buttonMatch.Success) { throw 'No live button geometry returned' }
                 $buttonGeometry = $buttonMatch.Groups[1].Value | ConvertFrom-Json
                 $layout = $buttonGeometry.attachedLayout
+                Check ($layout.width -le 372) "$label chest capacity does not widen the standard external layout"
+                Check ($layout.chestColumns -eq [math]::Max(5, [math]::Floor(($layout.width - 26) / 18))) "$label chest grid uses the available panel width instead of a capacity divisor"
                 Check ($null -ne $layout -and $layout.playerY -eq $layout.lowerY -and $layout.sideBySide) "$label default player inventory starts at the separate lower panel"
                 Check ($layout.craftingY -eq $layout.lowerY + [math]::Floor(($layout.lowerHeight-80)/2)) "$label crafting section is vertically centered in the lower panel"
                 $tweaks = @($buttonGeometry.buttons | Where-Object {
@@ -290,7 +303,9 @@ try {
                 Check $true "$label BogoSorter buttons stay separate in their own headers and clear of live slots"
                 $buttonGeometry | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $EvidenceDirectory "$label-buttons.json")
                 $sideBySide = ($craft | Measure-Object x -Minimum).Minimum -ge ($players | Measure-Object x -Maximum).Maximum + 16
-                if ($window[0] -eq 1920 -and ($preset.name -eq 'compact' -or $scale -ne 0)) {
+                # Auto can select a 270-pixel logical height. With NEI margins reserved, even
+                # Compact correctly scrolls there. The reachability checks below cover that fallback.
+                if ($window[0] -eq 1920 -and $scale -ne 0) {
                     Check ($players.Count -eq 81 -and $sideBySide) "$label full expanded inventory fits left of crafting"
                 }
                 $view = @{label=$label; requestedWindowWidth=$window[0]; requestedWindowHeight=$window[1];
@@ -314,14 +329,19 @@ try {
                 $lastId = ($audit.playerSlots | Where-Object ordinaryIndex -eq 80).containerSlot
                 $bottom = $state
                 for ($wheel = 0; $wheel -lt 72 -and $bottom.activeContainer.slots[$lastId].x -lt 0; $wheel++) {
-                    $target = PlayerSlots $bottom | Where-Object { $_.role -ne 'hotbar' -and $_.x -ge 0 } | Select-Object -First 1
+                    # Occupied slots intentionally let NEI move items. Probe an empty cell when testing viewport scroll.
+                    $target = PlayerSlots $bottom | Where-Object { $_.role -ne 'hotbar' -and $_.x -ge 0 -and !$_.item } | Select-Object -First 1
+                    if ($null -eq $target) { throw "$label has no empty visible cell for the viewport-wheel probe" }
                     Harness input-wheel $target.containerSlot -1 | Out-Null
                     $bottom = Snapshot "$label-wheel-$wheel"
                 }
                 Check ($bottom.activeContainer.slots[$lastId].x -ge 0) "$label wheel reaches the final expanded player slot"
                 Check (!$bottom.cursorOccupied -and (ContainerSignature $bottom) -eq $contents) "$label scrolling preserves every stack and empty cursor"
                 # Reinitialization resets only the viewport before an exact packet-backed item round trip.
-                Harness layout-set $preset.columns $preset.rows | Out-Null
+                Harness native-layout-set $preset.columns $preset.rows | Out-Null
+                # Tinkers preserves its independent chest slider across reinitialization.
+                # Reset it too before comparing the complete container with the top-row reference.
+                Harness chest-scroll top | Out-Null
                 $reset = Snapshot "$label-reset"
                 Check ((GeometrySignature $reset) -eq (GeometrySignature $state)) "$label reset retains the adapted geometry through Forge initialization"
                 $empty = VisibleChest $reset | Where-Object { !$_.item } | Sort-Object containerSlot | Select-Object -First 1
@@ -341,6 +361,16 @@ try {
             }
         }
     }
+    # Exercise the production editor too: this control used to be disabled for split stations.
+    Harness editor-open | Out-Null
+    Harness editor-control 113 | Out-Null # Advanced page.
+    Harness editor-control 13 | Out-Null # Texture crop + 1.
+    $crop = Harness editor-crop-check
+    Check ($crop -match 'PASS live native crop inset=[1-8]') 'Split-station Texture crop is enabled and changes the actual crop rectangle'
+    Harness editor-control 101 | Out-Null # Cancel: no user layout file is saved.
+    $afterEditor = Snapshot 'crop-editor-cancel'
+    Check (!$afterEditor.cursorOccupied -and (ContainerSignature $afterEditor) -eq $contents -and
+        (MainSignature $afterEditor) -eq (MainSignature $initial)) 'Crop preview/cancel preserves every stack and the empty cursor'
     $report.success = $true
     $report.status = 'passed'
 } catch {
@@ -349,7 +379,7 @@ try {
     throw
 } finally {
     if ($fixtureOpened) {
-        try { Harness layout-set 9 8 | Out-Null; $report.restoredLayout = 'Compact 9x8' }
+        try { Harness native-layout-clear | Out-Null; $report.restoredLayout = 'Saved family layout restored; no layout file changed' }
         catch { $report.success = $false; $report.status = 'failed'; $report.restoreError = $_.Exception.Message }
     }
     $report.checks = $checks.ToArray()

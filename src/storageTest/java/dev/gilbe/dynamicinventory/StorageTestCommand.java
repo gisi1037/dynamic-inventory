@@ -537,7 +537,7 @@ public final class StorageTestCommand extends CommandBase {
             "a conflicting inline player schema is retained in quarantine while the player root wins");
     }
 
-    static EntityPlayer detachedPlayer(EntityPlayer owner) {
+    public static EntityPlayer detachedPlayer(EntityPlayer owner) {
         return new EntityPlayer(owner.worldObj, new GameProfile(UUID.randomUUID(), "DIStorageTest")) {
 
             @Override

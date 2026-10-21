@@ -22,6 +22,11 @@ public interface PlayerInventoryBinding {
     /** Total logical ordinary slots, including the hotbar; excludes armor and optional equipment. */
     int getOrdinarySlotCount();
 
+    /** Revision captured when this binding was built. Legacy custom bindings describe revision zero only. */
+    default long getCapacityRevision() {
+        return 0;
+    }
+
     /** Maps a logical ordinary index to an absolute container slot ID, never to a raw inventory index. */
     int getContainerSlotId(int logicalIndex);
 
