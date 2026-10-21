@@ -1,9 +1,20 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
 $validator = Join-Path $projectRoot 'scripts/validate-qualification.ps1'
-$currentManifest = Join-Path $projectRoot 'docs/qualification/ui-api/build-verification.json'
-$currentRoot = Split-Path -Parent $currentManifest
-$manifestSeed = Get-Content -LiteralPath $currentManifest -Raw | ConvertFrom-Json
+# Validator tests must work in a clean public checkout without private runtime captures.
+# Keep this expected schema independent of the validator so an accidentally omitted
+# required report still fails the regression tests. These are not qualification evidence.
+$manifestSeed = @{ requiredReports = @(
+    'artifact-verification.json', 'examples-verification.json',
+    'integrated/verification.json', 'mui2-integrated/verification.json',
+    'dedicated/verification.json', 'mui2-dedicated/verification.json',
+    'isolated/verification.json', 'capacity-matrix/verification.json',
+    'container-regression/verification.json', 'machine-modes/verification.json',
+    'native-presentation/verification.json', 'full-pack-containers/verification.json',
+    'full-pack-frames/verification.json', 'gt-mui2/verification.json',
+    'full-pack-modes/verification.json', 'full-pack-presentation/verification.json',
+    'full-pack-preservation.json'
+) }
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dynamicinventory-qualification-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 
@@ -19,40 +30,29 @@ function Assert-ValidationFails([string] $manifestPath, [string] $case, [string]
 
 function New-DailyFixture([string] $name, [string] $stage = 'full-pack') {
     # Synthetic schema fixtures only. These are never real pack qualification evidence.
-    $root = Join-Path $testRoot $name
-    New-Item -ItemType Directory -Path $root | Out-Null
     $reportSet = @($manifestSeed.requiredReports)
     if ($stage -eq 'preflight') { $reportSet = @($reportSet | Select-Object -First 11) }
-    foreach ($relative in $reportSet) {
-        $destination = Join-Path $root $relative
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
-        @{success=$true; artifactSha256=('a' * 64); jarSha256=('a' * 64);
-            profile='daily-2026-10-19'; packTarget='2.9.0-nightly-2026-10-19';
-            scope='Synthetic validator regression fixture only'} |
-            ConvertTo-Json | Set-Content -LiteralPath $destination -Encoding UTF8
-    }
-    $manifestPath = Join-Path $root 'build-verification.json'
-    @{success=$true; fullPackSmokeTestAllowed=$true; prototype='0.8.0-dev';
-        profile='daily-2026-10-19'; packTarget='2.9.0-nightly-2026-10-19'; jarSha256=('a' * 64);
-        qualificationStage=$stage; requiredReports=$reportSet;
-        scope='Synthetic validator regression fixture only'} |
-        ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
-    return $manifestPath
+    return New-Fixture $name $reportSet $stage 'daily-2026-10-19'
 }
 
-function New-Fixture([string] $name, [string[]] $reportSet, [string] $stage) {
+function New-Fixture([string] $name, [string[]] $reportSet, [string] $stage,
+    [string] $profile = 'rc2-integration') {
     if ($null -eq $reportSet) { $reportSet = @($manifestSeed.requiredReports) }
+    $target = if ($profile -eq 'rc2-integration') { '2.9.0-RC-2' } else { '2.9.0-nightly-2026-10-19' }
     $root = Join-Path $testRoot $name
     New-Item -ItemType Directory -Path $root | Out-Null
     foreach ($relative in $reportSet) {
         $destination = Join-Path $root ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
         $parent = Split-Path -Parent $destination
         if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        Copy-Item -LiteralPath (Join-Path $currentRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))) -Destination $destination
+        @{success=$true; artifactSha256=('a' * 64); jarSha256=('a' * 64);
+            profile=$profile; packTarget=$target; scope='Synthetic validator regression fixture only'} |
+            ConvertTo-Json | Set-Content -LiteralPath $destination -Encoding UTF8
     }
     $manifestPath = Join-Path $root 'build-verification.json'
-    $manifest = Get-Content -LiteralPath $currentManifest -Raw | ConvertFrom-Json
-    $manifest.requiredReports = @($reportSet)
+    $manifest = [pscustomobject]@{success=$true; fullPackSmokeTestAllowed=$true; prototype='0.8.0-dev';
+        profile=$profile; packTarget=$target; jarSha256=('a' * 64); requiredReports=@($reportSet);
+        scope='Synthetic validator regression fixture only'}
     if ($stage) {
         $manifest | Add-Member -NotePropertyName qualificationStage -NotePropertyValue $stage -Force
     } elseif ($manifest.PSObject.Properties['qualificationStage']) {
@@ -63,8 +63,9 @@ function New-Fixture([string] $name, [string[]] $reportSet, [string] $stage) {
 }
 
 try {
+    $currentManifest = New-Fixture 'valid-current' $null $null
     & $validator -ManifestPath $currentManifest | Out-Null
-    Write-Host 'PASS valid current qualification manifest'
+    Write-Host 'PASS valid synthetic RC-2 qualification manifest (no local captures required)'
 
     $preflightReports = @($manifestSeed.requiredReports | Select-Object -First 11)
     $manifestPath = New-Fixture 'valid-preflight' $preflightReports 'preflight'
@@ -131,11 +132,11 @@ try {
 
     $manifestPath = New-Fixture 'identity-mismatch' $null $null
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $manifest | Add-Member -NotePropertyName profile -NotePropertyValue 'rc2-integration'
+    $manifest | Add-Member -NotePropertyName profile -NotePropertyValue 'rc2-integration' -Force
     $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     $reportPath = Join-Path (Split-Path -Parent $manifestPath) 'artifact-verification.json'
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-    $report | Add-Member -NotePropertyName profile -NotePropertyValue 'wrong-profile'
+    $report | Add-Member -NotePropertyName profile -NotePropertyValue 'wrong-profile' -Force
     $report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $reportPath -Encoding UTF8
     Assert-ValidationFails $manifestPath 'profile mismatch'
     Write-Host 'PASS profile mismatch rejected'
