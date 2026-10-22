@@ -95,7 +95,13 @@ public class StorageHarness {
         }
         switch (args[0]) {
             case "seed-large-grave": {
-                act(new String[]{"require-qualification", "DI-Baseline-Large-Grave-Smoke-2-Qualification"});
+                act(new String[]{"require-qualification"});
+                ObjectReference fixtureServer = (ObjectReference) call(client, "getIntegratedServer", "()Lnet/minecraft/server/integrated/IntegratedServer;");
+                String fixtureWorld = ((StringReference) call(fixtureServer, "getFolderName", "()Ljava/lang/String;")).value();
+                if (!fixtureWorld.equals("DI-Baseline-Large-Grave-Smoke-2-Qualification") &&
+                    !fixtureWorld.startsWith("DI-Baseline-Upgrades-Graves-"))
+                    throw new IllegalStateException("Disposable grave qualification world required");
+                int probes = args.length > 1 ? Integer.parseInt(args[1]) : 130;
                 if (!thread.name().equals("Server thread")) {
                     // Arm a normal server packet handler before queuing a harmless command.
                     // Fixture writes must happen on the authoritative server thread, never the render thread.
@@ -110,8 +116,9 @@ public class StorageHarness {
                 }
                 awaitingGraveSeed = false;
                 ObjectReference serverPlayer = field(thread.frame(0).thisObject(), "playerEntity");
-                if (layoutInt("storageSlots") != 216) throw new IllegalStateException("Requires cold-start capacity216");
                 ObjectReference inventory = field(serverPlayer, "inventory");
+                int ordinary = ownedLayoutInt(inventory, "mainSlots");
+                if (probes < 1 || probes > ordinary) throw new IllegalArgumentException("Probe count exceeds owned capacity");
                 for (String array : List.of("mainInventory", "armorInventory"))
                     for (Value stack : ((ArrayReference) inventory.getValue(fieldInfo(inventory.referenceType(), array))).getValues())
                         if (stack != null) throw new IllegalStateException("Seed requires empty inventory and armor");
@@ -119,7 +126,7 @@ public class StorageHarness {
                     throw new IllegalStateException("Seed requires empty cursor");
                 ArrayReference main = (ArrayReference) inventory.getValue(fieldInfo(inventory.referenceType(), "mainInventory"));
                 ClassType items = type("net.minecraft.init.Items"), json = type("net.minecraft.nbt.JsonToNBT");
-                for (int i = 0; i < 130; i++) {
+                for (int i = 0; i < probes; i++) {
                     ObjectReference stack = make("net.minecraft.item.ItemStack", "(Lnet/minecraft/item/Item;I)V",
                         items.getValue(fieldInfo(items, "diamond")), vm.mirrorOf(1));
                     ObjectReference nbt = (ObjectReference) json.invokeMethod(thread,
@@ -131,7 +138,7 @@ public class StorageHarness {
                 }
                 call(inventory, "markDirty", "()V");
                 call(field(serverPlayer, "inventoryContainer"), "detectAndSendChanges", "()V");
-                System.out.println("Seeded130 unique fixture stacks on the server thread; normal death/reclaim remain native");
+                System.out.println("Seeded " + probes + " unique fixture stacks on the server thread; normal death/reclaim remain native");
                 break;
             }
             case "sneak": {

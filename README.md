@@ -23,6 +23,28 @@ reviewed vanilla storage hosts; unknown container handling still requires review
 Custom synchronization, equipment, crafting results and transfer rules remain native.
 The in-game editor adjusts presentation, not item ownership or compatibility rules.
 
+## Download and install
+
+The first testing release is [0.8.0-alpha.1](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.1).
+Install **`dynamicinventory-0.8.0-alpha.1.jar`** in the `mods` folder on both client
+and server, replacing any older Dynamic Inventory JAR. The `-dev` and `-sources`
+JARs are developer downloads; do not install those in Minecraft. Back up your save
+and try this experimental release in a disposable world first.
+
+Select the matching pack profile in the launcher's **Java/JVM arguments** on both
+sides, before starting Minecraft:
+
+| Pack | Required JVM argument |
+| --- | --- |
+| GTNH 2.9.0-RC-2 | `-Ddynamicinventory.profile=rc2-integration` |
+| daily-2026-10-19 build 795 | `-Ddynamicinventory.profile=daily-2026-10-19` |
+
+Use the pack's supported Java runtime. Other pack builds require requalification;
+version guards deliberately reject mismatched integration dependencies. The
+starting capacity is configured in `config/dynamicinventory.cfg`; module and belt
+rules are in `config/dynamicinventory-upgrades.cfg`. See [configuration](docs/startup-capacity.md)
+and [inventory upgrades](docs/inventory-upgrades.md).
+
 ## Build
 
 Install JDK 25 and use the Gradle wrapper. The build produces Java 8-compatible
@@ -109,13 +131,16 @@ unknown GUI automatically.
 
 ## Current limits
 
-Capacity is 27–216 storage slots, chosen at startup. The hotbar remains nine slots.
-Live/per-player capacity changes and the creative item catalog are not implemented.
+Capacity is 27–216 storage slots. Startup defaults, live operator commands, permanent
+modules and an optional Baubles belt are supported. The hotbar remains nine slots.
+The creative item catalog has not been migrated.
 Coverage of standard framework builders does not imply that all custom machine
 screens work. The native opening agreement covers registered native windows and
 standard packets; arbitrary custom actions and synchronization need integration.
-Non-GUI inventory consumers, graves, backups, and nightly builds need their own
-compatibility checks. Performance has not been benchmarked against an unmodified pack.
+Non-GUI inventory consumers and other nightly builds need their own compatibility
+checks. Selected grave lifecycle cases passed on the pinned daily; other equipment
+mods and large backup restores remain separate work. Performance has not been
+benchmarked against an unmodified pack.
 
 ## License
 

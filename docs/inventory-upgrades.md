@@ -12,6 +12,10 @@ Both sides must install the matching build. The nine hotbar slots never change.
   This item is registered only when Baubles is installed. Permanent modules work
   without Baubles.
 
+Baubles equipment in the expanded player screen is placed and removed manually.
+Shift-click moves a belt between ordinary inventory regions; it never equips or
+unequips Baubles. Normal armor shift-click remains available.
+
 No recipes are registered. Pack developers can supply progression-appropriate
 recipes through their normal recipe tools. Items are available in Miscellaneous
 creative inventory, NEI and `/give`. Their original 16×16 placeholder textures use

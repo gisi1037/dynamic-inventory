@@ -30,6 +30,9 @@ public final class PlayerInventoryTransfers {
                 .mainSlots(),
             true);
         if (id < 0 || id >= container.inventorySlots.size()) return null;
+        // Appended Baubles equipment is manual-only in our player screen, in both
+        // directions. Shift-click moves ordinary storage/hotbar items or equips armor.
+        if (id >= PlayerContainerLayout.slotCount(inventory)) return null;
         Slot slot = container.getSlot(id);
         if (!slot.getHasStack() || !slot.canTakeStack(player)) return null;
         ItemStack source = slot.getStack();
@@ -39,11 +42,10 @@ public final class PlayerInventoryTransfers {
             moved = merge(container, source, reversed(allMain));
             if (moved) slot.onSlotChange(source, original);
         } else if (id < PlayerContainerLayout.LEGACY_STORAGE_START
-            || (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND)
-            || id >= PlayerContainerLayout.slotCount(inventory)) {
+            || (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND)) {
                 moved = merge(container, source, allMain);
             } else {
-                moved = equip(container, source, inventory);
+                moved = equipArmor(container, source);
                 if (!moved) {
                     int mainIndex = PlayerContainerLayout.mainIndex(inventory, id);
                     moved = merge(container, source, mainIndex < InventoryLayout.HOTBAR_SLOTS ? storage : hotbar);
@@ -56,14 +58,10 @@ public final class PlayerInventoryTransfers {
         return original;
     }
 
-    private static boolean equip(Container container, ItemStack source, InventoryPlayer inventory) {
+    private static boolean equipArmor(Container container, ItemStack source) {
         for (int id = PlayerContainerLayout.ARMOR_START; id < PlayerContainerLayout.LEGACY_STORAGE_START; id++) {
             Slot slot = container.getSlot(id);
             if (!slot.getHasStack() && slot.isItemValid(source)) return merge(container, source, new int[] { id });
-        }
-        for (int id = PlayerContainerLayout.slotCount(inventory); id < container.inventorySlots.size(); id++) {
-            Slot slot = container.getSlot(id);
-            if (slot.isItemValid(source) && merge(container, source, new int[] { id })) return true;
         }
         return false;
     }
