@@ -15,6 +15,9 @@ public final class BuiltinInventoryUiAdapters {
         if (Loader.isModLoaded("TConstruct")) TinkersConstructCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("GalacticraftCore")) GalacticraftCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("IronChest")) IronChestCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("Forestry")) ForestryCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial"))
+            AppliedEnergisticsCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("etfuturum")) EtFuturumCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("avaritiaddons")) AvaritiaddonsCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("dreamcraft")) DreamcraftCompatibility.registerInventoryAdapters();

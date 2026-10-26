@@ -117,7 +117,7 @@ From the repository root, run the generator with a saved audit JSON:
 
 The tool validates schema version 1, counts, slot indices, and class names, then writes an audit summary and manual-review notes. Native audits produce a fully commented Java registration example; MUI2 audits produce a player-section template, and MUI1 reports get framework-specific notes. Standalone bundles stay outside `src`; pass `-InsertIntoSource` to also insert native comments directly. No generated registration is activated by the exporter. Java files use UTF-8 without a byte-order mark on both Windows PowerShell 5.1 and PowerShell 7.
 
-Run `scripts/testing/test-ui-template-tools.ps1` to exercise the developer workflow, partial-file recovery, repeated-export preservation, source-output guard, and generated Java compilation. These tooling checks are separate from production GUI qualification.
+Run `scripts/testing/test-ui-template-tools.ps1` to exercise the developer workflow, partial-file recovery, repeated-export preservation, source-output guard, and generated Java compilation. Its [tooling report](qualification/ui-api/template-tooling.json) is separate from the production GUI qualification reports because these scripts do not change the game artifact.
 
 ## Generated scaffold and manual review
 
@@ -150,8 +150,9 @@ Use `NativeUiLayout.builder().presentationRevision(1)` (the default) for saved
 geometry compatibility. Bump it only when that GUI's saved geometry becomes
 incompatible. The adapter's `compatibilityRevision` still tracks binding and
 transfer changes on both peers; transfer-only fixes no longer invalidate editor
-layouts. Schema-5 layout files retain strict GUI/capacity matching and can import
-compatible schema-1/2/3/4 geometry without deleting the originals.
+layouts. Schema-8 layout files retain strict GUI/capacity matching and can import
+compatible schema-1/2/3/4/5/6/7 geometry. Older layouts default the independent player
+background crop to zero.
 
 ```java
 InventoryUi.register(
@@ -251,14 +252,55 @@ For GUIs that share an already registered container but need different layout ge
 4. Add targeted fixture coverage for slot maps, pickup/place, shift-click in both directions, final/offscreen slots, cursor conservation, recipe/equipment restrictions, and resizing/scrolling.
 5. Add an exact-version/profile activation gate and qualify the adapter in the intended pinned runtime. Record the tested artifact checksum and screenshots/reports before considering default activation.
 
-## Coverage boundary
+## Current coverage boundary
 
-A successful build is not a claim of support for every interface. Qualify the exact
-artifact, pinned dependency profile and host behavior; keep raw reports local.
-See [testing](testing.md) for the integrated, dedicated and pack test workflow.
-Standard MUI2 player-binding paths share integration, while custom widget creation,
-container overrides, transfer rules and synchronization require separate review.
-Class-scanner candidates and generated scaffolds do not establish compatibility.
+The current qualification set is tied to production artifact SHA-256
+`B23866A8031E7C9298BE1189A3183642647109989A6C2520D28635F661A83323`.
+The [build manifest](qualification/rc2-opening-gate-qualified/build-verification.json)
+lists the required reports; each report records its own exact profile and artifact identity.
+Earlier qualification directories retain their original hashes and results.
+
+| Boundary | Evidence |
+| --- | --- |
+| Registered-native opening agreement | [Integrated](qualification/rc2-opening-gate-qualified/opening-integrated/verification.json), [dedicated](qualification/rc2-opening-gate-qualified/opening-dedicated/verification.json) |
+| Actual Bogo/CraftingTweaks actions and Tinkers oversized synchronization | [Optional integrated runtime](qualification/rc2-opening-gate-qualified/opening-optional-integrated/verification.json), [optional dedicated runtime](qualification/rc2-opening-gate-qualified/opening-optional-dedicated/verification.json) |
+| Public native API | [Integrated](qualification/rc2-opening-gate-qualified/integrated/verification.json), [dedicated](qualification/rc2-opening-gate-qualified/dedicated/verification.json) |
+| Shared MUI2 live binding/factory | [Integrated](qualification/rc2-opening-gate-qualified/mui2-integrated/verification.json), [dedicated](qualification/rc2-opening-gate-qualified/mui2-dedicated/verification.json) |
+| Vanilla/common containers | [Regression report](qualification/rc2-opening-gate-qualified/container-regression/verification.json) |
+| Machine viewports and native MUI2 presentation | [Machine modes](qualification/rc2-opening-gate-qualified/machine-modes/verification.json), [presentation](qualification/rc2-opening-gate-qualified/native-presentation/verification.json) |
+| Startup capacity and isolated operation | [Five cold boots](qualification/rc2-opening-gate-qualified/capacity-matrix/verification.json), [without MUI](qualification/rc2-opening-gate-qualified/isolated/verification.json) |
+| Public Java 8 examples and production artifact | [Examples](qualification/rc2-opening-gate-qualified/examples-verification.json), [artifact scan](qualification/rc2-opening-gate-qualified/artifact-verification.json) |
+| Actual RC-2 native containers and frames | [Containers](qualification/rc2-opening-gate-qualified/full-pack-containers/verification.json), [frames](qualification/rc2-opening-gate-qualified/full-pack-frames/verification.json) |
+| Actual RC-2 compressed chest | [Compact/Wide layouts, two window sizes, four GUI scales, real transfers](qualification/rc2-opening-gate-qualified/attached-chest-layout/verification.json) |
+| Actual RC-2 GT MUI2 buffer | [Binding/input/scrolling](qualification/rc2-opening-gate-qualified/gt-mui2/verification.json), [Scroll/Vertical modes](qualification/rc2-opening-gate-qualified/full-pack-modes/verification.json) |
+| Actual RC-2 optional MUI2 presentation | [Presentation report](qualification/rc2-opening-gate-qualified/full-pack-presentation/verification.json) |
+| Full-run inventory and settings conservation | [Preservation report](qualification/rc2-opening-gate-qualified/full-pack-preservation.json), [batch runner](qualification/rc2-opening-gate-qualified/full-pack-runner.json) |
+
+The opening tests cover refusal, runtime-map mismatch, replayed replies with reused
+window IDs, pre-accept commits/clicks, timeout, populated initial synchronization,
+and bounded pending updates. The timeout fixture advances the pending deadline;
+it does not wait five wall-clock seconds. Optional source-runtime tests load the
+pinned Tinkers/Mantle and CraftingTweaks versions using `-PinventoryTinkersTests`
+and `-PinventoryActionTests` alongside `-PinventoryProfile=rc2-integration`.
+For CraftingTweaks, also supply `-PinventoryCraftingTweaksJar=<absolute path>` to
+the installed RC-2 `craftingtweaks-1.0.3.jar`. Its checksum must match
+`pack-compatibility-rc2.json`; Gradle remaps that local file for the test runtime
+because this release has no published development artifact. No dependency is published.
+They exercise real custom actions with pending negative controls and identical
+ready positive controls, and a real Tinkers 300-item custom snapshot. They are
+source-runtime evidence, distinct from installed full-pack tests.
+
+This does not mean every existing MUI2 inventory is supported. The standard
+`sync.bindPlayerInventory(player)` binding and `SlotGroupWidget.playerInventory`
+builder path have source-fixture coverage; actual full-pack MUI2 evidence covers
+one GT buffer and the named presentation screens. Custom binding/widget
+construction, container overrides, other machine families, custom synchronization,
+and custom quick-move/transfer dispatch need separate review and qualification.
+Class-scanner candidate totals are not GUI counts or compatibility claims.
+
+The [structural discovery summary](qualification/ui-api/discovery-summary.json) and
+[generator validation](qualification/ui-api/tooling.json) remain separate tooling
+evidence; they do not qualify production GUI behavior.
 
 ## MUI2 migration direction
 

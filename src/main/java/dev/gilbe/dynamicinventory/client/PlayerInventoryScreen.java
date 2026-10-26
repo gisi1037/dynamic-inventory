@@ -23,6 +23,12 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     private InventoryViewLayout view;
+    private DetachedChestPanel floating;
+
+    public DetachedChestPanel floating() {
+        return settingsOpen ? null : floating;
+    }
+
     private final net.minecraft.entity.player.InventoryPlayer ownerInventory;
     private PlayerHeaderLayout header;
     private BaublesPanelLayout baublesPanel;
@@ -31,6 +37,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     private int baublesScrollRow;
     private int scrollRow;
     private boolean settingsOpen;
+    private boolean terminalSettings;
     private boolean scrolling;
     private boolean controlClick;
     private final InventoryPresentation presentation = new InventoryPresentation(this);
@@ -64,6 +71,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     public void initGui() {
+        if (floating != null) floating.cancel();
+        floating = null;
         // Layout changes call initGui directly, without Forge's outer Post event.
         // Keep buttons installed by other mods so their input/render hooks survive relayout.
         for (Object entry : buttonList) {
@@ -114,9 +123,41 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             }
             buttonList.addAll(integrationButtons);
             InventoryTabsCompatibility.addTabs(buttonList, guiLeft, guiTop + tabSpace);
+            floating = new DetachedChestPanel(
+                this,
+                new InventoryPanelLayout.Rect(guiLeft, guiTop + tabSpace, view.width, 82),
+                new InventoryPanelLayout.Rect(guiLeft, guiTop + tabSpace + 64, view.width, view.height - 64),
+                2,
+                2,
+                0,
+                2,
+                baublesPanel == null ? java.util.Collections.emptyList()
+                    : java.util.Collections.singletonList(
+                        new InventoryPanelLayout.Rect(
+                            guiLeft + view.width + 4,
+                            guiTop + tabSpace,
+                            baublesPanel.width,
+                            baublesPanel.height)));
+            if (floating != null) floating.position();
         } else {
+            floating = null;
             int x = (width - 172) / 2;
             int y = (height - 226) / 2;
+            if (terminalSettings) {
+                for (int setting = 0; setting < 2; setting++) {
+                    int value = setting == 0 ? InventoryViewSettings.terminalSmallRows
+                        : InventoryViewSettings.terminalTallMinimumRows;
+                    GuiButton minus = new GuiButton(120 + setting * 2, x + 6, y + 57 + setting * 28, 24, 20, "-");
+                    GuiButton plus = new GuiButton(121 + setting * 2, x + 142, y + 57 + setting * 28, 24, 20, "+");
+                    minus.enabled = value > 3;
+                    plus.enabled = value < 24;
+                    addOwnedButton(minus);
+                    addOwnedButton(plus);
+                }
+                addOwnedButton(new GuiButton(114, x + 6, y + 200, 76, 20, "Back"));
+                addOwnedButton(new GuiButton(108, x + 90, y + 200, 76, 20, "Done"));
+                return;
+            }
             addOwnedButton(new GuiButton(101, x + 6, y + 25, 50, 20, "Wide"));
             addOwnedButton(new GuiButton(102, x + 61, y + 25, 50, 20, "Compact"));
             addOwnedButton(new GuiButton(103, x + 116, y + 25, 50, 20, "Tall"));
@@ -144,12 +185,17 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 112,
                 x + 6,
                 y + 173,
-                160,
+                77,
                 20,
                 InventoryViewSettings.mui2Presentation ? "Presentation: MUI2 (test)" : "Presentation: Native");
             renderer.enabled = InventoryPresentation.available();
             addOwnedButton(renderer);
-            addOwnedButton(new GuiButton(108, x + 36, y + 200, 100, 20, "Done"));
+            renderer.displayString = InventoryViewSettings.mui2Presentation ? "MUI2 (test)" : "Native";
+            addOwnedButton(new GuiButton(115, x + 87, y + 173, 79, 20, "Panel layouts"));
+            GuiButton terminals = new GuiButton(113, x + 6, y + 200, 94, 20, "AE2 terminals");
+            terminals.enabled = cpw.mods.fml.common.Loader.isModLoaded("appliedenergistics2");
+            addOwnedButton(terminals);
+            addOwnedButton(new GuiButton(108, x + 104, y + 200, 62, 20, "Done"));
         }
     }
 
@@ -188,6 +234,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 slot.yDisplayPosition = row >= 0 && row < view.visibleRows ? 84 + row * 18 : -10000;
             }
         }
+        if (floating != null) floating.position();
         int cell = 0;
         for (int id = PlayerContainerLayout.slotCount(ownerInventory); id
             < inventorySlots.inventorySlots.size(); id++) {
@@ -198,8 +245,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             if (baublesPanel != null) visible &= row >= 0 && row < baublesPanel.visibleRows;
             slot.xDisplayPosition = !visible ? -10000
                 : baublesPanel == null ? PlayerHeaderLayout.BAUBLES_X + cell / 4 * 18
-                    : view.width + 12 + cell % BaublesPanelLayout.COLUMNS * 18;
-            slot.yDisplayPosition = visible ? 8 + row * 18 : -10000;
+                    : view.width + 13 + cell % BaublesPanelLayout.COLUMNS * 18;
+            // Slot artwork starts one pixel before the item coordinate; center that whole 18px cell.
+            slot.yDisplayPosition = visible ? (baublesPanel == null ? 8 : 9) + row * 18 : -10000;
             if (assigned) cell++;
         }
         for (Slot slot : inventorySlots.inventorySlots)
@@ -214,6 +262,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         switch (button.id) {
             case 100:
                 settingsOpen = true;
+                terminalSettings = false;
                 break;
             case 101:
                 columns = 18;
@@ -244,6 +293,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 break;
             case 108:
                 settingsOpen = false;
+                terminalSettings = false;
                 break;
             case 109:
                 if (PackCompatibility.enabled() && controlsAvailable()) {
@@ -262,6 +312,27 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             case 112:
                 InventoryViewSettings.setMui2Presentation(!InventoryViewSettings.mui2Presentation);
                 presentation.dispose();
+                initGui();
+                return;
+            case 113:
+            case 114:
+                terminalSettings = button.id == 113;
+                initGui();
+                return;
+            case 115:
+                settingsOpen = false;
+                initGui();
+                PanelSettingsOverlay.open(this, floating);
+                return;
+            case 120:
+            case 121:
+            case 122:
+            case 123:
+                if (!settingsOpen || !terminalSettings) return;
+                int delta = button.id % 2 == 0 ? -1 : 1;
+                InventoryViewSettings.setTerminalRows(
+                    InventoryViewSettings.terminalSmallRows + (button.id < 122 ? delta : 0),
+                    InventoryViewSettings.terminalTallMinimumRows + (button.id >= 122 ? delta : 0));
                 initGui();
                 return;
             default:
@@ -343,7 +414,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     @Override
     public void handleMouseInput() {
         super.handleMouseInput();
-        if (settingsOpen || field_147007_t) return;
+        if (settingsOpen || field_147007_t || floating != null && floating.detached()) return;
         int wheel = Mouse.getEventDWheel();
         int x = Mouse.getEventX() * width / mc.displayWidth - guiLeft;
         int y = height - Mouse.getEventY() * height / mc.displayHeight - 1 - guiTop - tabSpace;
@@ -366,7 +437,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     protected void keyTyped(char character, int key) {
         if (settingsOpen) {
             if (key == Keyboard.KEY_ESCAPE || key == mc.gameSettings.keyBindInventory.getKeyCode()) {
-                settingsOpen = false;
+                if (terminalSettings) terminalSettings = false;
+                else settingsOpen = false;
                 initGui();
             }
             return;
@@ -379,11 +451,16 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     }
 
     private void scroll(int rows) {
+        if (floating != null && floating.detached()) {
+            floating.scroll(rows);
+            return;
+        }
         scrollRow = Math.max(0, Math.min(view.maxScroll(), scrollRow + rows));
         positionSlots();
     }
 
     private boolean overScroll(int x, int y) {
+        if (floating != null && floating.detached()) return false;
         int left = guiLeft + view.gridX + view.columns * 18 + 2;
         return view.maxScroll() > 0 && x >= left
             && x < left + 8
@@ -412,7 +489,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     protected void drawGuiContainerBackgroundLayer(float ticks, int mouseX, int mouseY) {
         positionButtons();
         int mainTop = guiTop + tabSpace;
-        drawPanel(guiLeft, mainTop, view.width, view.height);
+        boolean detached = floating != null && floating.detached();
+        drawPanel(guiLeft, mainTop, view.width, detached ? 82 : view.height);
         if (baublesPanel != null) {
             int left = guiLeft + view.width + 4;
             drawPanel(left, mainTop, baublesPanel.width, baublesPanel.height);
@@ -432,17 +510,18 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         try {
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            if (!presentation.slots(inventorySlots.inventorySlots)) for (Object entry : inventorySlots.inventorySlots) {
-                Slot slot = (Slot) entry;
-                if (slot.xDisplayPosition < 0) continue;
-                drawTexturedModalRect(
-                    guiLeft + slot.xDisplayPosition - 1,
-                    guiTop + slot.yDisplayPosition - 1,
-                    7,
-                    83,
-                    18,
-                    18);
-            }
+            if (detached || !presentation.slots(inventorySlots.inventorySlots))
+                for (Object entry : inventorySlots.inventorySlots) {
+                    Slot slot = (Slot) entry;
+                    if (slot.xDisplayPosition == -10000 || detached && ordinarySlot(slot)) continue;
+                    drawTexturedModalRect(
+                        guiLeft + slot.xDisplayPosition - 1,
+                        guiTop + slot.yDisplayPosition - 1,
+                        7,
+                        83,
+                        18,
+                        18);
+                }
         } finally {
             GL11.glPopAttrib();
         }
@@ -465,7 +544,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             guiLeft + PlayerHeaderLayout.PLAYER_X - mouseX,
             mainTop + 25 - mouseY,
             mc.thePlayer);
-        if (view.maxScroll() > 0) {
+        if (!detached && view.maxScroll() > 0) {
             int x = guiLeft + view.gridX + view.columns * 18 + 2;
             int track = view.visibleRows * 18;
             int thumb = Math.max(12, track * view.visibleRows / view.totalRows);
@@ -473,6 +552,12 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             drawRect(x, mainTop + 84, x + 8, mainTop + 84 + track, InventoryGuiTheme.get().scrollTrack);
             drawRect(x + 1, top, x + 7, top + thumb, InventoryGuiTheme.get().scrollThumb);
         }
+        if (detached) floating.drawPanels();
+    }
+
+    private boolean ordinarySlot(Slot slot) {
+        return slot.inventory == ownerInventory && InventoryLayout.of(ownerInventory)
+            .ordinaryIndex(slot.getSlotIndex()) >= 0;
     }
 
     private void positionButtons() {
@@ -516,6 +601,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         }
         super.drawScreen(settingsOpen ? -1000 : mouseX, settingsOpen ? -1000 : mouseY, ticks);
         if (!settingsOpen) {
+            if (floating != null) floating.drawControl();
             if (mc.thePlayer.inventory.getItemStack() == null && mouseX >= guiLeft + header.layoutButtonX
                 && mouseX < guiLeft + header.layoutButtonX + 16
                 && mouseY >= guiTop + tabSpace + 6
@@ -544,25 +630,47 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         InventoryGuiTheme theme = InventoryGuiTheme.get();
         drawFrame(x - 2, y - 2, 176, 230, 2, theme.settingsOuter);
         drawRect(x, y, x + 172, y + 226, theme.settingsFill);
-        drawCenteredString(fontRendererObj, "Inventory layout", width / 2, y + 8, theme.settingsText);
         drawCenteredString(
             fontRendererObj,
-            "Columns: " + InventoryViewSettings.columns,
+            terminalSettings ? "AE2 terminals" : "Inventory layout",
             width / 2,
-            y + 63,
+            y + 8,
             theme.settingsText);
-        drawCenteredString(
-            fontRendererObj,
-            "Visible rows: " + InventoryViewSettings.rows,
-            width / 2,
-            y + 91,
-            theme.settingsText);
-        drawCenteredString(
-            fontRendererObj,
-            "Fits: " + view.columns + " x " + view.visibleRows,
-            width / 2,
-            y + 112,
-            theme.settingsText);
+        if (terminalSettings) {
+            drawCenteredString(
+                fontRendererObj,
+                "Small rows: " + InventoryViewSettings.terminalSmallRows,
+                width / 2,
+                y + 63,
+                theme.settingsText);
+            drawCenteredString(
+                fontRendererObj,
+                "Tall minimum: " + InventoryViewSettings.terminalTallMinimumRows,
+                width / 2,
+                y + 91,
+                theme.settingsText);
+            drawCenteredString(fontRendererObj, "Saved immediately", width / 2, y + 125, theme.settingsText);
+            drawCenteredString(fontRendererObj, "Reopen terminal to apply", width / 2, y + 141, theme.settingsText);
+        } else {
+            drawCenteredString(
+                fontRendererObj,
+                "Columns: " + InventoryViewSettings.columns,
+                width / 2,
+                y + 63,
+                theme.settingsText);
+            drawCenteredString(
+                fontRendererObj,
+                "Visible rows: " + InventoryViewSettings.rows,
+                width / 2,
+                y + 91,
+                theme.settingsText);
+            drawCenteredString(
+                fontRendererObj,
+                "Fits: " + view.columns + " x " + view.visibleRows,
+                width / 2,
+                y + 112,
+                theme.settingsText);
+        }
         for (Object entry : buttonList) ((GuiButton) entry).drawButton(mc, mouseX, mouseY);
         GL11.glEnable(GL11.GL_DEPTH_TEST);
     }
@@ -596,11 +704,13 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     }
 
     public int sortButtonX() {
-        return view.width - 46;
+        return floating != null && floating.detached() ? floating.playerBounds()
+            .right() - guiLeft
+            - 46 : view.width - 46;
     }
 
     public int sortButtonY() {
-        return tabSpace + 64;
+        return floating != null && floating.detached() ? floating.playerBounds().y - guiTop + 2 : tabSpace + 64;
     }
 
     public int craftingOffsetY() {
@@ -609,6 +719,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     public void onGuiClosed() {
+        if (floating != null) floating.cancel();
         presentation.dispose();
         super.onGuiClosed();
         // Geometry is local to this screen; restore the persistent container's default positions afterward.

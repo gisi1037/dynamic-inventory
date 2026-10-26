@@ -38,7 +38,7 @@ the ordinary `dynamicinventory-0.8.0-dev.jar` is the game artifact. For example:
 
 ```groovy
 dependencies {
-    implementation(files('../dynamic-inventory/build/libs/dynamicinventory-0.8.0-dev-dev.jar'))
+    implementation(files('../gtnh-dynamic-inventory/build/libs/dynamicinventory-0.8.0-dev-dev.jar'))
 }
 ```
 

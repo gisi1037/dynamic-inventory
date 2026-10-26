@@ -14,15 +14,15 @@ shipped code small and the difference between planned and working support clear.
 | --- | --- | --- |
 | Minecraft / `minecraft` | [Vanilla](vanilla.md) | Shared inventory adapters; targeted native GUI hooks; batch review pending |
 | Et Futurum / `etfuturum` | [Et Futurum](etfuturum.md) | Brewing, enchanting, anvil; reviewed Blast Furnace and Smoker adapters |
-| OpenBlocks / `OpenBlocks` | [OpenBlocks](openblocks.md) | Backup guard; large-grave serialization gap |
-| Applied Energistics 2 / `appliedenergistics2` | [AE2](applied-energistics-2.md) | Inspection required |
+| OpenBlocks / `OpenBlocks` | [OpenBlocks](openblocks.md) | Backup guard; expanded-grave bridge and focused nightly lifecycle checks |
+| Applied Energistics 2 / `appliedenergistics2` | [AE2](applied-energistics-2.md) | Twenty-five exact machine/terminal adapters; broader gameplay and visual review pending |
 | GregTech / `gregtech` | [GregTech](gregtech.md) | Shared MUI1/MUI2 player hooks; custom paths need review |
 | Tinkers' Construct / `TConstruct` | [Tinkers](tinkers-construct.md) | Crafting-station and reviewed Furnace Slab adapters; targeted native hooks |
 | Galacticraft / `GalacticraftCore` | [Galacticraft](galacticraft.md) | Equipment adapter and targeted native hook |
 | Avaritiaddons / `avaritiaddons` | [Avaritiaddons](avaritiaddons.md) | Compressed-chest adapter |
 | GTNH Core / `dreamcraft` | [Dreamcraft](dreamcraft.md) | Baby-chest adapter |
 | Ender IO / `EnderIO` | [Ender IO](ender-io.md) | Inspection required |
-| Forestry / `Forestry` | [Forestry](forestry.md) | Inspection required |
+| Forestry / `Forestry` | [Forestry](forestry.md) | 21 stationary machine screens; visual review pending |
 | Binnie's Mods / `BinnieCore` | [Binnie](binnie.md) | Inspection required; separate from Forestry |
 | Thaumcraft / `Thaumcraft` | [Thaumcraft](thaumcraft.md) | Reviewed Alchemical Furnace; other hosts need inspection |
 | Iron Chests / `IronChest` | [Iron Chests](iron-chests.md) | Exact native adapter for all 11 chest tiers |

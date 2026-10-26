@@ -26,17 +26,36 @@ final class BaubleUpgradeSupport extends Item implements IBauble {
     private static final String BASE_TAG = "dynamicinventoryBaseSlots";
     private static final String ENABLED_TAG = "dynamicinventoryBeltEnabled";
 
-    static Item register() {
-        Item belt = new BaubleUpgradeSupport();
-        GameRegistry.registerItem(belt, "inventory_belt");
-        return belt;
+    private final int tier;
+
+    static Item[] register() {
+        Item[] belts = new Item[UpgradeSettings.BELT_TIERS.length];
+        for (int tier = 0; tier < belts.length; tier++) {
+            String id = tier == 0 ? "inventory_belt"
+                : "inventory_belt_" + UpgradeSettings.BELT_TIERS[tier].toLowerCase(java.util.Locale.ROOT);
+            belts[tier] = new BaubleUpgradeSupport(tier, id);
+            GameRegistry.registerItem(belts[tier], id);
+        }
+        return belts;
     }
 
-    private BaubleUpgradeSupport() {
-        setUnlocalizedName("dynamicinventory.inventory_belt");
-        setTextureName(DynamicInventory.MODID + ":inventory_belt");
+    private BaubleUpgradeSupport(int tier, String id) {
+        this.tier = tier;
+        setUnlocalizedName("dynamicinventory." + id);
+        setTextureName(DynamicInventory.MODID + ":" + id);
         setMaxStackSize(1);
         setCreativeTab(CreativeTabs.tabMisc);
+    }
+
+    static int bonus(EntityPlayer player) {
+        IInventory equipment = BaublesApi.getBaubles(player);
+        int bonus = 0;
+        if (equipment != null) for (int i = 0; i < equipment.getSizeInventory(); i++) {
+            ItemStack stack = equipment.getStackInSlot(i);
+            if (stack != null && stack.stackSize > 0 && stack.getItem() instanceof BaubleUpgradeSupport belt)
+                bonus = Math.max(bonus, UpgradeSettings.tierSlots[belt.tier]);
+        }
+        return bonus;
     }
 
     static boolean isWearing(EntityPlayer player) {
@@ -44,7 +63,7 @@ final class BaubleUpgradeSupport extends Item implements IBauble {
         if (equipment == null) return false;
         for (int i = 0; i < equipment.getSizeInventory(); i++) {
             ItemStack stack = equipment.getStackInSlot(i);
-            if (stack != null && stack.stackSize > 0 && stack.getItem() == InventoryUpgrades.belt) return true;
+            if (stack != null && stack.stackSize > 0 && stack.getItem() instanceof BaubleUpgradeSupport) return true;
         }
         return false;
     }
@@ -54,7 +73,7 @@ final class BaubleUpgradeSupport extends Item implements IBauble {
         if (equipment == null) return;
         for (int i = 0; i < equipment.getSizeInventory(); i++) {
             ItemStack stack = equipment.getStackInSlot(i);
-            if (stack == null || stack.getItem() != InventoryUpgrades.belt) continue;
+            if (stack == null || !(stack.getItem() instanceof BaubleUpgradeSupport)) continue;
             if (stack.hasTagCompound() && stack.getTagCompound()
                 .getInteger(BASE_TAG) == base) continue;
             if (!stack.hasTagCompound()) stack.setTagCompound(new NBTTagCompound());
@@ -123,7 +142,8 @@ final class BaubleUpgradeSupport extends Item implements IBauble {
 
     @Override
     public void addInformation(ItemStack stack, EntityPlayer player, List lines, boolean advanced) {
-        lines.add(StatCollector.translateToLocal("dynamicinventory.belt.tooltip"));
+        lines.add(
+            UpgradeSettings.BELT_TIERS[tier] + " - " + StatCollector.translateToLocal("dynamicinventory.belt.tooltip"));
         lines.add(StatCollector.translateToLocal("dynamicinventory.belt.remove"));
         lines.add(StatCollector.translateToLocal("dynamicinventory.upgrade.rules"));
     }

@@ -9,10 +9,12 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
+import dev.gilbe.dynamicinventory.client.DetachedChestPanel;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
 
 @Mixin(GuiContainer.class)
@@ -26,6 +28,14 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     protected int guiLeft;
     @Shadow
     protected int guiTop;
+
+    @Shadow
+    protected boolean field_147007_t;
+
+    @Override
+    public boolean dynamicinventory$draggingItems() {
+        return field_147007_t;
+    }
 
     @Shadow
     protected abstract void drawGuiContainerBackgroundLayer(float ticks, int x, int y);
@@ -101,11 +111,49 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$bar(int x, int y, int button, CallbackInfo ci) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        if (floating != null && floating.pointer(x, y, button, true)) {
+            ci.cancel();
+            return;
+        }
         if (dynamicinventory$panel != null && dynamicinventory$panel.scrollbar(x, y)) ci.cancel();
+    }
+
+    @Inject(method = "mouseClickMove", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$move(int x, int y, int button, long elapsed, CallbackInfo ci) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        if (floating != null && floating.pointer(x, y, -1, false)) ci.cancel();
+    }
+
+    @Inject(method = "mouseMovedOrUp", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$release(int x, int y, int button, CallbackInfo ci) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        if (floating != null && floating.pointer(x, y, button, false)) ci.cancel();
+    }
+
+    // Reviewed vanilla locals: outside flag after guiLeft/guiTop in press and release respectively.
+    @ModifyVariable(method = "mouseClicked", at = @At("STORE"), index = 10, require = 1, allow = 1)
+    private boolean dynamicinventory$outsidePress(boolean original, int x, int y, int button) {
+        return dynamicinventory$outside(original, x, y);
+    }
+
+    @ModifyVariable(method = "mouseMovedOrUp", at = @At("STORE"), index = 7, require = 1, allow = 1)
+    private boolean dynamicinventory$outsideRelease(boolean original, int x, int y, int button) {
+        return dynamicinventory$outside(original, x, y);
+    }
+
+    private boolean dynamicinventory$outside(boolean original, int x, int y) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        return floating != null && floating.detached() ? !floating.inside(x, y) : original;
     }
 
     @Inject(method = "keyTyped", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$page(char character, int key, CallbackInfo ci) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        if (key == Keyboard.KEY_ESCAPE && floating != null && floating.cancel()) {
+            ci.cancel();
+            return;
+        }
         if (dynamicinventory$panel != null && (key == Keyboard.KEY_PRIOR || key == Keyboard.KEY_NEXT)) {
             dynamicinventory$panel.scroll(key == Keyboard.KEY_NEXT ? 1 : -1);
             ci.cancel();

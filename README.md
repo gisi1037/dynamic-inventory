@@ -10,12 +10,17 @@ initial capacity at startup; experimental live resizing safely rebuilds and agre
 the slot map before releasing contents or input. Client layout preferences change
 presentation without creating another inventory.
 
-An **Inventory Capacity Module** permanently adds storage, and an optional Baubles
-**Inventory Expansion Belt** adds temporary storage while equipped. Both default to
-nine slots. Server configuration controls bonuses, limits and enablement; pack
-authors supply recipes. Occupied slots are never discarded when removing a bonus.
-See [inventory upgrades](docs/inventory-upgrades.md) and
-[live resizing](docs/live-inventory-resizing.md).
+An **Inventory Capacity Module** permanently adds storage. Optional Baubles belts
+at LV, HV, IV, ZPM and UHV provide configurable temporary bonuses. A reusable UHV
+controller can set an exact safe storage size. Provisional GTNH recipes and item
+textures are included; occupied slots are never discarded when removing capacity.
+See [inventory upgrades](docs/inventory-upgrades.md).
+
+The player inventory and single vanilla chest support named, movable and resizable
+inventory panels with global defaults and interface geometry profiles. Attached
+layout stays the default. Existing resource-pack textures are retained for slots
+and available for Original frames. See [inventory panels](docs/inventory-panels.md)
+and [resource packs](docs/glass-ui-integration.md).
 
 Native container adapters and shared MUI1/MUI2 bindings expose the canonical player
 inventory in supported interfaces. A conservative scroll presentation can reuse

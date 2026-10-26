@@ -205,10 +205,91 @@ public final class NativeLayoutPatches {
         } else DRAFTS.put(gui, patch);
     }
 
+    /** Counts only recognized saved layout documents. Unknown files are never reset or moved. */
+    public static java.util.Map<String, Integer> groups() throws IOException {
+        java.util.Map<String, Integer> groups = new java.util.TreeMap<>();
+        for (Path path : savedFiles(null)) {
+            JsonObject target = readResetTarget(path);
+            if (target == null) continue;
+            groups.merge(
+                dev.gilbe.dynamicinventory.client.PlayerPanelProfiles.group(
+                    target.get("containerClass")
+                        .getAsString()),
+                1,
+                Integer::sum);
+        }
+        return groups;
+    }
+
+    /** Retain old layouts in a separate backup directory so legacy migration cannot resurrect a reset. */
+    public static int reset(String group) throws IOException {
+        java.util.List<Path> files = savedFiles(group);
+        if (files.isEmpty()) return 0;
+        Path backup = directory.resolve("reset-backups")
+            .resolve(
+                java.util.UUID.randomUUID()
+                    .toString());
+        Files.createDirectories(backup);
+        try {
+            for (Path path : files) Files.move(path, backup.resolve(path.getFileName()));
+        } finally {
+            SAVED.clear();
+            DRAFTS.clear();
+            PREVIEW_MODES.clear();
+        }
+        return files.size();
+    }
+
+    private static java.util.List<Path> savedFiles(String group) throws IOException {
+        java.util.List<Path> matches = new java.util.ArrayList<>();
+        if (directory == null || !Files.isDirectory(directory)) return matches;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.json")) {
+            for (Path path : files) {
+                JsonObject target = readResetTarget(path);
+                if (target != null && (group == null || group.equals(
+                    dev.gilbe.dynamicinventory.client.PlayerPanelProfiles.group(
+                        target.get("containerClass")
+                            .getAsString()))))
+                    matches.add(path);
+            }
+        }
+        return matches;
+    }
+
+    private static JsonObject readResetTarget(Path path) throws IOException {
+        if (!Files.isRegularFile(path) || Files.isSymbolicLink(path) || Files.size(path) > 16384) return null;
+        try {
+            JsonObject root = new JsonParser().parse(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            JsonObject target = root.getAsJsonObject("target");
+            if (root.entrySet()
+                .size() != 3
+                || !root.get("schemaVersion")
+                    .getAsString()
+                    .matches("[1-9]")
+                || !root.has("layout")
+                || !root.get("layout")
+                    .isJsonObject()
+                || target == null
+                || !target.has("containerClass")
+                || !target.has("adapterId")
+                || !target.get("containerClass")
+                    .getAsString()
+                    .matches("[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+")
+                || !target.get("adapterId")
+                    .getAsString()
+                    .startsWith("dynamicinventory:"))
+                return null;
+            return target;
+        } catch (RuntimeException invalid) {
+            return null;
+        }
+    }
+
     public static Path save(GuiContainer gui, NativeLayoutPatch patch) throws IOException {
         JsonObject target = target(gui);
         JsonObject root = new JsonObject();
-        root.addProperty("schemaVersion", 5);
+        root.addProperty("schemaVersion", 9);
         root.add("target", target);
         root.add("layout", patch.toJson());
         Path destination = file(target);
@@ -254,6 +335,18 @@ public final class NativeLayoutPatches {
                     root.get("schemaVersion")
                         .getAsString())
                 || "5".equals(
+                    root.get("schemaVersion")
+                        .getAsString())
+                || "6".equals(
+                    root.get("schemaVersion")
+                        .getAsString())
+                || "7".equals(
+                    root.get("schemaVersion")
+                        .getAsString())
+                || "9".equals(
+                    root.get("schemaVersion")
+                        .getAsString())
+                || "8".equals(
                     root.get("schemaVersion")
                         .getAsString()))
             || !expectedTarget.equals(root.get("target")))

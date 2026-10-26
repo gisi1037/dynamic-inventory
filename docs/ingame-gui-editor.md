@@ -5,9 +5,51 @@ Open a supported **native** container GUI, put down any item held by the cursor,
 The current chest, crafting-station or other registered native adapter must already be working.
 This editor changes its presentation; it does not register an unsupported container.
 
+## Detachable inventory prototype
+
+A single vanilla chest currently has a small panel-outline icon before the name in its
+player-inventory title strip. Left-click it to detach or reattach. Drag the detached
+title strip to move it; drag any corner to resize the frame smoothly. Padding is
+split evenly between opposite sides until another complete row or column fits.
+The hotbar stays centered under the storage grid, excluding its scrollbar gutter. Overflow
+scrolls, and the hotbar remains nine slots wide. Escape cancels a gesture. Put down
+cursor items before moving or resizing the panel. The original attached layout is
+the default, including existing editor preferences.
+
+Right-click that icon to open **Inventory panels**, an in-container settings view.
+Layout edits mode and preferred size; Position edits screen-relative anchors;
+Style edits player-frame bevel, border and crop; Reset provides interface, global,
+mod-group and all-interface actions. Apply commits the draft; Cancel discards it.
+**Save as global** copies the draft to the global default. **Use global for this
+interface** removes this interface's override. Preferences live in
+`config/dynamicinventory/player-panels.json`, independently of inventory capacity.
+Only reviewed detachable hosts consume these preferences; other screens keep their
+existing layout until integrated.
+
+In the player settings menu, **Panel layouts** opens the global settings view, with
+reset-all-overrides and reset-global-default controls plus a separate **Reset mod groups...** menu. Click
+a reset action twice to confirm. Resetting interface overrides preserves the global
+panel preference. Resetting the global panel preference preserves interface
+overrides. Existing native editor layouts are also included in interface/mod-group
+resets and are backed up under `ui-layouts/reset-backups/`; those screens return to
+their adapter's attached defaults until detachable support is added.
+
+This increment edits one Main panel. Named panel creation and slot allocation
+are not enabled yet. Opening either settings view keeps the current screen,
+container, slots and item synchronization alive. Old five-field panel preferences
+are backed up as `player-panels.schema1-backup.json` before the first schema-2 save.
+
+This prototype avoids machine overlap and allows movement to either edge of the screen.
+Bookmarks temporarily hide while the inventory overlaps their area, then return
+when it moves away; their saved groups and recipes are unchanged.
+Search cells covered by the detached panel are masked, including cells in the
+middle of a result row. Full search/bookmark wrapping into all free screen space
+is a later stage. Small viewports can fall back to attached mode.
+
 ## Controls
 
-The toolbar has **Layout**, **Sections**, **Style**, **Advanced**, and **Screen** pages.
+The toolbar has **Layout**, **Sections**, **Style**, **Advanced**, **Screen**, and **Widgets** pages,
+arranged in two rows.
 
 - **Columns / Visible rows:** preferred player-inventory viewport dimensions. The existing layout
   engine fits them to the scaled window; the toolbar shows the resulting dimensions. Rows beyond
@@ -28,7 +70,15 @@ The toolbar has **Layout**, **Sections**, **Style**, **Advanced**, and **Screen*
 - **Native X / Y (Sections):** move the native chest/machine section independently. The compound Tinkers
   attached-chest adapter currently owns this group's placement, so these controls are disabled there.
 - **Drag: Panel / Player / Native:** choose the group to drag; the blue outline marks that group.
-- **Frame style (Style):** Original retains the native border and current global frame preference.
+- **Config X / Y (Widgets):** independently move AE2's configuration/priority tab buttons.
+- **Pins X / Y (Widgets):** move the terminal's pin-section button independently of the other controls.
+- **Controls X / Y (Widgets):** move AE2's icon controls together, including the ME Drive's
+  top-left access control. Negative offsets move left/up; hold Shift for eight-pixel steps.
+  AE2 toggle/simple icon buttons move with the controls too. Only reviewed native AE2 button
+  types are supported; absent groups are disabled. Tooltips
+  and click areas follow the actual button objects. Saved offsets default to zero in older files,
+  and preview, Save, Cancel, and Reset work like other layout settings.
+- **Frame style (Style):** Unified bevel is the default. Original retains the native border and current global frame preference.
   Unified flat uses matching square edges; Unified bevel uses matching stepped corners and an outer
   outline. Both unified styles crop the original sheet's border by at least four pixels and draw the
   shared frame using the active resource-pack palette. They join the normal native/player frame even
@@ -36,7 +86,13 @@ The toolbar has **Layout**, **Sections**, **Style**, **Advanced**, and **Screen*
   Original restores the ordinary Texture crop behavior. Style is a per-GUI presentation preference
   and follows the same preview, Save, Reset and Cancel rules as positioning.
 - **Border width (Style):** zero to six scaled pixels for either unified frame style. Zero keeps
-  the fill without an outline. Original uses the resource pack's border and disables this control.
+  the fill without an outline. New layouts default to three pixels for a stronger bottom/right shadow.
+  Original uses the resource pack's border and disables this control. Saved choices stay intact.
+- **Frame crop (Style):** inset every unified frame edge by zero to eight scaled pixels, including
+  AE2's separate upgrade/toolbox frames. This changes the painted frame, not slot positions.
+- **Corner crop (Style):** independently cut zero to eight pixels from beveled corners. The default
+  is two. Flat frames keep square corners. Layouts without these controls default to frame
+  crop zero and corner crop two; native and player texture crops remain independent.
 - **Top margin / Bottom margin (Screen):** reserve space outside the complete interface, for example
   for NEI's search field. Defaults are eight and 28 scaled pixels. Increasing a margin reduces
   visible inventory rows and enables scrolling as needed, including the attached chest during live
@@ -45,12 +101,15 @@ The toolbar has **Layout**, **Sections**, **Style**, **Advanced**, and **Screen*
 - **Top padding:** room above the native section, such as inventory tabs.
 - **Minimum header (Advanced):** a minimum height, not an offset. Auto uses measured native geometry;
   the first increase starts at that height and has a visible effect. Use Section gap to reduce spacing.
-- **Texture crop (Advanced):** crop the native sheet's edges, including Tessellator-rendered compressed-chest
+- **Native texture crop (Advanced):** crop the native sheet's edges, including Tessellator-rendered compressed-chest
   frames. Split stations also allow cropping their crafting sheet; the attached storage frame and scrollbar
   keep their own geometry. Cropping is disabled for compact single-frame modes that own their border styling. Hover controls
   to see explanations. Top padding and minimum header are also disabled in the attached-chest layout.
   Furnaces and vanilla crafting tables default to crop 4 and fixed nine-column player storage.
   Saved crop overrides remain intact; Reset previews the adapter defaults.
+- **Player texture crop (Advanced):** independently crop zero to eight scaled pixels from the player-section
+  background edges. Slot artwork, items and click positions retain their existing coordinates. Zero keeps
+  the original player background and is also the default when loading older saved layouts.
 - **Mode: Vertical / Scroll (toolbar):** preview either player-inventory presentation on any registered
   native screen. Vertical grows to fit the available height; Scroll shows up to three rows. Both scroll
   when needed and keep the same column preference. The switch is temporary: Save/Cancel restores the global
@@ -77,7 +136,7 @@ Files are local to the client under:
 <Minecraft game directory>/config/dynamicinventory/ui-layouts/<target-sha256>.json
 ```
 
-Each schema-5 JSON file contains a `target` and `layout`. Original schema-1/2/3/4 layouts still load;
+Each schema-9 JSON file contains a `target` and `layout`. Original schema-1/2/3/4/5/6/7/8 layouts still load;
 missing newer fields receive neutral offsets, automatic spacing, Original styling and an eight-pixel
 content gap. Missing screen margins use eight/28 pixels; missing border width uses two pixels.
 The target records adapter ID, presentation revision, exact container/screen classes and ordinary
@@ -90,7 +149,7 @@ Server opening and slot checks remain independent. Invalid/oversized files are i
 If no current file exists, compatible legacy geometry is read while presentation revision is 1.
 A shared family edit takes precedence over an older exact chest variant; other variants do not
 match. Conflicting legacy edits at the same priority are left for manual selection, with a warning,
-rather than picking a file arbitrarily. Save promotes a migrated edit to schema 5. Old files remain intact.
+rather than picking a file arbitrarily. Save promotes a migrated edit to schema 9. Older legacy files remain intact.
 Save replaces the file atomically where the filesystem supports it.
 
 Each launcher instance has its own game directory. RC-2 layouts do not automatically appear
@@ -188,3 +247,14 @@ These complement automated slot, transfer and persistence checks:
 
 For a report, include the block/GUI, pack build, resource pack, resolution, GUI scale, frame style,
 whether the editor is open, the action that caused the issue, and a screenshot when useful.
+
+AE2 terminals also use the client config's `ae2Terminal.smallRows` (default 3) and
+`ae2Terminal.tallMinimumRows` (default 6). Change these in the player inventory's
+**Inventory layout → AE2 terminals** menu, using **Small rows** and **Tall minimum**.
+They are global client settings, saved immediately. Reopen the terminal to apply;
+no restart is required when using these controls. Small keeps the fixed browser count;
+Tall reserves its minimum, fits player rows, then expands the browser into spare
+height. Player rows scroll when necessary. Editing the config file externally still requires a client restart.
+Baubles items can be equipped by right-clicking a held item into an empty valid
+native slot; sneaking preserves the item's alternate use action. The server owns
+the equipment update and native Baubles callbacks.

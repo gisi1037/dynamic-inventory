@@ -32,12 +32,20 @@ public final class InventoryUpgrades {
     private static final Map<EntityPlayerMP, Integer> WARNED_TARGETS = new WeakHashMap<>();
     public static Item module;
     public static Item belt;
+    public static Item[] belts = new Item[0];
+    public static Item creativeSizer;
 
     public static void register() {
         module = new CapacityModuleItem();
         GameRegistry.registerItem(module, "capacity_module");
         // Optional API classes are loaded only if Baubles is actually present.
-        if (Loader.isModLoaded("Baubles")) belt = BaubleUpgradeSupport.register();
+        if (Loader.isModLoaded("Baubles")) {
+            belts = BaubleUpgradeSupport.register();
+            belt = belts[0];
+        }
+        creativeSizer = new CreativeSizeItem();
+        GameRegistry.registerItem(creativeSizer, "creative_inventory_controller");
+        CreativeSizeRequest.initialize();
     }
 
     private static NBTTagCompound account(EntityPlayer player, boolean create) {
@@ -65,9 +73,9 @@ public final class InventoryUpgrades {
     }
 
     private static int bonus(EntityPlayer player) {
-        return belt != null && UpgradeSettings.beltsEnabled && BaubleUpgradeSupport.isWearing(player)
-            ? UpgradeSettings.beltSlots
-            : 0;
+        NBTTagCompound saved = account(player, false);
+        if (saved != null && saved.getBoolean("fixedCapacity")) return 0;
+        return belt != null && UpgradeSettings.beltsEnabled ? BaubleUpgradeSupport.bonus(player) : 0;
     }
 
     public static void requestModule(EntityPlayerMP player, ItemStack stack) {
@@ -97,6 +105,30 @@ public final class InventoryUpgrades {
         }
     }
 
+    /** Controller totals are independent of equipment. Zero restores ordinary equipment rules. */
+    public static void setControlledCapacity(EntityPlayerMP player, int target) {
+        if (target == 0) {
+            if (!InventoryUi.isOpeningReady(player))
+                throw new IllegalStateException("Wait for inventory synchronization");
+            NBTTagCompound saved = account(player, false);
+            if (saved != null) saved.setBoolean("fixedCapacity", false);
+            return;
+        }
+        InventoryShape before = InventoryLayout.of(player.inventory);
+        boolean completed = false;
+        try {
+            InventoryResizing.resize(player, target);
+            completed = true;
+        } finally {
+            if (completed || InventoryLayout.of(player.inventory) != before) {
+                NBTTagCompound saved = account(player, true);
+                saved.setInteger("baseSlots", target);
+                saved.setBoolean("fixedCapacity", true);
+                if (belt != null) BaubleUpgradeSupport.synchronizeBase(player, target);
+            }
+        }
+    }
+
     /** Normal unequip is refused before moving a belt whose extra cells still contain items. */
     public static boolean canRemoveBelt(EntityPlayer player) {
         if (player.worldObj.isRemote) return true; // The server owns rules and saved upgrade metadata.
@@ -118,6 +150,7 @@ public final class InventoryUpgrades {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.player;
         if (player.isDead || player.getHealth() <= 0 || player.playerNetServerHandler == null) return;
+        CreativeSizeRequest.applyPending(player);
         ItemStack request = REQUESTS.remove(player);
         // Gear polling is cheap and bounded; unchanged capacity never rebuilds containers or sends packets.
         if (request == null && player.ticksExisted % 10 != 0) return;

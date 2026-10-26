@@ -41,7 +41,8 @@ def pin = inventoryPin
 dependencies {
     // Optional integration APIs only; never add these mods to the isolated runtime or published POM.
     ["Baubles-Expanded", "NotEnoughItems", "CodeChickenCore", "InventoryBogoSorter",
-        "ModularUI2", "ModularUI", "TinkersConstruct", "Galacticraft", "OpenBlocks", "OpenModsLib"].each { name ->
+        "ModularUI2", "ModularUI", "TinkersConstruct", "Galacticraft", "OpenBlocks", "OpenModsLib",
+        "Applied-Energistics-2-Unofficial"].each { name ->
         compileOnly("com.github.GTNewHorizons:${name}:${pin(name)}:dev") { transitive = false }
     }
     // GTNHExtLib bundles this at runtime; Bogo's refill field exposes its API directly.

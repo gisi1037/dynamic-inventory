@@ -42,7 +42,27 @@ public final class InventoryUpgradeTestCommand extends CommandBase {
             throw new IllegalArgumentException("Disposable upgrades qualification world required");
         JsonObject report = new JsonObject();
         try {
-            if (args.length != 1) throw new IllegalArgumentException(getCommandUsage(sender));
+            if (args.length < 1 || args.length > 2) throw new IllegalArgumentException(getCommandUsage(sender));
+            if (args[0].equals("recipes")) {
+                java.util.Set<net.minecraft.item.Item> outputs = new java.util.HashSet<>();
+                java.util.Collections.addAll(outputs, InventoryUpgrades.belts);
+                outputs.add(InventoryUpgrades.creativeSizer);
+                int recipes = 0;
+                for (Object object : net.minecraft.item.crafting.CraftingManager.getInstance()
+                    .getRecipeList()) {
+                    net.minecraft.item.crafting.IRecipe recipe = (net.minecraft.item.crafting.IRecipe) object;
+                    ItemStack output = recipe.getRecipeOutput();
+                    if (output == null || !outputs.contains(output.getItem())) continue;
+                    if (!(recipe instanceof net.minecraftforge.oredict.ShapedOreRecipe))
+                        throw new AssertionError("Unexpected recipe type");
+                    for (Object ingredient : ((net.minecraftforge.oredict.ShapedOreRecipe) recipe).getInput())
+                        if (ingredient instanceof java.util.List && ((java.util.List<?>) ingredient).isEmpty())
+                            throw new AssertionError("Unresolved recipe ore ingredient");
+                    recipes++;
+                }
+                if (recipes != 6) throw new AssertionError("Expected six placeholder recipes, got " + recipes);
+                report.addProperty("placeholderRecipes", recipes);
+            }
             if (args[0].equals("admin-refusal")) {
                 // An explicit same-total command must not rewrite the permanent base while the
                 // peer agreement is pending (especially when the belt bonus is capped at 216).
@@ -68,15 +88,23 @@ public final class InventoryUpgradeTestCommand extends CommandBase {
                     throw new AssertionError("Rejected command changed permanent upgrade ownership");
                 report.addProperty("adminRefusalPreservesBase", true);
             }
-            if (!args[0].equals("state") && !args[0].equals("admin-refusal")) {
+            if (!args[0].equals("state") && !args[0].equals("admin-refusal") && !args[0].equals("recipes")) {
                 if (player.openContainer != player.inventoryContainer || player.inventory.getItemStack() != null)
                     throw new IllegalStateException("Close other hosts and clear cursor first");
-                ItemStack belt = new ItemStack(InventoryUpgrades.belt);
+                int tier = args.length == 2 ? Integer.parseInt(args[1]) : 0;
+                if (tier < 0 || tier >= InventoryUpgrades.belts.length)
+                    throw new IllegalArgumentException("Unknown belt tier");
+                ItemStack belt = new ItemStack(InventoryUpgrades.belts[tier]);
                 Slot target = null;
                 for (Object entry : player.inventoryContainer.inventorySlots) {
                     Slot slot = (Slot) entry;
                     if (slot.inventory == BaublesApi.getBaubles(player) && ((slot.getHasStack() && slot.getStack()
-                        .getItem() == InventoryUpgrades.belt) || slot.isItemValid(belt))) {
+                        .getItem() instanceof baubles.api.IBauble
+                        && java.util.Arrays.asList(InventoryUpgrades.belts)
+                            .contains(
+                                slot.getStack()
+                                    .getItem()))
+                        || slot.isItemValid(belt))) {
                         target = slot;
                         break;
                     }

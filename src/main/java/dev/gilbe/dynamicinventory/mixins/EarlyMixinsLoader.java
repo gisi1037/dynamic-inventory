@@ -72,6 +72,12 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
                 "minecraft.VanillaMerchantOpeningMixin"));
         boolean nei = getClass().getClassLoader()
             .getResource("codechicken/nei/asm/NEICorePlugin.class") != null;
+        // ItemStack is loaded before late mod mixins. The hook itself links Baubles only on item use.
+        if (dev.gilbe.dynamicinventory.compat.IntegrationProfile.selected()
+            .usesPackAdapters()
+            && getClass().getClassLoader()
+                .getResource("baubles/api/IBauble.class") != null)
+            mixins.add("baubles.BaubleRightClickMixin");
         if (nei) mixins.add("nei.WorkbenchCapacityMixin");
         if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
             .isClient()) {

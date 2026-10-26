@@ -1,11 +1,14 @@
 package dev.gilbe.dynamicinventory.client;
 
+import java.awt.image.BufferedImage;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+
+import javax.imageio.ImageIO;
 
 import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.client.resources.IResource;
@@ -130,12 +133,13 @@ public final class InventoryGuiTheme implements IResourceManagerReloadListener {
     }
 
     private static InventoryGuiTheme load(IResourceManager resourceManager) {
+        InventoryGuiTheme base = fromInventoryTexture(resourceManager);
         try {
             IResource resource = resourceManager.getResource(THEME_RESOURCE);
             try (InputStream input = resource.getInputStream();
                 Reader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
                 JsonElement parsed = new JsonParser().parse(reader);
-                if (!parsed.isJsonObject()) return invalidRoot("root must be an object", null);
+                if (!parsed.isJsonObject()) return invalidRoot(base, "root must be an object", null);
                 JsonObject root = parsed.getAsJsonObject();
                 JsonElement schema = root.get("schemaVersion");
                 JsonElement themeName = root.get("name");
@@ -153,42 +157,81 @@ public final class InventoryGuiTheme implements IResourceManagerReloadListener {
                         .isEmpty()
                     || colorsElement == null
                     || !colorsElement.isJsonObject())
-                    return invalidRoot("expected schemaVersion 1, a non-empty name, and a colors object", null);
+                    return invalidRoot(base, "expected schemaVersion 1, a non-empty name, and a colors object", null);
 
                 JsonObject colors = colorsElement.getAsJsonObject();
                 return new InventoryGuiTheme(
                     themeName.getAsString()
                         .trim(),
                     true,
-                    color(colors, "panelOuter", VANILLA.panelOuter),
-                    color(colors, "panelShadow", VANILLA.panelShadow),
-                    color(colors, "panelHighlight", VANILLA.panelHighlight),
-                    color(colors, "panelFill", VANILLA.panelFill),
-                    color(colors, "playerFrame", VANILLA.playerFrame),
-                    color(colors, "playerFill", VANILLA.playerFill),
-                    color(colors, "arrow", VANILLA.arrow),
-                    color(colors, "label", VANILLA.label),
-                    color(colors, "scrollTrack", VANILLA.scrollTrack),
-                    color(colors, "scrollThumb", VANILLA.scrollThumb),
-                    color(colors, "settingsOuter", VANILLA.settingsOuter),
-                    color(colors, "settingsFill", VANILLA.settingsFill),
-                    color(colors, "settingsText", VANILLA.settingsText));
+                    color(colors, "panelOuter", base.panelOuter),
+                    color(colors, "panelShadow", base.panelShadow),
+                    color(colors, "panelHighlight", base.panelHighlight),
+                    color(colors, "panelFill", base.panelFill),
+                    color(colors, "playerFrame", base.playerFrame),
+                    color(colors, "playerFill", base.playerFill),
+                    color(colors, "arrow", base.arrow),
+                    color(colors, "label", base.label),
+                    color(colors, "scrollTrack", base.scrollTrack),
+                    color(colors, "scrollThumb", base.scrollThumb),
+                    color(colors, "settingsOuter", base.settingsOuter),
+                    color(colors, "settingsFill", base.settingsFill),
+                    color(colors, "settingsText", base.settingsText));
             }
         } catch (FileNotFoundException missing) {
-            return VANILLA;
+            return base;
         } catch (IOException error) {
-            LOG.warn("Could not read {}. Using the vanilla inventory theme.", THEME_RESOURCE, error);
-            return VANILLA;
+            LOG.warn("Could not read {}. Using the active inventory texture palette.", THEME_RESOURCE, error);
+            return base;
         } catch (JsonParseException | IllegalStateException error) {
-            LOG.warn("Invalid {}. Using the vanilla inventory theme.", THEME_RESOURCE, error);
+            LOG.warn("Invalid {}. Using the active inventory texture palette.", THEME_RESOURCE, error);
+            return base;
+        }
+    }
+
+    private static InventoryGuiTheme invalidRoot(InventoryGuiTheme base, String reason, Throwable error) {
+        if (error == null)
+            LOG.warn("Invalid {}: {}. Using the active inventory texture palette.", THEME_RESOURCE, reason);
+        else LOG.warn("Invalid {}: {}. Using the active inventory texture palette.", THEME_RESOURCE, reason, error);
+        return base;
+    }
+
+    /** Existing packs need no Dynamic Inventory-specific theme to supply the basic panel colors. */
+    private static InventoryGuiTheme fromInventoryTexture(IResourceManager manager) {
+        try (InputStream input = manager.getResource(new ResourceLocation("textures/gui/container/inventory.png"))
+            .getInputStream()) {
+            BufferedImage image = ImageIO.read(input);
+            if (image == null || image.getWidth() < 176 || image.getHeight() < 166) return VANILLA;
+            int fill = sample(image, 6, 6), shadow = sample(image, 173, 80);
+            int highlight = sample(image, 1, 80), outer = sample(image, 0, 80);
+            int label = (fill >>> 24) < 128
+                || ((fill >> 16 & 255) * 299 + (fill >> 8 & 255) * 587 + (fill & 255) * 114) < 128000 ? 0xffeeeeee
+                    : 0xff404040;
+            return new InventoryGuiTheme(
+                "Inventory texture",
+                false,
+                outer,
+                shadow,
+                highlight,
+                fill,
+                sample(image, 8, 84),
+                sample(image, 27, 9),
+                VANILLA.arrow,
+                label,
+                shadow,
+                highlight,
+                VANILLA.settingsOuter,
+                VANILLA.settingsFill,
+                VANILLA.settingsText);
+        } catch (IOException | RuntimeException invalid) {
             return VANILLA;
         }
     }
 
-    private static InventoryGuiTheme invalidRoot(String reason, Throwable error) {
-        if (error == null) LOG.warn("Invalid {}: {}. Using the vanilla inventory theme.", THEME_RESOURCE, reason);
-        else LOG.warn("Invalid {}: {}. Using the vanilla inventory theme.", THEME_RESOURCE, reason, error);
-        return VANILLA;
+    private static int sample(BufferedImage image, int u, int v) {
+        return image.getRGB(
+            Math.min(image.getWidth() - 1, (int) ((u + 0.5) * image.getWidth() / 256)),
+            Math.min(image.getHeight() - 1, (int) ((v + 0.5) * image.getHeight() / 256)));
     }
 
     private static int color(JsonObject colors, String key, int fallback) {

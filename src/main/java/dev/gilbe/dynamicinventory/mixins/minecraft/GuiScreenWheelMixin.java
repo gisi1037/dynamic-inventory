@@ -15,6 +15,8 @@ public abstract class GuiScreenWheelMixin {
 
     @Inject(method = "handleMouseInput", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$wheel(CallbackInfo ci) {
-        if (NativeInventoryPanel.handleWheel((GuiScreen) (Object) this)) ci.cancel();
+        if (dev.gilbe.dynamicinventory.client.PanelSettingsOverlay.handleMouse((GuiScreen) (Object) this)
+            || NativeInventoryPanel.handlePointer((GuiScreen) (Object) this)
+            || NativeInventoryPanel.handleWheel((GuiScreen) (Object) this)) ci.cancel();
     }
 }

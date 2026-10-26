@@ -23,6 +23,7 @@ $classCount = 0
 $publicApiClassCount = 0
 $craftingStationForegroundRefmap = $null
 $openBlocksRestoreRefmap = $null
+$aeContainerRefmap = $null
 $productionPath = $null
 $developmentPath = $null
 try {
@@ -79,6 +80,54 @@ try {
             $openBlocksRestoreRefmap = @{mixin=$restoreMixin; selector=$restoreSelector; target=$restoreTarget; passed=$true}
         }
 
+        $aeMixin = 'dev/gilbe/dynamicinventory/mixins/appliedenergistics2/AeContainerMixin'
+        if ($entryNames.Contains("$aeMixin.class")) {
+            # This overrides a vanilla method. A missing refmap would pass development builds
+            # but fail to apply the opening/sync hook in an installed obfuscated pack.
+            $aeMap = $refmap.mappings.PSObject.Properties[$aeMixin]
+            $aeSelector = if ($null -ne $aeMap) { $aeMap.Value.PSObject.Properties['detectAndSendChanges'] } else { $null }
+            $aeTarget = 'Lappeng/container/AEBaseContainer;func_75142_b()V'
+            if ($null -eq $aeSelector -or [string]$aeSelector.Value -cne $aeTarget) {
+                throw "AE2 synchronization selector must map to $aeTarget."
+            }
+            $aeContainerRefmap = @{mixin=$aeMixin; selector='detectAndSendChanges'; target=$aeTarget; passed=$true}
+        }
+
+        # These client bridges also reference inherited vanilla names. Verify the shipped remaps,
+        # because development-only compilation does not prove an installed pack can apply them.
+        $aeClientMaps = @{
+            'AePatternTerminalGuiMixin' = @{
+                'drawScreen' = 'Lappeng/client/gui/implementations/GuiPatternTermEx;func_73863_a(IIF)V'
+                'Lappeng/client/gui/implementations/GuiPatternTerm;drawScreen(IIF)V' = 'Lappeng/client/gui/implementations/GuiPatternTerm;func_73863_a(IIF)V'
+            }
+            'AeGuiInputMixin' = @{
+                'drawScreen' = 'Lappeng/client/gui/AEBaseGui;func_73863_a(IIF)V'
+                'mouseClicked' = 'Lappeng/client/gui/AEBaseGui;func_73864_a(III)V'
+                'mouseClickMove' = 'Lappeng/client/gui/AEBaseGui;func_146273_a(IIIJ)V'
+                'handleMouseInput' = 'Lappeng/client/gui/AEBaseGui;func_146274_d()V'
+                'Lappeng/client/gui/AEBaseGui;guiLeft:I' = 'Lappeng/client/gui/AEBaseGui;field_147003_i:I'
+                'Lappeng/client/gui/AEBaseGui;guiTop:I' = 'Lappeng/client/gui/AEBaseGui;field_147009_r:I'
+            }
+            'AeSecurityGuiMixin' = @{
+                'initGui' = 'Lappeng/client/gui/implementations/GuiMEMonitorable;func_73866_w_()V'
+            }
+            'AeCellWorkbenchGuiMixin' = @{
+                'Lappeng/client/gui/implementations/GuiCellWorkbench;guiLeft:I' = 'Lappeng/client/gui/implementations/GuiCellWorkbench;field_147003_i:I'
+                'Lappeng/client/gui/implementations/GuiCellWorkbench;guiTop:I' = 'Lappeng/client/gui/implementations/GuiCellWorkbench;field_147009_r:I'
+            }
+        }
+        foreach ($aeClientName in $aeClientMaps.Keys) {
+            $aeClientMixin = "dev/gilbe/dynamicinventory/mixins/appliedenergistics2/$aeClientName"
+            if (!$entryNames.Contains("$aeClientMixin.class")) { continue }
+            $aeClientMap = $refmap.mappings.PSObject.Properties[$aeClientMixin]
+            foreach ($aeClientSelector in $aeClientMaps[$aeClientName].Keys) {
+                $aeClientMapped = if ($null -ne $aeClientMap) { $aeClientMap.Value.PSObject.Properties[$aeClientSelector] } else { $null }
+                if ($null -eq $aeClientMapped -or [string]$aeClientMapped.Value -cne $aeClientMaps[$aeClientName][$aeClientSelector]) {
+                    throw "AE2 client selector must be remapped: $aeClientName / $aeClientSelector."
+                }
+            }
+        }
+
         $pickBlockIncluded = $false
         foreach ($entry in $entries) {
             if (-not $entry.FullName.EndsWith('.class', [StringComparison]::Ordinal)) { continue }
@@ -132,6 +181,7 @@ try {
         pickBlockSlotMixinIncluded = $true
         craftingStationForegroundRefmap = $craftingStationForegroundRefmap
         openBlocksRestoreRefmap = $openBlocksRestoreRefmap
+        aeContainerRefmap = $aeContainerRefmap
         capturedAtUtc = [datetime]::UtcNow.ToString('o')
     }
     $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $evidenceFullPath -Encoding UTF8
@@ -152,6 +202,7 @@ try {
         nonJava8Classes = @($nonJava8Classes.ToArray())
         craftingStationForegroundRefmap = $craftingStationForegroundRefmap
         openBlocksRestoreRefmap = $openBlocksRestoreRefmap
+        aeContainerRefmap = $aeContainerRefmap
         failure = $_.Exception.Message
         capturedAtUtc = [datetime]::UtcNow.ToString('o')
     }

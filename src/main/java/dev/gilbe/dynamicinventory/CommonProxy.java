@@ -20,6 +20,8 @@ import dev.gilbe.dynamicinventory.inventory.InventoryCapacity;
 
 public class CommonProxy {
 
+    public void openInventoryController() {}
+
     /** Optional local viewer for actor-less widget factories. Server code should pass the owner explicitly. */
     public net.minecraft.entity.player.InventoryPlayer getClientInventory() {
         return null;
@@ -81,6 +83,7 @@ public class CommonProxy {
     public void postInit(FMLPostInitializationEvent event) {
         // Both client and server must replace Bogo's native ranges after its default compat initialization.
         if (PackCompatibility.enabled()) BogoInventoryCompatibility.initialize();
+        dev.gilbe.dynamicinventory.upgrades.UpgradeRecipes.register();
         BaselineDiagnostics.writeRuntimeManifest();
     }
 

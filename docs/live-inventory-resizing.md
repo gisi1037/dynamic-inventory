@@ -68,5 +68,8 @@ This runner seeds and clears disposable test inventories. It checks peer metadat
 and the dedicated fixture world before those operations. It covers two-player
 isolation, occupied shrink refusal, a resize with an external chest open, persistence,
 respawn, dimension travel, and the minimum/maximum capacities. Evidence defaults to
-`.setup/live-resize/runtime`. The runner records its actual checks and artifact identity locally. It does not
-claim every mod path or full-pack dedicated multiplayer acceptance.
+`.setup/live-resize/runtime`. The first RC-2 integration run passed 32 server report
+checks. Additional native/MUI2 reopen checks passed at 108 storage slots, including
+an item retained in newly added storage. Targeted checks have since passed in the
+actual RC-2 and pinned nightly packs; see the [pack test record](qualification/live-resize/README.md).
+That record does not claim every mod path or full-pack dedicated multiplayer acceptance.

@@ -15,6 +15,8 @@ public final class InventoryViewSettings {
     public static boolean compactNativePanels = false;
     public static boolean mui2Presentation = false;
     public static boolean automaticStorageScroll = true;
+    public static int terminalSmallRows = 3;
+    public static int terminalTallMinimumRows = 6;
     private static Configuration configuration;
 
     private InventoryViewSettings() {}
@@ -64,6 +66,20 @@ public final class InventoryViewSettings {
             true,
             "Use a compact scroll panel for simple drawing-only GUIs backed by an already integrated vanilla storage container.")
             .getBoolean(true);
+        terminalSmallRows = configuration.getInt(
+            "smallRows",
+            "ae2Terminal",
+            3,
+            3,
+            24,
+            "Fixed network-browser rows in AE2 Small mode; player rows scroll when necessary.");
+        terminalTallMinimumRows = configuration.getInt(
+            "tallMinimumRows",
+            "ae2Terminal",
+            6,
+            3,
+            24,
+            "Reserve at least this many browser rows in Tall mode when space permits, then fit player rows and expand the browser into remaining space.");
         if (legacyDefault && columns == 18 && rows == 3) {
             // Only migrate the original, unversioned default. Saved modern/custom
             // preferences remain the user's choice when the factory default changes.
@@ -105,6 +121,19 @@ public final class InventoryViewSettings {
         if (configuration != null) {
             configuration.get("layout", "compactNativePanels", false)
                 .set(compact);
+            configuration.save();
+        }
+    }
+
+    /** Global client preferences; a native terminal rebuilds its browser on its next opening. */
+    public static void setTerminalRows(int small, int tallMinimum) {
+        terminalSmallRows = Math.max(3, Math.min(24, small));
+        terminalTallMinimumRows = Math.max(3, Math.min(24, tallMinimum));
+        if (configuration != null) {
+            configuration.get("ae2Terminal", "smallRows", 3)
+                .set(terminalSmallRows);
+            configuration.get("ae2Terminal", "tallMinimumRows", 6)
+                .set(terminalTallMinimumRows);
             configuration.save();
         }
     }

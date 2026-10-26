@@ -24,6 +24,15 @@ import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 public class ClientProxy extends CommonProxy {
 
     @Override
+    public void openInventoryController() {
+        Minecraft client = Minecraft.getMinecraft();
+        if (client.currentScreen == null && client.thePlayer != null
+            && client.thePlayer.openContainer == client.thePlayer.inventoryContainer
+            && dev.gilbe.dynamicinventory.api.InventoryUi.isOpeningReady(client.thePlayer))
+            client.displayGuiScreen(new dev.gilbe.dynamicinventory.client.InventoryControllerScreen());
+    }
+
+    @Override
     public net.minecraft.entity.player.InventoryPlayer getClientInventory() {
         EntityPlayer player = Minecraft.getMinecraft().thePlayer;
         return player == null ? null : player.inventory;
@@ -48,6 +57,8 @@ public class ClientProxy extends CommonProxy {
         super.preInit(event);
         InventoryViewSettings.initialize(new File(event.getModConfigurationDirectory(), "dynamicinventory-client.cfg"));
         NativeLayoutPatches.initialize(new File(event.getModConfigurationDirectory(), "dynamicinventory/ui-layouts"));
+        dev.gilbe.dynamicinventory.client.PlayerPanelProfiles
+            .initialize(new File(event.getModConfigurationDirectory(), "dynamicinventory/player-panels.json"));
     }
 
     @Override
@@ -57,6 +68,7 @@ public class ClientProxy extends CommonProxy {
             Minecraft.getMinecraft()
                 .getResourceManager());
         MinecraftForge.EVENT_BUS.register(new PlayerInventoryEvents());
+        MinecraftForge.EVENT_BUS.register(new dev.gilbe.dynamicinventory.client.PanelSettingsOverlay());
         InventoryLayoutEditor editor = new InventoryLayoutEditor();
         MinecraftForge.EVENT_BUS.register(editor);
         FMLCommonHandler.instance()

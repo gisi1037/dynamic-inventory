@@ -86,12 +86,28 @@ public final class PackClientCompatibility {
         API.registerNEIGuiHandler(new INEIGuiHandler() {
 
             @Override
+            public boolean hideItemPanelSlot(GuiContainer gui, int x, int y, int width, int height) {
+                dev.gilbe.dynamicinventory.client.DetachedChestPanel panel = dev.gilbe.dynamicinventory.client.DetachedChestPanel
+                    .of(gui);
+                return panel != null && panel.excludes(x, y, width, height);
+            }
+
+            @Override
             public VisiblityData modifyVisiblity(GuiContainer gui, VisiblityData visibility) {
                 if (gui instanceof PlayerInventoryScreen screen && screen.layoutSettingsOpen())
                     visibility.showNEI = false;
+                if (dev.gilbe.dynamicinventory.client.PanelSettingsOverlay.isOpen(gui)) visibility.showNEI = false;
+                // Keep bookmark visibility. The scoped bounds hook retains an unobstructed native grid.
                 return visibility;
             }
         });
+    }
+
+    public static boolean neiDragging() {
+        return codechicken.nei.ItemPanels.itemPanel.draggedStack != null
+            || codechicken.nei.ItemPanels.bookmarkPanel.draggedStack != null
+            || codechicken.nei.ItemPanels.itemPanel.mouseDownSlot >= 0
+            || codechicken.nei.ItemPanels.bookmarkPanel.mouseDownSlot >= 0;
     }
 
     public static GuiButton baublesButton(int x, int y) {

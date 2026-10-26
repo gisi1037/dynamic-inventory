@@ -21,6 +21,43 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         // Subpackages organize integrations; these guards still control whether
         // their mixins load. Moving a class must never change its side/mod guard.
         List<String> mixins = new ArrayList<>();
+        if (loadedMods.contains("NotEnoughItems")
+            && OptionalInventoryAdapters.profileVersion("NotEnoughItems", "NotEnoughItems")
+            && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient())
+            mixins.addAll(Arrays.asList("nei.NeiPanelOverlapMixin", "nei.NeiBookmarkBoundsMixin"));
+        if (PackCompatibility.enabled() && loadedMods.contains("Forestry")
+            && OptionalInventoryAdapters.reviewedVersion("Forestry")) {
+            mixins.addAll(
+                Arrays.asList(
+                    "forestry.ForestrySlotUtilMixin",
+                    "forestry.ForestrySyncMixin",
+                    "forestry.ForestryOpeningActionsMixin"));
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient()) mixins.addAll(Arrays.asList("forestry.ForestryGuiMixin", "forestry.ForestryLedgerMixin"));
+        }
+        if (PackCompatibility.enabled() && loadedMods.contains("appliedenergistics2")
+            && OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial")) {
+            mixins.addAll(
+                Arrays.asList(
+                    "appliedenergistics2.AeContainerMixin",
+                    "appliedenergistics2.AeOpeningActionsMixin",
+                    "appliedenergistics2.AePlayerInventoryAdaptorMixin"));
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient())
+                mixins.addAll(
+                    Arrays.asList(
+                        "appliedenergistics2.AeGuiInputMixin",
+                        "appliedenergistics2.AeSecurityGuiMixin",
+                        "appliedenergistics2.AeCellWorkbenchGuiMixin",
+                        "appliedenergistics2.AeTerminalOriginMixin",
+                        "appliedenergistics2.AePatternTerminalGuiMixin",
+                        "appliedenergistics2.AeInterfaceTerminalGuiMixin",
+                        "appliedenergistics2.AeDiagnosticTerminalGuiMixin"));
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient() && loadedMods.contains("NotEnoughItems"))
+                mixins.add("appliedenergistics2.AeTerminalRecipeMixin");
+        }
         if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.addAll(
             Arrays.asList(
                 "bogosorter.BogoPlayerSlotsMixin",

@@ -108,10 +108,10 @@ public final class InventoryLayoutEditor {
 
     private static final class Overlay extends GuiScreen {
 
-        private static final int TOOL_WIDTH = 206, TOOL_HEIGHT = 210;
-        private static final int[][] PAGES = { { 0, 1, 2, 3, 4, 11 }, { 7, 8, 9, 10, 13 }, { 12, 16 }, { 5, 6 },
-            { 14, 15 } };
-        private static final String[] PAGE_NAMES = { "Layout", "Sections", "Style", "Advanced", "Screen" };
+        private static final int TOOL_WIDTH = 206, TOOL_HEIGHT = 230;
+        private static final int[][] PAGES = { { 0, 1, 2, 3, 4, 11 }, { 7, 8, 9, 10, 13 }, { 12, 16, 18, 19 },
+            { 5, 6, 17 }, { 14, 15 }, { 20, 21, 22, 23, 24, 25 } };
+        private static final String[] PAGE_NAMES = { "Layout", "Sections", "Style", "Advanced", "Screen", "Widgets" };
         private static final String[] DRAG_NAMES = { "Panel", "Player", "Native" };
         private final GuiContainer host;
         private final Container container;
@@ -167,50 +167,57 @@ public final class InventoryLayoutEditor {
             mode.enabled = canEdit() && InventoryUi.findLayout(container, host.getClass())
                 .followsMachineMode();
             buttonList.add(mode);
-            int labelWidth = 0;
-            for (String name : PAGE_NAMES) labelWidth += fontRendererObj.getStringWidth(name);
-            int tabX = toolX + 6;
-            int tabPadding = Math.max(2, (TOOL_WIDTH - 12 - labelWidth) / PAGE_NAMES.length);
+            // Two rows keep all six page labels readable at the existing toolbar width.
+            int tabWidth = (TOOL_WIDTH - 12) / 3;
             for (int tab = 0; tab < PAGE_NAMES.length; tab++) {
-                int tabWidth = fontRendererObj.getStringWidth(PAGE_NAMES[tab]) + tabPadding;
-                GuiButton button = new GuiButton(110 + tab, tabX, toolY + 32, tabWidth - 1, 18, PAGE_NAMES[tab]);
+                GuiButton button = new GuiButton(
+                    110 + tab,
+                    toolX + 6 + tab % 3 * tabWidth,
+                    toolY + 32 + tab / 3 * 18,
+                    tabWidth - 1,
+                    18,
+                    PAGE_NAMES[tab]);
                 button.enabled = tab != page;
                 buttonList.add(button);
-                tabX += tabWidth;
             }
             for (int row = 0; row < PAGES[page].length; row++) {
                 int field = PAGES[page][row];
-                GuiButton minus = new GuiButton(field * 2, toolX + 153, toolY + 54 + row * 18, 22, 18, "-");
-                GuiButton plus = new GuiButton(field * 2 + 1, toolX + 178, toolY + 54 + row * 18, 22, 18, "+");
+                GuiButton minus = new GuiButton(field * 2, toolX + 153, toolY + 74 + row * 18, 22, 18, "-");
+                GuiButton plus = new GuiButton(field * 2 + 1, toolX + 178, toolY + 74 + row * 18, 22, 18, "+");
                 minus.enabled = fieldEnabled(panel, field)
                     && (field != 5 || patch.value(5) > panel.nativeHeaderBoundary())
-                    && (field < 14 || patch.value(field) > 0);
+                    && patch.canAdjust(field, -1);
                 plus.enabled = fieldEnabled(panel, field) && (field != 1
                     || InventoryUi.findLayout(container, host.getClass())
                         .getMaximumVisibleRows() == 0
                     || patch.value(1) < InventoryUi.findLayout(container, host.getClass())
                         .getMaximumVisibleRows())
-                    && (field < 14 || patch.value(field) < (field == 16 ? 6 : 128));
+                    && patch.canAdjust(field, 1);
                 buttonList.add(minus);
                 buttonList.add(plus);
             }
-            buttonList.add(new GuiButton(105, toolX + 6, toolY + 164, 96, 18, "Drag: " + DRAG_NAMES[dragTarget]));
-            buttonList.add(new GuiButton(102, toolX + 106, toolY + 164, 94, 18, "Preview (F10)"));
-            buttonList.add(new GuiButton(100, toolX + 6, toolY + 186, 61, 18, "Save"));
-            buttonList.add(new GuiButton(101, toolX + 72, toolY + 186, 61, 18, "Cancel"));
-            buttonList.add(new GuiButton(103, toolX + 138, toolY + 186, 62, 18, "Reset"));
+            buttonList.add(new GuiButton(105, toolX + 6, toolY + 184, 96, 18, "Drag: " + DRAG_NAMES[dragTarget]));
+            buttonList.add(new GuiButton(102, toolX + 106, toolY + 184, 94, 18, "Preview (F10)"));
+            buttonList.add(new GuiButton(100, toolX + 6, toolY + 206, 61, 18, "Save"));
+            buttonList.add(new GuiButton(101, toolX + 72, toolY + 206, 61, 18, "Cancel"));
+            buttonList.add(new GuiButton(103, toolX + 138, toolY + 206, 62, 18, "Reset"));
         }
 
         private boolean fieldEnabled(NativeInventoryPanel panel, int field) {
             if (panel == null) return false;
+            if (field >= 20) return panel.hasEditableWidgets(field);
             if (field == 0) return InventoryUi.findLayout(container, host.getClass())
                 .getFixedPlayerColumns() == 0;
             if (field == 1) return !InventoryUi.findLayout(container, host.getClass())
                 .followsMachineMode();
-            if (field == 16) return patch.value(12) != 0;
+            if (field == 16 || field == 18 || field == 19) {
+                boolean unified = patch.value(12) != 0 || panel.hasSeparateSidePanels();
+                return unified && (field != 19 || patch.value(12) != 1);
+            }
             if (field == 13) return panel.hasAttachedChest();
             if (panel.hasAttachedChest() && (field == 4 || field == 5 || field == 9 || field == 10)) return false;
             return field != 6 || panel.hasAttachedChest()
+                || panel.hasSeparateSidePanels()
                 || !InventoryViewSettings.compactNativePanels
                 || patch.value(12) != 0;
         }
@@ -220,13 +227,19 @@ public final class InventoryLayoutEditor {
                 return "Rows follow the mode above. Mode previews do not change the global machine setting.";
             if (field == 0 && !fieldEnabled(panel, field))
                 return "This host keeps fixed columns; resize vertically or scroll to preserve item positions.";
-            if (field == 16 && patch.value(12) == 0)
+            if (field == 16 && patch.value(12) == 0 && !panel.hasSeparateSidePanels())
                 return "Choose a unified style; Original uses the resource-pack border.";
+            if (field >= 20) return fieldEnabled(panel, field)
+                ? "Move this AE2 button group; negative values move left/up. Shift +/- moves eight pixels."
+                : "This screen has no supported buttons in this widget group.";
             if (!fieldEnabled(panel, field)) return "This control is owned by the split/compact frame adapter.";
             if (field == 16) return "Border thickness in pixels; 0 keeps the fill without a border.";
+            if (field == 18) return "Inset all unified frame edges by 0-8 pixels; slots stay fixed.";
+            if (field == 19) return "Cut beveled corners by 0-8 pixels, independently of border width. Default: 2.";
             if (field == 5)
                 return "Minimum only; measured header: " + panel.nativeHeaderBoundary() + " px. Use gap to tighten.";
             if (field == 6) return "Crop native frame edges, including custom-drawn chest textures.";
+            if (field == 17) return "Crop the player-section background edges; slots and click positions stay fixed.";
             if (field == 11) return "-1: automatic. 0: no extra spacing after the native section.";
             if (field == 13) return "Space between player and content sections; stacks vertically on small screens.";
             if (field == 14 || field == 15) return "Reserve viewport space; fewer visible rows may need scrolling.";
@@ -267,15 +280,15 @@ public final class InventoryLayoutEditor {
                     fontRendererObj.drawString(
                         NativeLayoutPatch.LABELS[field] + ": " + value,
                         toolX + 6,
-                        toolY + 59 + row * 18,
+                        toolY + 79 + row * 18,
                         fieldEnabled(panel, field) ? 0xFFFFFF : 0x777777);
                 }
             }
             String explanation = status;
             if (controls && mouseX >= toolX + 113 && mouseX < toolX + 200 && mouseY >= toolY + 4 && mouseY < toolY + 18)
                 explanation = "Preview Vertical/Scroll; Save keeps layout edits, not this temporary mode.";
-            if (controls && mouseX >= toolX && mouseX < toolX + TOOL_WIDTH && mouseY >= toolY + 54) {
-                int row = (mouseY - toolY - 54) / 18;
+            if (controls && mouseX >= toolX && mouseX < toolX + TOOL_WIDTH && mouseY >= toolY + 74) {
+                int row = (mouseY - toolY - 74) / 18;
                 if (row < PAGES[page].length) explanation = hint(PAGES[page][row], current);
             }
             drawRect(0, height - 23, width, height, 0xD0222222);

@@ -54,4 +54,4 @@ Verify dense contents across 127/128 and the configured upper capacity, typed NB
 armor/offhand origins, death, saved-world reload and native reclaim. Test matching
 and mismatched backup sizes separately. The current backup guard refuses raw API
 sizes above 128; successful grave recovery does not qualify large backup restores.
-Retain exact-version runtime evidence locally when qualifying this integration.
+See [current evidence and limits](../qualification/compatibility-gaps/README.md).

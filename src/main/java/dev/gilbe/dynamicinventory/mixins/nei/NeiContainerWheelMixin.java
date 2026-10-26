@@ -16,6 +16,8 @@ public abstract class NeiContainerWheelMixin extends GuiScreen {
 
     @Inject(method = { "handleMouseInput", "func_146274_d" }, at = @At("HEAD"), cancellable = true, remap = false)
     private void dynamicinventory$wheel(CallbackInfo ci) {
-        if (NativeInventoryPanel.handleWheel(this)) ci.cancel();
+        if (dev.gilbe.dynamicinventory.client.PanelSettingsOverlay.handleMouse(this)
+            || NativeInventoryPanel.handlePointer(this)
+            || NativeInventoryPanel.handleWheel(this)) ci.cancel();
     }
 }

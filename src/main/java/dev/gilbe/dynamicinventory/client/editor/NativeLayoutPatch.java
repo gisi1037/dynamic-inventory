@@ -12,20 +12,24 @@ import dev.gilbe.dynamicinventory.api.NativeUiLayout;
 public final class NativeLayoutPatch {
 
     public static final String[] LABELS = { "Columns", "Visible rows", "Panel X", "Panel Y", "Top padding",
-        "Minimum header", "Texture crop", "Player X", "Player Y", "Native X", "Native Y", "Section gap", "Frame style",
-        "Content gap", "Top margin", "Bottom margin", "Border width" };
+        "Minimum header", "Native texture crop", "Player X", "Player Y", "Native X", "Native Y", "Section gap",
+        "Frame style", "Content gap", "Top margin", "Bottom margin", "Border width", "Player texture crop",
+        "Frame crop", "Corner crop", "Config X", "Config Y", "Controls X", "Controls Y", "Pins X", "Pins Y" };
     private static final String[] KEYS = { "columns", "visibleRows", "offsetX", "offsetY", "topPadding",
         "minimumHeaderHeight", "backgroundInset", "playerOffsetX", "playerOffsetY", "nativeOffsetX", "nativeOffsetY",
-        "sectionGap", "frameStyle", "contentGap", "screenTopMargin", "screenBottomMargin", "borderWidth" };
-    private static final int[] MIN = { 3, 1, -4096, -4096, 0, 0, 0, -4096, -4096, -4096, -4096, -1, 0, 0, 0, 0, 0 };
+        "sectionGap", "frameStyle", "contentGap", "screenTopMargin", "screenBottomMargin", "borderWidth",
+        "playerBackgroundInset", "frameCrop", "cornerCrop", "configOffsetX", "configOffsetY", "controlsOffsetX",
+        "controlsOffsetY", "pinsOffsetX", "pinsOffsetY" };
+    private static final int[] MIN = { 3, 1, -4096, -4096, 0, 0, 0, -4096, -4096, -4096, -4096, -1, 0, 0, 0, 0, 0, 0, 0,
+        0, -4096, -4096, -4096, -4096, -4096, -4096 };
     private static final int[] MAX = { 18, 12, 4096, 4096, 4096, 4096, 8, 4096, 4096, 4096, 4096, 128, 2, 128, 128, 128,
-        6 };
+        6, 8, 8, 8, 4096, 4096, 4096, 4096, 4096, 4096 };
     private final int[] values;
 
     public NativeLayoutPatch(int columns, int rows, int x, int y, NativeUiLayout hints) {
         this(
             new int[] { columns, rows, x, y, hints.getTopPadding(), hints.getMinimumHeaderHeight(),
-                hints.getBackgroundInset(), 0, 0, 0, 0, -1, 0, 8, 8, 28, 2 });
+                hints.getBackgroundInset(), 0, 0, 0, 0, -1, 2, 8, 8, 28, 3, 0, 0, 2, 0, 0, 0, 0, 0, 0 });
     }
 
     private NativeLayoutPatch(int[] values) {
@@ -38,6 +42,10 @@ public final class NativeLayoutPatch {
 
     public int value(int field) {
         return values[field];
+    }
+
+    public boolean canAdjust(int field, int delta) {
+        return delta < 0 ? values[field] > MIN[field] : values[field] < MAX[field];
     }
 
     public NativeLayoutPatch adjust(int field, int delta) {
@@ -73,6 +81,7 @@ public final class NativeLayoutPatch {
         values[14] = 8;
         values[15] = 28;
         values[16] = 2;
+        values[19] = 2;
         for (int i = 0; i < KEYS.length; i++) {
             JsonElement value = json.get(KEYS[i]);
             if (value == null && i >= 7) continue;

@@ -9,6 +9,8 @@ import dev.gilbe.dynamicinventory.client.InventoryViewportLayout;
 import dev.gilbe.dynamicinventory.client.NativeSectionGeometry;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
+import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
+import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsWidgets;
 
 /** Focused, headless checks for editor input files and live chest resize budgets. No world is needed. */
 public final class NativeEditorFixtures {
@@ -16,7 +18,21 @@ public final class NativeEditorFixtures {
     private NativeEditorFixtures() {}
 
     public static void main(String[] args) {
+        PlayerPanelFixtures.run();
+        ResourcePackPanelFixtures.run();
         AutomaticScrollFixtures.main(args);
+        check(
+            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(373, 153, 8, true, 3, 6) == 3,
+            "Small terminal reserves its fixed browser rows");
+        check(
+            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(373, 153, 8, false, 3, 6) == 6,
+            "Tall terminal minimum takes priority over full player inventory");
+        check(
+            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(504, 153, 8, false, 3, 6) == 11,
+            "Tall terminal fills remaining space once all player rows fit");
+        check(
+            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(243, 153, 8, false, 3, 6) == 4,
+            "Short viewport relaxes browser minimum before hiding the last player row");
         check(NativeUiLayout.DEFAULT.getPresentationRevision() == 1, "default presentation revision");
         check(
             NativeUiLayout.builder()
@@ -74,7 +90,7 @@ public final class NativeEditorFixtures {
         target.addProperty("presentationRevision", 1);
         target.addProperty("ordinarySlotCount", 81);
         JsonObject root = new JsonObject();
-        root.addProperty("schemaVersion", 5);
+        root.addProperty("schemaVersion", 9);
         root.add("target", target);
         root.add("layout", original.toJson());
         check(
@@ -118,7 +134,7 @@ public final class NativeEditorFixtures {
         JsonObject wrongCapacity = copy(target);
         wrongCapacity.addProperty("ordinarySlotCount", 90);
         rejects(() -> NativeLayoutPatches.decodeLegacy(oldRoot, wrongCapacity, 63), "legacy capacity change");
-        for (String schema : new String[] { "6", "1.0", "\"1\"", "null" }) {
+        for (String schema : new String[] { "10", "1.0", "\"1\"", "null" }) {
             JsonObject bad = copy(root);
             bad.add("schemaVersion", new JsonParser().parse(schema));
             rejects(() -> NativeLayoutPatches.decode(bad, target), "schema " + schema);
@@ -141,7 +157,7 @@ public final class NativeEditorFixtures {
             NativeLayoutPatch.fromJson(named)
                 .value(12) == 0
                 && NativeLayoutPatch.fromJson(named)
-                    .value(16) == 5,
+                    .value(16) == 6,
             "missing optional field keeps later named settings");
         check(
             original.adjust(2, Integer.MAX_VALUE)
@@ -249,17 +265,149 @@ public final class NativeEditorFixtures {
         for (int border = 0; border <= 6; border++) {
             check(
                 NativeLayoutPatch.fromJson(
-                    original.adjust(16, border - 2)
+                    original.adjust(16, border - 3)
                         .toJson())
                     .value(16) == border,
                 "border width persists: " + border);
         }
         check(
-            original.value(16) == 2 && original.adjust(16, Integer.MAX_VALUE)
-                .value(16) == 6
+            original.value(12) == 2 && original.value(19) == 2
+                && original.value(16) == 3
+                && original.adjust(16, Integer.MAX_VALUE)
+                    .value(16) == 6
                 && original.adjust(16, Integer.MIN_VALUE)
                     .value(16) == 0,
-            "border previews are immutable and bounded");
+            "unified bevel defaults to corner crop two and border three; border previews stay immutable and bounded");
+        JsonObject beforePlayerCrop = original.toJson();
+        for (String key : new String[] { "configOffsetX", "configOffsetY", "controlsOffsetX", "controlsOffsetY" })
+            beforePlayerCrop.remove(key);
+        for (String key : new String[] { "frameCrop", "cornerCrop" }) beforePlayerCrop.remove(key);
+        beforePlayerCrop.remove("playerBackgroundInset");
+        check(
+            NativeLayoutPatch.fromJson(beforePlayerCrop)
+                .value(17) == 0,
+            "older layouts retain an uncropped player background");
+        NativeLayoutPatch migratedFrame = NativeLayoutPatch.fromJson(beforePlayerCrop);
+        check(
+            migratedFrame.value(18) == 0 && migratedFrame.value(19) == 2,
+            "older layouts default to full-size frames with two-pixel corners");
+        for (int schema = 1; schema <= 8; schema++) {
+            JsonObject old = copy(root);
+            old.addProperty("schemaVersion", schema);
+            old.add("layout", beforePlayerCrop);
+            check(
+                NativeLayoutPatches.decode(old, target)
+                    .value(19) == 2,
+                "frame migration schema " + schema);
+            check(
+                NativeLayoutPatches.decode(old, target)
+                    .value(20) == 0
+                    && NativeLayoutPatches.decode(old, target)
+                        .value(23) == 0,
+                "old widget offsets default to zero " + schema);
+        }
+        String[] widgetKeys = { "configOffsetX", "configOffsetY", "controlsOffsetX", "controlsOffsetY", "pinsOffsetX",
+            "pinsOffsetY" };
+        for (int field = 20; field <= 25; field++) {
+            NativeLayoutPatch moved = original.adjust(field, -23);
+            check(
+                NativeLayoutPatch.fromJson(moved.toJson())
+                    .value(field) == -23 && original.value(field) == 0,
+                "widget offsets persist without mutating prior previews " + field);
+            check(
+                original.canAdjust(field, -1) && original.canAdjust(field, 1)
+                    && !original.adjust(field, Integer.MIN_VALUE)
+                        .canAdjust(field, -1)
+                    && !original.adjust(field, Integer.MAX_VALUE)
+                        .canAdjust(field, 1),
+                "widget controls allow both directions and respect bounds " + field);
+            for (String number : new String[] { "-4097", "4097", "1.5", "\"4\"", "null" }) {
+                JsonObject bad = original.toJson();
+                bad.add(widgetKeys[field - 20], new JsonParser().parse(number));
+                rejects(() -> NativeLayoutPatch.fromJson(bad), "widget offset " + field + " " + number);
+            }
+        }
+        String drive = "appeng.client.gui.implementations.GuiDrive";
+        JsonObject beforePins = original.toJson();
+        beforePins.remove("pinsOffsetX");
+        beforePins.remove("pinsOffsetY");
+        check(
+            NativeLayoutPatch.fromJson(beforePins)
+                .value(24) == 0
+                && NativeLayoutPatch.fromJson(beforePins)
+                    .value(25) == 0,
+            "existing layouts retain neutral independent pin offsets");
+        check(
+            AppliedEnergisticsBackground
+                .headerBottom("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal", 167) == 126
+                && AppliedEnergisticsBackground
+                    .mainSheetWidth("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal", 208) == 195,
+            "diagnostic frame excludes the old transparent strip and stepped player cap");
+        check(
+            AppliedEnergisticsWidgets.offsetField(drive, "appeng.client.gui.widgets.GuiTabButton") == 20
+                && AppliedEnergisticsWidgets.offsetField(drive, "appeng.client.gui.widgets.GuiImgButton") == 22
+                && AppliedEnergisticsWidgets.offsetField(drive, "appeng.client.gui.widgets.GuiProgressBar") == -1
+                && AppliedEnergisticsWidgets.offsetField("example.GuiMachine", "appeng.client.gui.widgets.GuiImgButton")
+                    == -1,
+            "only reviewed AE2 button groups can move independently");
+        check(
+            AppliedEnergisticsWidgets.offsetField(
+                "appeng.client.gui.implementations.GuiInterface",
+                "appeng.client.gui.widgets.GuiToggleButton") == 22,
+            "interface toggles move with the other native controls");
+        for (String gui : new String[] { "CellWorkbench", "Interface" }) {
+            String name = "appeng.client.gui.implementations.Gui" + gui;
+            int bottom = AppliedEnergisticsBackground.minimumContentBottom(name);
+            check(
+                AppliedEnergisticsBackground.hasSidePanels(name)
+                    && NativeSectionGeometry.playerBoundary(165, 0, bottom, 0) > bottom,
+                "zero section gap still reserves virtual/optional content for " + gui);
+        }
+        for (int field : new int[] { 18, 19 }) {
+            check(
+                NativeLayoutPatch.fromJson(
+                    original.adjust(field, 2)
+                        .toJson())
+                    .value(field) == original.value(field) + 2,
+                "frame control persists " + field);
+            String key = field == 18 ? "frameCrop" : "cornerCrop";
+            for (String number : new String[] { "-1", "9", "1.5", "\"4\"", "null" }) {
+                JsonObject bad = original.toJson();
+                bad.add(key, new JsonParser().parse(number));
+                rejects(() -> NativeLayoutPatch.fromJson(bad), key + " " + number);
+            }
+        }
+        // The real Advanced Inscriber call is 176px wide, while its toolbox GUI is 246px.
+        // Texture and frame-hole bounds must agree at every crop, or the world shows through.
+        for (int crop = 0; crop <= 8; crop++) for (int width : new int[] { 176, 177 }) {
+            int[] rect = AppliedEnergisticsBackground.clip(
+                "appeng.client.gui.implementations.GuiAdvancedInscriber",
+                303,
+                77,
+                246,
+                176,
+                90,
+                crop,
+                303,
+                77,
+                0,
+                0,
+                width,
+                176);
+            check(
+                rect != null && rect[0] + rect[4] == 303 + AppliedEnergisticsBackground.mainContentRight(crop),
+                "AE2 frame hole matches native texture edge " + crop + "/" + width);
+        }
+        NativeLayoutPatch playerCrop = original.adjust(17, 4);
+        check(
+            NativeLayoutPatch.fromJson(playerCrop.toJson())
+                .value(17) == 4 && playerCrop.value(6) == original.value(6),
+            "player crop persists independently of native crop");
+        for (String number : new String[] { "-1", "9", "1.5", "\"4\"", "null" }) {
+            JsonObject bad = original.toJson();
+            bad.add("playerBackgroundInset", new JsonParser().parse(number));
+            rejects(() -> NativeLayoutPatch.fromJson(bad), "player crop " + number);
+        }
         for (String number : new String[] { "-1", "7", "1.5", "1e1", "2147483650", "\"2\"", "null", "{}" }) {
             JsonObject bad = original.toJson();
             bad.add("borderWidth", new JsonParser().parse(number));

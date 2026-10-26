@@ -16,5 +16,7 @@ public interface ContainerPanelAccess {
 
     int dynamicinventory$top();
 
+    boolean dynamicinventory$draggingItems();
+
     void dynamicinventory$bounds(int width, int height, int left, int top);
 }
