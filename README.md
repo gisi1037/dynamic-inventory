@@ -11,13 +11,14 @@ the slot map before releasing contents or input. Client layout preferences chang
 presentation without creating another inventory.
 
 An **Inventory Capacity Module** permanently adds storage. Optional Baubles belts
-at LV, HV, IV, ZPM and UHV provide configurable temporary bonuses. A reusable UHV
-controller can set an exact safe storage size. Provisional GTNH recipes and item
+at LV, HV, IV and ZPM provide configurable temporary bonuses. The UHV Creative
+Belt can set an exact safe storage size. Provisional GTNH recipes and item
 textures are included; occupied slots are never discarded when removing capacity.
-See [inventory upgrades](docs/inventory-upgrades.md).
+See [inventory upgrades](docs/inventory-upgrades.md) and the [changelog](CHANGELOG.md).
 
-The player inventory and single vanilla chest support named, movable and resizable
-inventory panels with global defaults and interface geometry profiles. Attached
+The player inventory and all eleven vanilla container families support named,
+movable and resizable inventory panels with global defaults, named profiles and
+per-interface overrides. Reserved hotbar rows can be swapped by direct or cycle keys. Attached
 layout stays the default. Existing resource-pack textures are retained for slots
 and available for Original frames. See [inventory panels](docs/inventory-panels.md)
 and [resource packs](docs/glass-ui-integration.md).
@@ -30,8 +31,8 @@ The in-game editor adjusts presentation, not item ownership or compatibility rul
 
 ## Download and install
 
-The first testing release is [0.8.0-alpha.1](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.1).
-Install **`dynamicinventory-0.8.0-alpha.1.jar`** in the `mods` folder on both client
+The current testing release is [0.8.0-alpha.2](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.2).
+Install **`dynamicinventory-0.8.0-alpha.2.jar`** in the `mods` folder on both client
 and server, replacing any older Dynamic Inventory JAR. The `-dev` and `-sources`
 JARs are developer downloads; do not install those in Minecraft. Back up your save
 and try this experimental release in a disposable world first.

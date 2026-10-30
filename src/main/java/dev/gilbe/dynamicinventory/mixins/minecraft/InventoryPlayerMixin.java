@@ -48,11 +48,15 @@ public class InventoryPlayerMixin implements ExpandedInventoryAccess {
 
     @Inject(method = "getFirstEmptyStack", at = @At("RETURN"), cancellable = true, order = 2000)
     private void dynamicinventory$findOrdinaryEmpty(CallbackInfoReturnable<Integer> cir) {
-        if (!BackhandCompatibility.enabled() || cir.getReturnValue() != -1) return;
+        InventoryPlayer inventory = (InventoryPlayer) (Object) this;
+        boolean reserved = cir.getReturnValue() >= 0
+            && dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, cir.getReturnValue());
+        if (!reserved && (!BackhandCompatibility.enabled() || cir.getReturnValue() != -1)) return;
         // Backhand rejects an empty offhand when automatic pickup is disabled. Skip
         // equipment first, so that rejection cannot hide free ordinary slots after it.
         for (int ordinary = 0; ordinary < dynamicinventory$shape.mainSlots(); ordinary++) {
             int raw = dynamicinventory$shape.rawIndex(ordinary);
+            if (dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, raw)) continue;
             if (mainInventory[raw] == null) {
                 cir.setReturnValue(raw);
                 return;
@@ -60,6 +64,28 @@ public class InventoryPlayerMixin implements ExpandedInventoryAccess {
         }
         // Keep Backhand's own result when no ordinary space remains, including its
         // configured offhand-pickup behavior. No copied configuration policy is needed.
+        if (reserved) cir.setReturnValue(-1);
+    }
+
+    @Inject(method = "storeItemStack", at = @At("RETURN"), cancellable = true, order = 2000)
+    private void dynamicinventory$skipReservedMerge(ItemStack source, CallbackInfoReturnable<Integer> cir) {
+        InventoryPlayer inventory = (InventoryPlayer) (Object) this;
+        if (cir.getReturnValue() < 0
+            || !dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, cir.getReturnValue())) return;
+        for (int ordinary = 0; ordinary < dynamicinventory$shape.mainSlots(); ordinary++) {
+            int raw = dynamicinventory$shape.rawIndex(ordinary);
+            if (dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, raw)) continue;
+            ItemStack existing = mainInventory[raw];
+            if (existing != null && existing.getItem() == source.getItem()
+                && existing.isStackable()
+                && existing.stackSize < Math.min(existing.getMaxStackSize(), inventory.getInventoryStackLimit())
+                && (!source.getHasSubtypes() || source.getItemDamage() == existing.getItemDamage())
+                && ItemStack.areItemStackTagsEqual(existing, source)) {
+                cir.setReturnValue(raw);
+                return;
+            }
+        }
+        cir.setReturnValue(-1);
     }
 
     @Inject(method = "writeToNBT", at = @At("HEAD"), cancellable = true)

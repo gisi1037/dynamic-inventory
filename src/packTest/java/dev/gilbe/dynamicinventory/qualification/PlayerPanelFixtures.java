@@ -22,7 +22,9 @@ public final class PlayerPanelFixtures {
 
     public static void run() {
         geometry();
+        PanelDragGeometryFixtures.run();
         allocations();
+        shiftResize();
         neiMasks();
         try {
             profilesAndResets();
@@ -34,7 +36,48 @@ public final class PlayerPanelFixtures {
     }
 
     private static void geometry() {
+        check(
+            InventoryPanelLayout.rowOffset(0, 20, 9) == 0 && InventoryPanelLayout.rowOffset(17, 20, 9) == 0,
+            "full storage rows keep their grid alignment");
+        check(
+            InventoryPanelLayout.rowOffset(18, 20, 9) == 63 && InventoryPanelLayout.rowOffset(19, 20, 9) == 63,
+            "partial final row shares one centered inset when visible or scrolled into view");
+        check(
+            InventoryPanelLayout.rowOffset(0, 1, 9) == 72 && InventoryPanelLayout.rowOffset(22, 23, 10) == 63,
+            "single-slot and odd-width remaining rows center without a left bias");
         Rect fullScreen = new Rect(0, 8, 640, 324);
+        InventoryPanelLayout narrow = InventoryPanelLayout
+            .fit(new Rect(0, 8, 34, 80), fullScreen, java.util.Collections.emptyList(), 18, 8, false);
+        check(
+            narrow != null && narrow.columns == 1 && narrow.bounds.width == 34,
+            "satellite panels can be one column wide");
+        Rect dragStart = new Rect(0, 130, 178, 80), obstacle = new Rect(240, 80, 100, 180);
+        Rect stopped = InventoryPanelLayout.constrainGesture(
+            dragStart,
+            new Rect(450, 130, 178, 80),
+            fullScreen,
+            java.util.Collections.singletonList(obstacle),
+            178,
+            64);
+        check(
+            stopped.right() == obstacle.x - 1 && stopped.y == dragStart.y,
+            "fast drag stops at machine edge without jumping across it");
+        Rect resized = InventoryPanelLayout.constrainGesture(
+            dragStart,
+            new Rect(0, 130, 300, 80),
+            fullScreen,
+            java.util.Collections.singletonList(obstacle),
+            178,
+            64);
+        check(resized.right() == obstacle.x - 1, "resize stops at machine edge");
+        Rect free = InventoryPanelLayout.constrainGesture(
+            dragStart,
+            new Rect(100, 220, 178, 80),
+            fullScreen,
+            java.util.Collections.emptyList(),
+            178,
+            64);
+        check(free.x == 100 && free.y == 220, "unobstructed drag reaches requested position");
         for (int pixels = 0; pixels <= 36; pixels++) {
             Rect requested = new Rect(0, 8, 178 + pixels, 64 + pixels);
             InventoryPanelLayout smooth = InventoryPanelLayout.fit(requested, fullScreen, null, 72);
@@ -111,12 +154,30 @@ public final class PlayerPanelFixtures {
         JsonObject unknown = preferred.toJson();
         unknown.addProperty("unexpected", 1);
         rejects(() -> PlayerPanelProfile.fromJson(unknown), "unknown profile fields rejected");
+        PlayerPanelProfile hidden = preferred.visible(false)
+            .withBounds(188, 100, 0, 5000)
+            .withAppearance(2, 2, 0, 2)
+            .atBounds(new Rect(0, 8, 188, 100), fullScreen)
+            .detached(true);
+        check(
+            !PlayerPanelProfile.fromJson(hidden.toJson()).visible,
+            "geometry and appearance edits preserve visibility");
+        JsonObject oldProfile = hidden.toJson();
+        oldProfile.remove("visible");
+        check(PlayerPanelProfile.fromJson(oldProfile).visible, "legacy panels remain visible");
     }
 
     private static void allocations() {
         dev.gilbe.dynamicinventory.client.PlayerPanelSet set = dev.gilbe.dynamicinventory.client.PlayerPanelSet.DEFAULT
             .add()
             .add();
+        check(
+            set.entries.get(1).name.equals("Panel 1") && set.entries.get(2).name.equals("Panel 2"),
+            "panel names count satellites rather than Main");
+        check(
+            set.remove(set.entries.get(1).id)
+                .add().entries.get(2).name.equals("Panel 1"),
+            "new panel reuses the first available default name");
         set = set.allocate(new int[] { 36, 18, 18 }, 72);
         String a = set.entries.get(1).id, b = set.entries.get(2).id;
         java.util.List<Integer> stable = set.members(b, 72);
@@ -170,6 +231,51 @@ public final class PlayerPanelFixtures {
             "bookmarks shrink in width instead of disappearing");
     }
 
+    private static void shiftResize() {
+        dev.gilbe.dynamicinventory.client.PlayerPanelSet initial = dev.gilbe.dynamicinventory.client.PlayerPanelSet.DEFAULT
+            .add()
+            .add()
+            .allocate(new int[] { 54, 9, 9 }, 72);
+        String side = initial.entries.get(1).id, other = initial.entries.get(2).id;
+        java.util.List<Integer> original = initial.members(side, 72), untouched = initial.members(other, 72);
+        for (boolean row : new boolean[] { false, true }) for (boolean left : new boolean[] { false, true }) {
+            dev.gilbe.dynamicinventory.client.PlayerPanelSet grown = initial.resizeGrid(side, 3, row, 1, left, 72);
+            check(
+                grown.members(side, 72)
+                    .size() == 12
+                    && grown.members("main", 72)
+                        .size() == 51
+                    && grown.members(other, 72)
+                        .equals(untouched),
+                "Shift resize borrows from Main without changing another panel");
+            if (!row) for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) check(
+                grown.members(side, 72)
+                    .get(r * 4 + c + (left ? 1 : 0))
+                    .equals(original.get(r * 3 + c)),
+                "column growth preserves existing rows");
+            dev.gilbe.dynamicinventory.client.PlayerPanelSet restored = grown
+                .resizeGrid(side, row ? 3 : 4, row, -1, left, 72);
+            check(
+                restored.members(side, 72)
+                    .equals(original)
+                    && restored.members("main", 72)
+                        .size() == 54,
+                "decreasing returns the added row or column to Main");
+        }
+        dev.gilbe.dynamicinventory.client.PlayerPanelSet single = initial.allocate(new int[] { 62, 1, 9 }, 72);
+        rejects(() -> single.resizeGrid(side, 1, true, -1, false, 72), "one-row minimum");
+        rejects(() -> single.resizeGrid(side, 1, false, -1, false, 72), "one-column minimum");
+        dev.gilbe.dynamicinventory.client.PlayerPanelSet full = initial.allocate(new int[] { 0, 36, 36 }, 72);
+        rejects(() -> full.resizeGrid(side, 6, false, 1, false, 72), "cannot borrow unavailable Main slots");
+        dev.gilbe.dynamicinventory.client.PlayerPanelSet partial = initial.allocate(new int[] { 55, 8, 9 }, 72)
+            .resizeGrid(side, 3, false, 1, false, 72);
+        Set<Integer> all = new HashSet<>();
+        for (dev.gilbe.dynamicinventory.client.PlayerPanelSet.Entry entry : partial.entries)
+            for (int index : partial.members(entry.id, 72))
+                check(all.add(index), "partial final row has no duplicate slots");
+        check(all.size() == 72, "partial final row conserves all storage identities");
+    }
+
     private static void profilesAndResets() throws java.io.IOException {
         rejects(
             () -> PlayerPanelProfiles.key("dynamicinventory:chest", ".", "net.minecraft.client.gui.inventory.GuiChest"),
@@ -190,8 +296,8 @@ public final class PlayerPanelFixtures {
             "forestry.factory.gui.GuiCarpenter");
         PlayerPanelProfile global = new PlayerPanelProfile(true, 242, 150, 7500, 9000);
         JsonObject legacyRoot = new JsonObject(), legacyGlobal = global.toJson();
-        for (String key : new String[] { "frameStyle", "borderWidth", "frameCrop", "cornerCrop" })
-            legacyGlobal.remove(key);
+        for (String key : new String[] { "frameStyle", "borderWidth", "frameCrop", "cornerCrop", "visible",
+            "minimumMargin" }) legacyGlobal.remove(key);
         legacyRoot.addProperty("schemaVersion", 1);
         legacyRoot.add("global", legacyGlobal);
         legacyRoot.add("interfaces", new JsonObject());
@@ -216,26 +322,102 @@ public final class PlayerPanelFixtures {
             .add()
             .allocate(new int[] { 54, 18 }, 72);
         String satellite = split.entries.get(1).id;
-        split = split.replace(
-            split.get(satellite)
-                .profile(vanilla, new PlayerPanelProfile(true, 88, 100, 0, 5000)));
-        PlayerPanelProfiles.applyPanels(split, vanilla, themed);
+        PlayerPanelProfiles.applyPanels(split, null, themed);
+        dev.gilbe.dynamicinventory.client.PlayerPanelSet local = split.add()
+            .allocate(new int[] { 36, 18, 18 }, 72);
+        String localOnly = local.entries.get(2).id;
+        PlayerPanelProfile independent = new PlayerPanelProfile(true, 34, 100, 1000, 7000).visible(false)
+            .withMinimumMargin(6);
+        local = local.replace(
+            local.get(satellite)
+                .profile(vanilla, independent));
+        PlayerPanelProfiles.applyPanels(local, vanilla, themed.withBounds(200, 160, 2000, 3000));
+        PlayerPanelProfiles.applyPanels(
+            split.replace(
+                split.get(satellite)
+                    .named("Forestry tools")),
+            forestry,
+            themed);
         PlayerPanelProfiles.initialize(file.toFile());
         check(
-            PlayerPanelProfiles.panels()
-                .members(satellite, 72)
-                .size() == 18
-                && PlayerPanelProfiles.panels()
+            PlayerPanelProfiles.panels().entries.size() == 2 && PlayerPanelProfiles.panels(vanilla).entries.size() == 3
+                && PlayerPanelProfiles.resolve(vanilla).width == 200
+                && PlayerPanelProfiles.panels(vanilla)
                     .get(satellite)
-                    .resolve(vanilla).width == 88,
-            "allocation and per-interface geometry persist atomically");
+                    .resolve(vanilla).width == 34
+                && !PlayerPanelProfiles.panels(vanilla)
+                    .get(satellite)
+                    .resolve(vanilla).visible
+                && PlayerPanelProfiles.panels(vanilla)
+                    .get(satellite)
+                    .resolve(vanilla).minimumMargin == 6,
+            "complete interface layouts persist without modifying the global layout");
+        PlayerPanelProfiles.inherit(vanilla);
+        check(
+            PlayerPanelProfiles.panels(vanilla).entries.size() == 2 && PlayerPanelProfiles.panels(vanilla)
+                .members("main", 72)
+                .size() == 54
+                && PlayerPanelProfiles.panels(vanilla)
+                    .get(satellite)
+                    .resolve(vanilla).visible
+                && PlayerPanelProfiles.panels(forestry)
+                    .get(satellite).name.equals("Forestry tools"),
+            "use global restores panel list, allocations and profiles while preserving other interfaces");
+        PlayerPanelProfiles.applyPanels(local, vanilla, themed);
         PlayerPanelProfiles.reset("Vanilla");
         check(
-            PlayerPanelProfiles.panels()
-                .get(satellite).overrides.isEmpty() && PlayerPanelProfiles.panels()
-                    .members(satellite, 72)
+            PlayerPanelProfiles.panels(vanilla).entries.size() == 2 && PlayerPanelProfiles.panels(forestry)
+                .get(satellite).name.equals("Forestry tools"),
+            "mod reset restores whole layouts for that mod only");
+        PlayerPanelProfiles.applyGlobalPanels(
+            dev.gilbe.dynamicinventory.client.PlayerPanelSet.DEFAULT,
+            vanilla,
+            PlayerPanelProfile.DEFAULT);
+        check(
+            PlayerPanelProfiles.panels(vanilla).entries.size() == 1
+                && PlayerPanelProfiles.panels(forestry).entries.size() == 2,
+            "save global updates panel collection and preserves unrelated saved layouts");
+        PlayerPanelProfiles.resetGlobal();
+        check(
+            PlayerPanelProfiles.panels().entries.size() == 1
+                && PlayerPanelProfiles.panels(forestry).entries.size() == 2,
+            "reset global retains explicit interface layouts");
+        JsonObject oldRoot = new JsonObject(), oldInterfaces = new JsonObject();
+        oldRoot.addProperty("schemaVersion", 4);
+        JsonObject attachedGlobal = PlayerPanelProfile.DEFAULT.toJson();
+        attachedGlobal.remove("minimumMargin");
+        oldRoot.add("global", attachedGlobal);
+        JsonObject oldMain = themed.toJson();
+        oldMain.remove("minimumMargin");
+        oldInterfaces.add(vanilla, oldMain);
+        oldRoot.add("interfaces", oldInterfaces);
+        com.google.gson.JsonArray oldPanels = local.toJson();
+        for (com.google.gson.JsonElement element : oldPanels) {
+            JsonObject entry = element.getAsJsonObject();
+            entry.getAsJsonObject("global")
+                .remove("minimumMargin");
+            for (java.util.Map.Entry<String, com.google.gson.JsonElement> override : entry.getAsJsonObject("interfaces")
+                .entrySet())
+                override.getValue()
+                    .getAsJsonObject()
+                    .remove("minimumMargin");
+        }
+        oldRoot.add("panels", oldPanels);
+        byte[] oldBytes = oldRoot.toString()
+            .getBytes(StandardCharsets.UTF_8);
+        Files.write(file, oldBytes);
+        PlayerPanelProfiles.initialize(file.toFile());
+        check(
+            PlayerPanelProfiles.panels().entries.size() == 1 && PlayerPanelProfiles.panels(vanilla).entries.size() == 3
+                && PlayerPanelProfiles.panels(vanilla)
+                    .members(localOnly, 72)
                     .size() == 18,
-            "mod reset preserves named allocation and clears geometry overrides");
+            "legacy attached default is separate from preserved interface splits");
+        PlayerPanelProfiles.inherit(vanilla);
+        check(
+            PlayerPanelProfiles.panels(vanilla).entries.size() == 1 && java.util.Arrays
+                .equals(oldBytes, Files.readAllBytes(directory.resolve("player-panels.schema4-backup.json"))),
+            "legacy reset removes split definitions and retains the exact migration backup");
         Files.delete(file);
         PlayerPanelProfiles.initialize(file.toFile());
         check(!PlayerPanelProfiles.resolve(vanilla).detached, "factory default attached");
@@ -266,6 +448,68 @@ public final class PlayerPanelFixtures {
             !PlayerPanelProfiles.resolve(vanilla).detached && PlayerPanelProfiles.groups()
                 .isEmpty(),
             "use global removes interface override");
+        Rect originViewport = new Rect(0, 8, 640, 324), originMachine = new Rect(100, 20, 178, 90);
+        PlayerPanelProfiles.applyGlobalPanels(
+            dev.gilbe.dynamicinventory.client.PlayerPanelSet.DEFAULT,
+            vanilla,
+            global,
+            new dev.gilbe.dynamicinventory.client.PanelLayoutReference(originMachine, originViewport));
+        PlayerPanelProfiles.initialize(file.toFile());
+        Rect adapted = PlayerPanelProfiles
+            .inheritedBounds(new Rect(120, 130, 178, 190), new Rect(100, 20, 178, 78), originViewport);
+        check(
+            adapted.y == 118 && adapted.x == 120,
+            "global reference survives reload and adjusts for a shorter machine");
+        PlayerPanelProfiles.applyPanels(PlayerPanelProfiles.panels(vanilla), vanilla, PlayerPanelProfiles.global());
+        check(!PlayerPanelProfiles.hasOverride(vanilla), "saving an unchanged default keeps inheritance");
+        PlayerPanelProfiles.applyPanels(PlayerPanelProfiles.panels(forestry), forestry, themed);
+        PlayerPanelProfiles.applyGlobalPanels(
+            dev.gilbe.dynamicinventory.client.PlayerPanelSet.DEFAULT,
+            vanilla,
+            global,
+            new dev.gilbe.dynamicinventory.client.PanelLayoutReference(originMachine, originViewport));
+        check(
+            PlayerPanelProfiles.hasOverride(forestry) && PlayerPanelProfiles.resolve(forestry)
+                .toJson()
+                .equals(themed.toJson()),
+            "publishing a reference preserves custom layouts");
+        dev.gilbe.dynamicinventory.client.BaublesPanelLayout horizontal = new dev.gilbe.dynamicinventory.client.BaublesPanelLayout(
+            300,
+            18,
+            90,
+            200);
+        check(
+            horizontal.columns == 5 && horizontal.visibleRows == 4
+                && horizontal.height <= 90
+                && horizontal.maxScroll() == 0,
+            "detached Baubles expands across five columns within the crafting section height");
+        dev.gilbe.dynamicinventory.client.PanelLayoutPresets.save(
+            "Fixture layout",
+            PlayerPanelProfiles.panels(),
+            PlayerPanelProfiles.global(),
+            null,
+            PlayerPanelProfiles.globalReference());
+        PlayerPanelProfiles.initialize(file.toFile());
+        check(
+            dev.gilbe.dynamicinventory.client.PanelLayoutPresets.names()
+                .contains("Fixture layout"),
+            "named layout survives configuration reload");
+        PlayerPanelProfiles.setGlobal(themed);
+        dev.gilbe.dynamicinventory.client.PanelLayoutPresets.load("Fixture layout", vanilla);
+        check(
+            PlayerPanelProfiles.global()
+                .toJson()
+                .equals(global.toJson()) && !PlayerPanelProfiles.hasOverride(vanilla)
+                && PlayerPanelProfiles.hasOverride(forestry),
+            "named profile restores global while keeping unrelated custom layouts");
+        dev.gilbe.dynamicinventory.client.PanelLayoutPresets.delete("Fixture layout");
+        check(
+            dev.gilbe.dynamicinventory.client.PanelLayoutPresets.names()
+                .isEmpty()
+                && PlayerPanelProfiles.global()
+                    .toJson()
+                    .equals(global.toJson()),
+            "deleting a profile leaves the active layout unchanged");
         byte[] invalid = "{\"schemaVersion\":999}".getBytes(StandardCharsets.UTF_8);
         Files.write(file, invalid);
         PlayerPanelProfiles.initialize(file.toFile());

@@ -42,7 +42,6 @@ import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import dev.gilbe.dynamicinventory.api.mui2.Mui2InventoryWidgets;
-import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.InventoryViewportLayout;
 import dev.gilbe.dynamicinventory.compat.mui2.InventoryScrollWidget;
 import dev.gilbe.dynamicinventory.compat.mui2.PlayerInventoryWidgetGroup;
@@ -80,6 +79,7 @@ public final class Mui2ApiFixtures {
                     MinecraftServer.getServer()
                         .worldServerForDimension(0)));
             AttachedChestLayoutFixtures.run();
+            completedChecks += Mui2CompactMachineHostFixtures.run();
             writeReport("transfer-regression", true, null);
         } catch (RuntimeException | Error failure) {
             writeReport("transfer-regression", false, failure);
@@ -231,8 +231,6 @@ public final class Mui2ApiFixtures {
     }
 
     private static void assertResponsiveBranches() {
-        boolean expandBefore = InventoryViewSettings.expandMachineInventory;
-        InventoryViewSettings.expandMachineInventory = true;
         try {
             ModularPanel first = ModularPanel.defaultPanel("responsive_first", 420, 180);
             ModularPanel second = ModularPanel.defaultPanel("responsive_second", 420, 260);
@@ -329,9 +327,7 @@ public final class Mui2ApiFixtures {
             for (ItemSlot hotbar : original.getHotbarSlots()) check(
                 hotbar.getArea().ry == rebuiltRows * 18 + 4,
                 "reattached inventory group hotbar positions match the current viewport rows");
-        } finally {
-            InventoryViewSettings.expandMachineInventory = expandBefore;
-        }
+        } finally {}
     }
 
     private static void layout(ModularPanel panel) {
@@ -457,6 +453,7 @@ public final class Mui2ApiFixtures {
                     assertFactory(1);
                     assertFactory(2);
                     assertResponsiveBranches();
+                    completedChecks += Mui2CompactMachineHostFixtures.run();
                     assertBinding(player, player.inventory.currentItem);
                     // Pinned GT toolbox callbacks compare against raw 36 when held in Backhand.
                     // That callback must never disable the added storage slot at raw 37.

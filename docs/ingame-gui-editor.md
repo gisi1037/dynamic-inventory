@@ -1,5 +1,9 @@
 # In-game GUI editor (first development version)
 
+For the current split-panel controls and supported vanilla hosts, see
+[Inventory panels](inventory-panels.md). The prototype description below records
+the earlier editor design.
+
 Open a supported **native** container GUI, put down any item held by the cursor, and press
 **F10** (Controls → Dynamic Inventory Diagnostics → Edit inventory GUI layout).
 The current chest, crafting-station or other registered native adapter must already be working.

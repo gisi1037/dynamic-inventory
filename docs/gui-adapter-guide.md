@@ -117,7 +117,7 @@ From the repository root, run the generator with a saved audit JSON:
 
 The tool validates schema version 1, counts, slot indices, and class names, then writes an audit summary and manual-review notes. Native audits produce a fully commented Java registration example; MUI2 audits produce a player-section template, and MUI1 reports get framework-specific notes. Standalone bundles stay outside `src`; pass `-InsertIntoSource` to also insert native comments directly. No generated registration is activated by the exporter. Java files use UTF-8 without a byte-order mark on both Windows PowerShell 5.1 and PowerShell 7.
 
-Run `scripts/testing/test-ui-template-tools.ps1` to exercise the developer workflow, partial-file recovery, repeated-export preservation, source-output guard, and generated Java compilation. Its [tooling report](qualification/ui-api/template-tooling.json) is separate from the production GUI qualification reports because these scripts do not change the game artifact.
+Run `scripts/testing/test-ui-template-tools.ps1` to exercise the developer workflow, partial-file recovery, repeated-export preservation, source-output guard, and generated Java compilation. Its locally generated tooling report is separate from the production GUI qualification reports because these scripts do not change the game artifact.
 
 ## Generated scaffold and manual review
 
@@ -246,7 +246,7 @@ For GUIs that share an already registered container but need different layout ge
 
 ## Qualification sequence
 
-1. Capture and review the audit JSON while the intended GUI is open; retain the exact target mod/profile provenance. The API has runtime evidence for the named native, MUI2, capacity, isolated, and full-pack scopes listed below; an audit by itself still does not qualify a GUI.
+1. Capture and review the audit JSON while the intended GUI is open; retain the exact target mod/profile provenance. The API has focused development coverage for native, MUI2 and capacity paths; an audit by itself still does not qualify a GUI.
 2. Generate an external scaffold and resolve every `reasons[]`, missing legacy index, duplicate index, and transfer/header question by inspecting source or observed runtime behavior.
 3. Implement the narrowest adapter required. Preserve the canonical server container and avoid introducing duplicate item stores or alternate synchronization.
 4. Add targeted fixture coverage for slot maps, pickup/place, shift-click in both directions, final/offscreen slots, cursor conservation, recipe/equipment restrictions, and resizing/scrolling.
@@ -254,27 +254,13 @@ For GUIs that share an already registered container but need different layout ge
 
 ## Current coverage boundary
 
-The current qualification set is tied to production artifact SHA-256
-`B23866A8031E7C9298BE1189A3183642647109989A6C2520D28635F661A83323`.
-The [build manifest](qualification/rc2-opening-gate-qualified/build-verification.json)
-lists the required reports; each report records its own exact profile and artifact identity.
-Earlier qualification directories retain their original hashes and results.
-
-| Boundary | Evidence |
-| --- | --- |
-| Registered-native opening agreement | [Integrated](qualification/rc2-opening-gate-qualified/opening-integrated/verification.json), [dedicated](qualification/rc2-opening-gate-qualified/opening-dedicated/verification.json) |
-| Actual Bogo/CraftingTweaks actions and Tinkers oversized synchronization | [Optional integrated runtime](qualification/rc2-opening-gate-qualified/opening-optional-integrated/verification.json), [optional dedicated runtime](qualification/rc2-opening-gate-qualified/opening-optional-dedicated/verification.json) |
-| Public native API | [Integrated](qualification/rc2-opening-gate-qualified/integrated/verification.json), [dedicated](qualification/rc2-opening-gate-qualified/dedicated/verification.json) |
-| Shared MUI2 live binding/factory | [Integrated](qualification/rc2-opening-gate-qualified/mui2-integrated/verification.json), [dedicated](qualification/rc2-opening-gate-qualified/mui2-dedicated/verification.json) |
-| Vanilla/common containers | [Regression report](qualification/rc2-opening-gate-qualified/container-regression/verification.json) |
-| Machine viewports and native MUI2 presentation | [Machine modes](qualification/rc2-opening-gate-qualified/machine-modes/verification.json), [presentation](qualification/rc2-opening-gate-qualified/native-presentation/verification.json) |
-| Startup capacity and isolated operation | [Five cold boots](qualification/rc2-opening-gate-qualified/capacity-matrix/verification.json), [without MUI](qualification/rc2-opening-gate-qualified/isolated/verification.json) |
-| Public Java 8 examples and production artifact | [Examples](qualification/rc2-opening-gate-qualified/examples-verification.json), [artifact scan](qualification/rc2-opening-gate-qualified/artifact-verification.json) |
-| Actual RC-2 native containers and frames | [Containers](qualification/rc2-opening-gate-qualified/full-pack-containers/verification.json), [frames](qualification/rc2-opening-gate-qualified/full-pack-frames/verification.json) |
-| Actual RC-2 compressed chest | [Compact/Wide layouts, two window sizes, four GUI scales, real transfers](qualification/rc2-opening-gate-qualified/attached-chest-layout/verification.json) |
-| Actual RC-2 GT MUI2 buffer | [Binding/input/scrolling](qualification/rc2-opening-gate-qualified/gt-mui2/verification.json), [Scroll/Vertical modes](qualification/rc2-opening-gate-qualified/full-pack-modes/verification.json) |
-| Actual RC-2 optional MUI2 presentation | [Presentation report](qualification/rc2-opening-gate-qualified/full-pack-presentation/verification.json) |
-| Full-run inventory and settings conservation | [Preservation report](qualification/rc2-opening-gate-qualified/full-pack-preservation.json), [batch runner](qualification/rc2-opening-gate-qualified/full-pack-runner.json) |
+Focused development checks cover native opening agreements, public API bindings,
+vanilla containers, capacity changes and selected pinned-pack integrations. Raw
+qualification captures are local development records and are not published here.
+See [testing](testing.md), the [vanilla UI lab](vanilla-ui-lab.md), and the
+[release changelog](../CHANGELOG.md) for reproducible checks and current limits.
+Earlier runtime results apply to their tested artifacts; they do not qualify every
+path in this release.
 
 The opening tests cover refusal, runtime-map mismatch, replayed replies with reused
 window IDs, pre-accept commits/clicks, timeout, populated initial synchronization,
@@ -298,9 +284,8 @@ construction, container overrides, other machine families, custom synchronizatio
 and custom quick-move/transfer dispatch need separate review and qualification.
 Class-scanner candidate totals are not GUI counts or compatibility claims.
 
-The [structural discovery summary](qualification/ui-api/discovery-summary.json) and
-[generator validation](qualification/ui-api/tooling.json) remain separate tooling
-evidence; they do not qualify production GUI behavior.
+Structural discovery and generator validation are tooling checks; they do not
+qualify production GUI behavior.
 
 ## MUI2 migration direction
 

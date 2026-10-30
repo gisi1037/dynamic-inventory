@@ -10,6 +10,13 @@ remain owned by Minecraft. Registrations also apply in the isolated development
 profile. Existing chest, workbench and furnace adapter IDs remain unchanged so
 their saved editor layouts still apply.
 
+All eleven families now also expose the shared detachable/split inventory controls;
+the factory layout remains attached. Exact client host pairs and the server's
+ordinary-inventory panel-transfer admission share `VanillaPanelHosts`. The three
+Et Futurum replacements are listed explicitly, without loading optional classes
+on a dedicated server. See [the test lab](../vanilla-ui-lab.md) for station layout
+and focused presentation checks.
+
 The inspected October 19 daily substitutes Et Futurum brewing and enchanting
 screens; its anvil still opens the vanilla classes. Three optional replacement
 registrations are documented in [Et Futurum](etfuturum.md); enabling a vanilla adapter

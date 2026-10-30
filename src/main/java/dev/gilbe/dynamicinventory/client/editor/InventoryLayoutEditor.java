@@ -24,7 +24,6 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
-import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
 import dev.gilbe.dynamicinventory.client.NativePanelFrame;
 
@@ -216,15 +215,12 @@ public final class InventoryLayoutEditor {
             }
             if (field == 13) return panel.hasAttachedChest();
             if (panel.hasAttachedChest() && (field == 4 || field == 5 || field == 9 || field == 10)) return false;
-            return field != 6 || panel.hasAttachedChest()
-                || panel.hasSeparateSidePanels()
-                || !InventoryViewSettings.compactNativePanels
-                || patch.value(12) != 0;
+            return true;
         }
 
         private String hint(int field, NativeInventoryPanel panel) {
             if (field == 1 && !fieldEnabled(panel, field))
-                return "Rows follow the mode above. Mode previews do not change the global machine setting.";
+                return "Rows follow the mode above. Mode previews are local to this editor.";
             if (field == 0 && !fieldEnabled(panel, field))
                 return "This host keeps fixed columns; resize vertically or scroll to preserve item positions.";
             if (field == 16 && patch.value(12) == 0 && !panel.hasSeparateSidePanels())

@@ -53,4 +53,4 @@ DirtChest and Dark Steel passed appended-slot shift transfers and NEI wheel
 transfers in both directions, with exact typed-NBT conservation. DirtChest rejected
 the non-dirt probe. This is focused coverage at 1920×1080 and GUI scale 2; further
 layout/resize checks and visual tuning remain separate from the registration.
-See [focused evidence](../qualification/grave-and-iron-chests-smoke/iron-chests.json).
+Raw development captures are not published; see the [testing guide](../testing.md).

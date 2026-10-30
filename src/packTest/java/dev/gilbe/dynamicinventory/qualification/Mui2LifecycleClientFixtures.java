@@ -11,7 +11,6 @@ import com.cleanroommc.modularui.screen.ModularScreen;
 import com.cleanroommc.modularui.widgets.DynamicSyncedWidget;
 import com.google.gson.JsonObject;
 
-import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.InventoryViewportLayout;
 import dev.gilbe.dynamicinventory.compat.mui2.InventoryScrollWidget;
 import dev.gilbe.dynamicinventory.compat.mui2.PlayerInventoryWidgetGroup;
@@ -24,8 +23,6 @@ public final class Mui2LifecycleClientFixtures {
 
     public static void run() throws Exception {
         Minecraft minecraft = Minecraft.getMinecraft();
-        boolean expandBefore = InventoryViewSettings.expandMachineInventory;
-        InventoryViewSettings.expandMachineInventory = true;
         ModularPanel main = ModularPanel.defaultPanel("lifecycle_main", 200, 180);
         ModularScreen screen = new ModularScreen("dynamicinventory", main);
         screen.constructOverlay(minecraft.currentScreen);
@@ -71,9 +68,7 @@ public final class Mui2LifecycleClientFixtures {
                     .closeAll();
                 screen.getPanelManager()
                     .dispose();
-            } finally {
-                InventoryViewSettings.expandMachineInventory = expandBefore;
-            }
+            } finally {}
         }
     }
 

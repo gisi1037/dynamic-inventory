@@ -89,6 +89,12 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
         guiTop = y;
     }
 
+    @Inject(method = "drawScreen", at = @At("HEAD"))
+    private void dynamicinventory$dragFrame(int x, int y, float ticks, CallbackInfo ci) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        if (floating != null) floating.updateDragFrame();
+    }
+
     @Redirect(
         method = "drawScreen",
         at = @At(
@@ -97,6 +103,7 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     private void dynamicinventory$background(GuiContainer gui, float ticks, int x, int y) {
         if (dynamicinventory$panel == null) drawGuiContainerBackgroundLayer(ticks, x, y);
         else dynamicinventory$panel.background(() -> drawGuiContainerBackgroundLayer(ticks, x, y));
+        dev.gilbe.dynamicinventory.client.HotbarBankPanel.draw(gui);
     }
 
     @Redirect(
@@ -111,6 +118,11 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$bar(int x, int y, int button, CallbackInfo ci) {
+        if (dev.gilbe.dynamicinventory.client.HotbarBankPanel
+            .pointer((GuiContainer) (Object) this, x, y, button, true)) {
+            ci.cancel();
+            return;
+        }
         DetachedChestPanel floating = DetachedChestPanel.of(this);
         if (floating != null && floating.pointer(x, y, button, true)) {
             ci.cancel();
@@ -119,14 +131,30 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
         if (dynamicinventory$panel != null && dynamicinventory$panel.scrollbar(x, y)) ci.cancel();
     }
 
+    @Inject(method = "handleMouseClick", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$panelQuickMove(net.minecraft.inventory.Slot slot, int id, int button, int mode,
+        CallbackInfo ci) {
+        DetachedChestPanel floating = DetachedChestPanel.of(this);
+        if (mode == 1 && (button == 0 || button == 1) && floating != null && floating.quickMoveToMain(id)) ci.cancel();
+    }
+
     @Inject(method = "mouseClickMove", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$move(int x, int y, int button, long elapsed, CallbackInfo ci) {
+        if (dev.gilbe.dynamicinventory.client.HotbarBankPanel.pointer((GuiContainer) (Object) this, x, y, -1, false)) {
+            ci.cancel();
+            return;
+        }
         DetachedChestPanel floating = DetachedChestPanel.of(this);
         if (floating != null && floating.pointer(x, y, -1, false)) ci.cancel();
     }
 
     @Inject(method = "mouseMovedOrUp", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$release(int x, int y, int button, CallbackInfo ci) {
+        if (dev.gilbe.dynamicinventory.client.HotbarBankPanel
+            .pointer((GuiContainer) (Object) this, x, y, button, false)) {
+            ci.cancel();
+            return;
+        }
         DetachedChestPanel floating = DetachedChestPanel.of(this);
         if (floating != null && floating.pointer(x, y, button, false)) ci.cancel();
     }
@@ -143,6 +171,9 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     }
 
     private boolean dynamicinventory$outside(boolean original, int x, int y) {
+        dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect hotbars = dev.gilbe.dynamicinventory.client.HotbarBankPanel
+            .bounds((GuiContainer) (Object) this);
+        if (hotbars != null && hotbars.contains(x, y)) return false;
         DetachedChestPanel floating = DetachedChestPanel.of(this);
         return floating != null && floating.detached() ? !floating.inside(x, y) : original;
     }

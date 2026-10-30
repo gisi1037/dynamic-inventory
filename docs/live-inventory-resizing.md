@@ -71,5 +71,6 @@ respawn, dimension travel, and the minimum/maximum capacities. Evidence defaults
 `.setup/live-resize/runtime`. The first RC-2 integration run passed 32 server report
 checks. Additional native/MUI2 reopen checks passed at 108 storage slots, including
 an item retained in newly added storage. Targeted checks have since passed in the
-actual RC-2 and pinned nightly packs; see the [pack test record](qualification/live-resize/README.md).
-That record does not claim every mod path or full-pack dedicated multiplayer acceptance.
+actual RC-2 and pinned nightly packs. Raw development captures are not published;
+see [testing](testing.md) for the test workflow. This coverage does not claim every
+mod path or full-pack dedicated multiplayer acceptance.

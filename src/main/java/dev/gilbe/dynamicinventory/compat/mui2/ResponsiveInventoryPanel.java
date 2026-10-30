@@ -13,7 +13,6 @@ import com.cleanroommc.modularui.screen.ModularScreen;
 import com.cleanroommc.modularui.widget.WidgetTree;
 import com.cleanroommc.modularui.widgets.slot.ItemSlot;
 
-import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.InventoryViewportLayout;
 
 /** Resize live player-inventory branches and their ancestors; machine controls keep native sizes. */
@@ -41,11 +40,17 @@ public final class ResponsiveInventoryPanel {
         return resizePanels(
             screen.getPanelManager()
                 .getOpenPanels(),
-            height);
+            height,
+            screen.getOwner());
     }
 
     /** The panel snapshot is supplied separately so secondary and dynamically replaced panels use the same path. */
     public boolean resizePanels(Iterable<ModularPanel> panels, int height) {
+        return resizePanels(panels, height, null);
+    }
+
+    /** The owning screen identifies optional fixed-footprint hosts without depending on their mod classes. */
+    public boolean resizePanels(Iterable<ModularPanel> panels, int height, String screenOwner) {
         Map<IWidget, IWidget> parents = new IdentityHashMap<>();
         Map<IWidget, ModularPanel> owners = new IdentityHashMap<>();
         List<PlayerInventoryWidgetGroup> groups = new ArrayList<>();
@@ -79,11 +84,8 @@ public final class ResponsiveInventoryPanel {
             InventoryScrollWidget viewport = group.getInventoryViewport();
             if (!viewport.isAdaptive() || parents.get(viewport) != group) continue;
             ModularPanel panel = owners.get(group);
-            int nextRows = InventoryViewportLayout.rows(
-                viewport.getStorageSlots(),
-                baseline(panel),
-                height,
-                InventoryViewSettings.expandMachineInventory);
+            boolean expand = !Mui2CompactMachineHosts.keepsCompactViewport(screenOwner, panel.getName());
+            int nextRows = InventoryViewportLayout.rows(viewport.getStorageSlots(), baseline(panel), height, expand);
             int previousRows = rows.containsKey(group) ? rows.get(group) : group.getInitialRows();
             activeRows.put(group, nextRows);
             if (previousRows != nextRows) {

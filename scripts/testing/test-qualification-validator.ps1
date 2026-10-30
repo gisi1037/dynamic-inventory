@@ -10,9 +10,8 @@ $manifestSeed = @{ requiredReports = @(
     'dedicated/verification.json', 'mui2-dedicated/verification.json',
     'isolated/verification.json', 'capacity-matrix/verification.json',
     'container-regression/verification.json', 'machine-modes/verification.json',
-    'native-presentation/verification.json', 'full-pack-containers/verification.json',
-    'full-pack-frames/verification.json', 'gt-mui2/verification.json',
-    'full-pack-modes/verification.json', 'full-pack-presentation/verification.json',
+    'full-pack-containers/verification.json', 'full-pack-frames/verification.json',
+    'gt-mui2/verification.json', 'full-pack-modes/verification.json',
     'full-pack-preservation.json'
 ) }
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dynamicinventory-qualification-' + [guid]::NewGuid().ToString('N'))
@@ -31,7 +30,7 @@ function Assert-ValidationFails([string] $manifestPath, [string] $case, [string]
 function New-DailyFixture([string] $name, [string] $stage = 'full-pack') {
     # Synthetic schema fixtures only. These are never real pack qualification evidence.
     $reportSet = @($manifestSeed.requiredReports)
-    if ($stage -eq 'preflight') { $reportSet = @($reportSet | Select-Object -First 11) }
+    if ($stage -eq 'preflight') { $reportSet = @($reportSet | Select-Object -First 10) }
     return New-Fixture $name $reportSet $stage 'daily-2026-10-19'
 }
 
@@ -67,13 +66,13 @@ try {
     & $validator -ManifestPath $currentManifest | Out-Null
     Write-Host 'PASS valid synthetic RC-2 qualification manifest (no local captures required)'
 
-    $preflightReports = @($manifestSeed.requiredReports | Select-Object -First 11)
+    $preflightReports = @($manifestSeed.requiredReports | Select-Object -First 10)
     $manifestPath = New-Fixture 'valid-preflight' $preflightReports 'preflight'
     $preflightManifest = & $validator -ManifestPath $manifestPath -Stage preflight
-    if ($preflightManifest.qualificationStage -ne 'preflight' -or $preflightManifest.requiredReports.Count -ne 11) {
-        throw 'Preflight stage did not return its exact 11-report manifest.'
+    if ($preflightManifest.qualificationStage -ne 'preflight' -or $preflightManifest.requiredReports.Count -ne 10) {
+        throw 'Preflight stage did not return its exact 10-report manifest.'
     }
-    Write-Host 'PASS explicit 11-report preflight accepted without full-pack reports'
+    Write-Host 'PASS explicit 10-report preflight accepted without full-pack reports'
 
     $manifestPath = New-Fixture 'preflight-missing-stage' $preflightReports $null
     Assert-ValidationFails $manifestPath 'preflight without explicit stage' 'preflight'
@@ -81,7 +80,7 @@ try {
 
     $manifestPath = New-Fixture 'full-pack-incomplete' $preflightReports 'full-pack'
     Assert-ValidationFails $manifestPath 'full-pack stage with only preflight reports' 'full-pack'
-    Write-Host 'PASS full-pack stage rejects the 11-report preflight set'
+    Write-Host 'PASS full-pack stage rejects the 10-report preflight set'
 
     $manifestPath = New-Fixture 'full-pack-requested-for-preflight' $preflightReports 'preflight'
     Assert-ValidationFails $manifestPath 'full-pack validation of preflight manifest' 'full-pack'
@@ -144,7 +143,7 @@ try {
     foreach ($stage in @('preflight', 'full-pack')) {
         $manifestPath = New-DailyFixture "daily-valid-$stage" $stage
         $daily = & $validator -ManifestPath $manifestPath -Stage $stage -Profile daily-2026-10-19
-        $expectedCount = if ($stage -eq 'preflight') { 11 } else { 17 }
+        $expectedCount = if ($stage -eq 'preflight') { 10 } else { 15 }
         if ($daily.profile -ne 'daily-2026-10-19' -or $daily.requiredReports.Count -ne $expectedCount) {
             throw "Daily $stage did not return its complete synthetic report set."
         }

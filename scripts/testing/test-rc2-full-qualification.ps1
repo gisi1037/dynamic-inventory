@@ -25,7 +25,6 @@ $expectedFullPackReports = @(
     'full-pack-frames/verification.json',
     'gt-mui2/verification.json',
     'full-pack-modes/verification.json',
-    'full-pack-presentation/verification.json',
     'full-pack-preservation.json'
 )
 $runReportPath = Join-Path $evidenceFullPath 'full-pack-runner.json'
@@ -135,12 +134,6 @@ function Get-IntConfig([string] $Text, [string] $Name, [int] $Fallback) {
     return $Fallback
 }
 
-function Get-BoolConfig([string] $Text, [string] $Name, [bool] $Fallback) {
-    $match = [regex]::Match($Text, "(?im)^\s*B:$([regex]::Escape($Name))=(true|false)\s*$")
-    if ($match.Success) { return $match.Groups[1].Value -ieq 'true' }
-    return $Fallback
-}
-
 function Get-OptionInt([string] $Text, [string] $Name, [int] $Fallback) {
     $match = [regex]::Match($Text, "(?m)^$([regex]::Escape($Name)):(-?\d+)\s*$")
     if ($match.Success) { return [int]$match.Groups[1].Value }
@@ -153,25 +146,6 @@ function Restore-ClientSettings {
     # Return to the player screen, then restore each preference through the same
     # settings dialog the tests use so the live game and saved configuration agree.
     Harness capture rc2-full-qualification-restore-settings | Out-Null
-    Harness layout-control 100 | Out-Null
-    $mode = Harness machine-mode
-    $preferences = @(
-        @{ property = 'compactNativePanels'; id = 111; value = (Get-BoolConfig $clientConfigBefore 'compactNativePanels' $false) },
-        @{ property = 'expandMachineInventory'; id = 110; value = (Get-BoolConfig $clientConfigBefore 'expandMachineInventory' $true) },
-        @{ property = 'mui2Presentation'; id = 112; value = (Get-BoolConfig $clientConfigBefore 'mui2Presentation' $false) }
-    )
-    foreach ($preference in $preferences) {
-        $pattern = [regex]::Escape([string]$preference.property) + '=true'
-        $current = $mode -match $pattern
-        if ($current -ne [bool]$preference.value) {
-            Harness layout-control $preference.id | Out-Null
-            $mode = Harness machine-mode
-            if (($mode -match $pattern) -ne [bool]$preference.value) {
-                throw "Could not restore $($preference.property) to $($preference.value)."
-            }
-        }
-    }
-    Harness layout-control 108 | Out-Null
     Harness layout-set $initialColumns $initialRows | Out-Null
     Harness scale $initialScale | Out-Null
     Harness window $initialWidth $initialHeight | Out-Null
@@ -338,13 +312,10 @@ try {
         & (Join-Path $PSScriptRoot 'test-gt-mui2-api.ps1') -Port $Port -GameDirectory $gameDirectoryFullPath `
             -EvidenceDirectory (Join-Path $evidenceFullPath 'gt-mui2')
     }
+
     if (!(Reuse-Report 'full-pack-modes/verification.json')) {
         & (Join-Path $PSScriptRoot 'test-machine-modes.ps1') -FullPack -Port $Port -GameDirectory $gameDirectoryFullPath `
             -EvidenceDirectory (Join-Path $evidenceFullPath 'full-pack-modes')
-    }
-    if (!(Reuse-Report 'full-pack-presentation/verification.json')) {
-        & (Join-Path $PSScriptRoot 'test-mui2-presentation.ps1') -Port $Port -GameDirectory $gameDirectoryFullPath `
-            -EvidenceDirectory (Join-Path $evidenceFullPath 'full-pack-presentation') -ExpectedPlayerSlots 109
     }
 
     Restore-ClientSettings
@@ -400,7 +371,7 @@ try {
     $fullPackManifest.fullPackSmokeTestPassed = $true
     $fullPackManifest.fullPackAcceptanceComplete = $false
     $fullPackManifest.capturedAtUtc = [datetime]::UtcNow.ToString('o')
-    $fullPackManifest.scope = 'Selected actual GTNH 2.9.0-RC-2 full-pack checks only: native TConstruct containers and compressed-chest layout, container frames, GT MUI2 API and buffer mode, MUI2 presentation, and exact inventory/settings preservation for the pinned disposable world and this artifact. This does not claim all-GUI or nightly acceptance.'
+    $fullPackManifest.scope = 'Selected actual GTNH 2.9.0-RC-2 full-pack checks only: native TConstruct containers and compressed-chest layout, container frames, GT MUI2 API with automatic expansion and scrolling, and exact inventory/settings preservation for the pinned disposable world and this artifact. This does not claim all-GUI or nightly acceptance.'
     $fullPackManifest.requiredReports = @($sourceManifest.requiredReports) + $expectedFullPackReports
     $fullPackManifest | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath (Join-Path $evidenceFullPath 'build-verification.json') -Encoding UTF8
     & (Join-Path $projectRoot 'scripts/validate-qualification.ps1') -ManifestPath (Join-Path $evidenceFullPath 'build-verification.json') -Stage full-pack | Out-Null

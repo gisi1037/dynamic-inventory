@@ -33,7 +33,6 @@ public final class InventoryUpgrades {
     public static Item module;
     public static Item belt;
     public static Item[] belts = new Item[0];
-    public static Item creativeSizer;
 
     public static void register() {
         module = new CapacityModuleItem();
@@ -43,9 +42,15 @@ public final class InventoryUpgrades {
             belts = BaubleUpgradeSupport.register();
             belt = belts[0];
         }
-        creativeSizer = new CreativeSizeItem();
-        GameRegistry.registerItem(creativeSizer, "creative_inventory_controller");
+        // Keep a distinct hidden entry: older worlds contain BOTH this ID and the UHV belt ID.
+        // Remapping both names onto one registered item makes Forge reject the world ID map.
+        GameRegistry.registerItem(new LegacyInventoryControllerItem(), "creative_inventory_controller");
         CreativeSizeRequest.initialize();
+    }
+
+    /** The UHV belt supplies the size editor as well as its normal equipment bonus. */
+    public static Item creativeBelt() {
+        return belts.length == UpgradeSettings.BELT_TIERS.length ? belts[belts.length - 1] : null;
     }
 
     private static NBTTagCompound account(EntityPlayer player, boolean create) {

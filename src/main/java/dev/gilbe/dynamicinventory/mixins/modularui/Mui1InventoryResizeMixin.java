@@ -14,7 +14,6 @@ import com.gtnewhorizons.modularui.api.screen.ModularWindow;
 import com.gtnewhorizons.modularui.api.widget.IWidgetParent;
 import com.gtnewhorizons.modularui.api.widget.Widget;
 
-import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.InventoryViewportLayout;
 import dev.gilbe.dynamicinventory.compat.mui1.InventoryViewport;
 
@@ -38,7 +37,7 @@ public abstract class Mui1InventoryResizeMixin {
                     ((InventoryViewport) widget).getStorageSlots(),
                     dynamicinventory$nativeHeight,
                     screen.height,
-                    InventoryViewSettings.expandMachineInventory);
+                    true);
                 size = new Size(size.width, dynamicinventory$nativeHeight + (rows - 3) * 18);
                 InventoryViewport viewport = (InventoryViewport) widget;
                 viewport.setVerticalScrollOffset(0);

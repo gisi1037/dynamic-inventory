@@ -72,6 +72,32 @@ public class StorageHarness {
         if (!((BooleanValue) call(panel, "pointer", "(IIIZ)Z", vm.mirrorOf(x), vm.mirrorOf(y), vm.mirrorOf(button), vm.mirrorOf(down))).value())
             throw new AssertionError("Panel chrome did not own gesture");
     }
+    static void rawClick(ObjectReference screen, int x, int y, int button) throws Exception {
+        int sw=intField(screen,"width"),sh=intField(screen,"height");
+        int dw=intField(client,"displayWidth"),dh=intField(client,"displayHeight");
+        ClassType mouse=type("org.lwjglx.input.Mouse");
+        Map<Field,Value> previous=new LinkedHashMap<>();
+        for(String name:List.of("x","y","latestX","latestY","lastEventX","lastEventY")) {
+            Field f=mouse.fieldByName(name); previous.put(f,mouse.getValue(f));
+            mouse.setValue(f,vm.mirrorOf(name.endsWith("X")||name.equals("x") ? x*dw/sw : (sh-y-1)*dh/sh));
+        }
+        try {
+            for(boolean down:new boolean[]{true,false}) mouse.invokeMethod(thread,methods(mouse,"addButtonEvent","(IZ)V").getFirst(),List.of(vm.mirrorOf(button),vm.mirrorOf(down)),ObjectReference.INVOKE_SINGLE_THREADED);
+            call(screen,"handleInput","()V");
+        } finally { for(var saved:previous.entrySet())mouse.setValue(saved.getKey(),saved.getValue()); }
+    }
+    static String inventoryNbt(ObjectReference inventory) throws Exception {
+        return canonicalNbt((ObjectReference)call(inventory,"writeToNBT","(Lnet/minecraft/nbt/NBTTagList;)Lnet/minecraft/nbt/NBTTagList;",make("net.minecraft.nbt.NBTTagList","()V")));
+    }
+    static ObjectReference serverPlayer(ObjectReference player) throws Exception {
+        ObjectReference server=(ObjectReference)call(client,"getIntegratedServer","()Lnet/minecraft/server/integrated/IntegratedServer;");
+        return (ObjectReference)call((ObjectReference)call(server,"getConfigurationManager","()Lnet/minecraft/server/management/ServerConfigurationManager;"),"func_152612_a","(Ljava/lang/String;)Lnet/minecraft/entity/player/EntityPlayerMP;",call(player,"getCommandSenderName","()Ljava/lang/String;"));
+    }
+    static int ownedRawIndex(ObjectReference inventory, int logical) throws Exception {
+        ClassType layout=type("dev.gilbe.dynamicinventory.inventory.InventoryLayout");
+        ObjectReference shape=(ObjectReference)layout.invokeMethod(thread,layout.methodsByName("of").getFirst(),List.of(inventory),ObjectReference.INVOKE_SINGLE_THREADED);
+        return ((IntegerValue)call(shape,"rawIndex","(I)I",vm.mirrorOf(logical))).value();
+    }
     static void pressGuiButton(ObjectReference gui, int id) throws Exception {
         ObjectReference buttons = field(gui,"buttonList");
         for(int i=0;i<((IntegerValue)call(buttons,"size","()I")).value();i++) {
@@ -83,6 +109,47 @@ public class StorageHarness {
             return;
         }
         throw new AssertionError("Missing menu button "+id);
+    }
+    static void panelMenuField(ObjectReference view, String fields, String key, String text) throws Exception {
+        ObjectReference input=(ObjectReference)call(field(view,fields),"get","(Ljava/lang/Object;)Ljava/lang/Object;",vm.mirrorOf(key));
+        call(input,"setText","(Ljava/lang/String;)V",vm.mirrorOf(text));
+    }
+    static void checkPlayerPanelRoundTrip(ObjectReference host, ObjectReference panel) throws Exception {
+        if(!host.referenceType().name().equals("dev.gilbe.dynamicinventory.client.PlayerInventoryScreen")) return;
+        ObjectReference view=field(host,"view"), container=field(host,"inventorySlots");
+        ArrayReference ids=(ArrayReference)field(panel,"slotIds");
+        for(int cycle=0;cycle<2;cycle++) {
+            ObjectReference control=(ObjectReference)call(panel,"control",null,call(panel,"playerBounds",null));
+            int x=intField(control,"x")+2,y=intField(control,"y")+2;
+            panelPointer(panel,x,y,0,true); panelPointer(panel,x,y,0,false);
+            if(((BooleanValue)call(panel,"detached",null)).value()) throw new AssertionError("Reattach failed");
+            for(int main=0;main<ids.length();main++) {
+                ObjectReference slot=(ObjectReference)call(container,"getSlot","(I)Lnet/minecraft/inventory/Slot;",ids.getValue(main));
+                int columns=intField(view,"columns"),row=(main-9)/columns-intField(host,"scrollRow");
+                boolean visible=main<9 || row>=0 && row<intField(view,"visibleRows");
+                ClassType viewSettings=type("dev.gilbe.dynamicinventory.client.InventoryViewSettings");
+                boolean centered=((BooleanValue)viewSettings.getValue(viewSettings.fieldByName("centerLastRow"))).value();
+                int inset=main<9 || !centered ? 0 : (columns-Math.min(columns,ids.length()-9-(main-9)/columns*columns))*9;
+                int expectedX=!visible ? -10000 : main<9 ? (intField(view,"width")-162)/2+main*18 : intField(view,"gridX")+inset+(main-9)%columns*18;
+                int expectedY=!visible ? -10000 : (main<9 ? intField(view,"hotbarY") : 84+row*18)+intField(host,"tabSpace");
+                if(intField(slot,"xDisplayPosition")!=expectedX || intField(slot,"yDisplayPosition")!=expectedY)
+                    throw new AssertionError("Reattach retained floating coordinates for ordinary slot "+main);
+            }
+            control=(ObjectReference)call(panel,"control",null,call(panel,"playerBounds",null));
+            x=intField(control,"x")+2; y=intField(control,"y")+2;
+            panelPointer(panel,x,y,0,true); panelPointer(panel,x,y,0,false);
+            if(!((BooleanValue)call(panel,"detached",null)).value()) throw new AssertionError("Detach failed");
+            List<Integer> before=new ArrayList<>();
+            for(Value id:ids.getValues()) {
+                ObjectReference slot=(ObjectReference)call(container,"getSlot","(I)Lnet/minecraft/inventory/Slot;",id);
+                before.add(intField(slot,"yDisplayPosition"));
+            }
+            call(host,"positionSlots",null);
+            for(int main=0;main<ids.length();main++) {
+                ObjectReference slot=(ObjectReference)call(container,"getSlot","(I)Lnet/minecraft/inventory/Slot;",ids.getValue(main));
+                if(intField(slot,"yDisplayPosition")!=before.get(main)) throw new AssertionError("Tab offset applied twice to floating slot "+main);
+            }
+        }
     }
     static void checkPanelMenu(ObjectReference host, ObjectReference panel) throws Exception {
         ClassType overlay=type("dev.gilbe.dynamicinventory.client.PanelSettingsOverlay");
@@ -99,23 +166,25 @@ public class StorageHarness {
                 throw new AssertionError("Panel menu replaced the live host");
             for(int key:new int[]{2,16,18}) call(view,"keyTyped","(CI)V",vm.mirrorOf('x'),vm.mirrorOf(key));
             if(apply) pressGuiButton(view,20);
-            pressGuiButton(view,3);
-            pressGuiButton(view,31); pressGuiButton(view,7);
+            panelMenuField(view,"geometryFields","width",Integer.toString(intField(before,"width")+1));
+            panelMenuField(view,"geometryFields","x","51");
             pressGuiButton(view,32); pressGuiButton(view,11); pressGuiButton(view,11); pressGuiButton(view,13); pressGuiButton(view,17);
             pressGuiButton(view,apply ? 50 : 0);
             overlay.invokeMethod(thread,overlay.methodsByName("handleInput").getFirst(),List.of(host),ObjectReference.INVOKE_SINGLE_THREADED);
             if(overlay.getValue(overlay.fieldByName("active"))!=null) throw new AssertionError("Menu did not finish its release");
             ObjectReference after=(ObjectReference)call((ObjectReference)call(panel,"preference",null),"toJson",null);
-            if(!original.equals(((StringReference)call(after,"toString",null)).value())) throw new AssertionError("Cancel/global edit changed interface override");
+            if(!apply && !original.equals(((StringReference)call(after,"toString",null)).value())) throw new AssertionError("Cancel changed interface override");
             if(apply) {
                 ObjectReference global=(ObjectReference)profiles.invokeMethod(thread,profiles.methodsByName("global").getFirst(),List.of(),ObjectReference.INVOKE_SINGLE_THREADED);
                 if(intField(global,"frameStyle")<0 || intField(global,"borderWidth")!=3) throw new AssertionError("Global style settings were not saved");
+                ObjectReference globalJson=(ObjectReference)call(global,"toJson",null);
+                if(!((StringReference)call(globalJson,"toString",null)).value().equals(((StringReference)call(after,"toString",null)).value())) throw new AssertionError("Current interface did not inherit saved global");
             }
         }
         ObjectReference bounds=(ObjectReference)call(panel,"playerBounds",null);
         panelPointer(panel,intField(bounds,"x")+16,intField(bounds,"y")+6,1,true);
         ObjectReference view=(ObjectReference)overlay.getValue(overlay.fieldByName("active"));
-        pressGuiButton(view,33); pressGuiButton(view,40); pressGuiButton(view,40);
+        pressGuiButton(view,33); pressGuiButton(view,40);
         overlay.invokeMethod(thread,overlay.methodsByName("handleInput").getFirst(),List.of(host),ObjectReference.INVOKE_SINGLE_THREADED);
         if(((BooleanValue)call(panel,"detached",null)).value()) throw new AssertionError("Use global did not restore attached mode");
         System.out.println("PASS in-container panel menu: pages, guarded keys, Cancel, global/interface scope and Use global");
@@ -157,12 +226,206 @@ public class StorageHarness {
                 List.of(field(client, "currentScreen"), vm.mirrorOf(false)), ObjectReference.INVOKE_SINGLE_THREADED);
         }
         switch (args[0]) {
+            case "panel-menu-outside-check": {
+                act(new String[]{"require-qualification",args[1]});
+                ObjectReference host=field(client,"currentScreen"),container=field(player,"openContainer"),inventory=field(player,"inventory");
+                ClassType overlay=type("dev.gilbe.dynamicinventory.client.PanelSettingsOverlay");
+                if(overlay.getValue(overlay.fieldByName("active"))!=null)throw new IllegalStateException("Close existing draft first");
+                String before=inventoryNbt(inventory);
+                ObjectReference panel=floatingPanel(host);
+                String profile=((StringReference)call((ObjectReference)call((ObjectReference)call(panel,"preference",null),"toJson",null),"toString","()Ljava/lang/String;")).value();
+                for(int button:new int[]{0,1}) {
+                    if(!((BooleanValue)overlay.invokeMethod(thread,overlay.methodsByName("open").getFirst(),List.of(host,panel),ObjectReference.INVOKE_SINGLE_THREADED)).value())throw new AssertionError("Menu did not open");
+                    ObjectReference view=(ObjectReference)overlay.getValue(overlay.fieldByName("active"));
+                    call(field(view,"nameField"),"setText","(Ljava/lang/String;)V",vm.mirrorOf("Unsaved outside-click fixture"));
+                    // Blank interior clicks preserve the draft; either outside mouse button cancels it.
+                    rawClick(host,intField(view,"left")+3,intField(view,"top")+3,button);
+                    if(overlay.getValue(overlay.fieldByName("active"))==null)throw new AssertionError("Inside click closed menu");
+                    rawClick(host,2,2,button);
+                    if(overlay.getValue(overlay.fieldByName("active"))!=null)throw new AssertionError("Outside click failed to close menu");
+                    if(!field(client,"currentScreen").equals(host)||!field(player,"openContainer").equals(container)||call(inventory,"getItemStack","()Lnet/minecraft/item/ItemStack;")!=null||!before.equals(inventoryNbt(inventory)))throw new AssertionError("Closing clicked through into inventory");
+                    if(!profile.equals(((StringReference)call((ObjectReference)call((ObjectReference)call(panel,"preference",null),"toJson",null),"toString","()Ljava/lang/String;")).value()))throw new AssertionError("Outside click saved draft");
+                }
+                System.out.println("PASS raw left/right outside clicks cancel draft, preserve inside clicks, host, container and inventory");
+                return;
+            }
+            case "hotbar-seed": {
+                if(!args[1].equals("DI-Baseline-Hotbar-20261027-Qualification"))throw new IllegalArgumentException("Dedicated hotbar fixture world required");
+                act(new String[]{"require-qualification",args[1]});
+                if(!thread.name().equals("Server thread")) {
+                    ClassType handler=type("net.minecraft.network.NetHandlerPlayServer");
+                    BreakpointRequest seed=vm.eventRequestManager().createBreakpointRequest(methods(handler,"processChatMessage","(Lnet/minecraft/network/play/client/C01PacketChatMessage;)V").getFirst().location());
+                    seed.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);seed.enable();awaitingGraveSeed=true;
+                    call(player,"sendChatMessage","(Ljava/lang/String;)V",vm.mirrorOf("/dinvbaseline"));break;
+                }
+                awaitingGraveSeed=false;
+                ObjectReference actor=field(thread.frame(0).thisObject(),"playerEntity"),inventory=field(actor,"inventory");
+                if(!field(actor,"openContainer").equals(field(actor,"inventoryContainer"))||call(inventory,"getItemStack","()Lnet/minecraft/item/ItemStack;")!=null)throw new IllegalStateException("Empty cursor and player container required");
+                int total=ownedLayoutInt(inventory,"mainSlots");
+                boolean banks=args[2].equals("banks")||args[2].equals("pickup");
+                boolean sweep=args[2].equals("sweep");
+                if(!banks&&!args[2].equals("transfer")&&!sweep)throw new IllegalArgumentException("banks, pickup, sweep or transfer");
+                if(total<36)throw new IllegalStateException("Fixture requires at least 27 storage slots");
+                ArrayReference main=(ArrayReference)field(inventory,"mainInventory");
+                ClassType items=type("net.minecraft.init.Items");
+                for(int logical=0;logical<total;logical++) {
+                    ObjectReference stack=null;
+                    if(banks || logical<9 || logical==9 || logical==18 || sweep&&logical<18) {
+                        stack=make("net.minecraft.item.ItemStack","(Lnet/minecraft/item/Item;I)V",items.getValue(fieldInfo(items,!banks&&logical<9 ? "stick" : "diamond")),vm.mirrorOf(banks ? 1 : logical<9 ? 64 : logical<18 ? 8 : 61));
+                        ObjectReference tag=make("net.minecraft.nbt.NBTTagCompound","()V");
+                        call(tag,"setInteger","(Ljava/lang/String;I)V",vm.mirrorOf("dinvHotbarFixture"),vm.mirrorOf(1));
+                        if(banks)call(tag,"setInteger","(Ljava/lang/String;I)V",vm.mirrorOf("identity"),vm.mirrorOf(logical));
+                        call(stack,"setTagCompound","(Lnet/minecraft/nbt/NBTTagCompound;)V",tag);
+                    }
+                    main.setValue(ownedRawIndex(inventory,logical),stack);
+                }
+                if(args[2].equals("pickup")) {
+                    for(int logical=10;logical<27;logical++)main.setValue(ownedRawIndex(inventory,logical),null);
+                    int empty=((IntegerValue)call(inventory,"getFirstEmptyStack","()I")).value();
+                    if(empty>=9&&empty<27)throw new AssertionError("Pickup selected an empty reserved cell");
+                    ObjectReference probe=(ObjectReference)call((ObjectReference)main.getValue(9),"copy","()Lnet/minecraft/item/ItemStack;");
+                    if(((IntegerValue)call(inventory,"storeItemStack","(Lnet/minecraft/item/ItemStack;)I",probe)).value()!=-1)throw new AssertionError("Pickup selected matching reserved stack");
+                    call(inventory,"addItemStackToInventory","(Lnet/minecraft/item/ItemStack;)Z",probe);
+                    if(intField((ObjectReference)main.getValue(9),"stackSize")!=1)throw new AssertionError("Pickup changed reserved stack");
+                    for(int logical=10;logical<27;logical++)if(main.getValue(ownedRawIndex(inventory,logical))!=null)throw new AssertionError("Pickup filled hidden hotbar");
+                    System.out.println("PASS actual transformed pickup skips empty and matching reserved slots");
+                }
+                call(inventory,"markDirty","()V");call(field(actor,"inventoryContainer"),"detectAndSendChanges","()V");
+                System.out.println("PASS authoritative fixture seed "+args[2]);return;
+            }
+            case "hotbar-configure":
+            case "hotbar-swap": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                ClassType controls=type("dev.gilbe.dynamicinventory.client.HotbarControls");
+                controls.invokeMethod(thread,controls.methodsByName(args[0].equals("hotbar-configure")?"configure":"swap").getFirst(),List.of(vm.mirrorOf(Integer.parseInt(args[1]))),ObjectReference.INVOKE_SINGLE_THREADED);
+                break;
+            }
+            case "hotbar-key": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                if(field(client,"currentScreen")!=null)throw new IllegalStateException("Close GUI for gameplay hotkeys");
+                ClassType controls=type("dev.gilbe.dynamicinventory.client.HotbarControls");
+                ObjectReference binding=args[1].equals("cycle")?(ObjectReference)controls.getValue(controls.fieldByName("CYCLE")):(ObjectReference)((ArrayReference)controls.getValue(controls.fieldByName("ROWS"))).getValue(Integer.parseInt(args[1]));
+                binding.setValue(fieldInfo(binding.referenceType(),"pressTime"),vm.mirrorOf(1));
+                call(make("dev.gilbe.dynamicinventory.client.HotbarControls","()V"),"keys",null,make("cpw.mods.fml.common.gameevent.InputEvent$KeyInputEvent","()V"));
+                break;
+            }
+            case "hotbar-cell": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                for(ObjectReference actor:new ObjectReference[]{player,serverPlayer(player)}) {
+                    ObjectReference inventory=field(actor,"inventory");
+                    ObjectReference stack=(ObjectReference)((ArrayReference)field(inventory,"mainInventory")).getValue(ownedRawIndex(inventory,Integer.parseInt(args[1])));
+                    if(stack==null||((IntegerValue)call((ObjectReference)call(stack,"getTagCompound","()Lnet/minecraft/nbt/NBTTagCompound;"),"getInteger","(Ljava/lang/String;)I",vm.mirrorOf("identity"))).value()!=Integer.parseInt(args[2]))throw new AssertionError("Unexpected cell identity");
+                }
+                System.out.println("PASS client/server cell "+args[1]+" = "+args[2]);return;
+            }
+            case "hotbar-editor-check": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                ObjectReference gui=field(client,"currentScreen");
+                ClassType editors=type("dev.gilbe.dynamicinventory.client.HotbarBankPanel");
+                ObjectReference editor=(ObjectReference)call((ObjectReference)editors.getValue(editors.fieldByName("PANELS")),"get","(Ljava/lang/Object;)Ljava/lang/Object;",gui);
+                if(editor==null||field(editor,"bounds")==null)throw new AssertionError("Editor did not fit");
+                ObjectReference bounds=field(editor,"bounds");
+                ObjectReference occupied=(ObjectReference)call(editor,"obstacles",null,gui);
+                for(int i=0;i<((IntegerValue)call(occupied,"size","()I")).value();i++)if(((BooleanValue)call(bounds,"intersects",null,call(occupied,"get","(I)Ljava/lang/Object;",vm.mirrorOf(i)))).value())throw new AssertionError("Editor overlaps host/panel");
+                int left=intField(gui,"guiLeft"),top=intField(gui,"guiTop"),visible=0;
+                ObjectReference inventory=field(player,"inventory"),container=field(player,"openContainer");
+                ClassType banks=type("dev.gilbe.dynamicinventory.inventory.HotbarBanks");
+                ObjectReference slots=field(container,"inventorySlots");
+                for(int i=0;i<((IntegerValue)call(slots,"size","()I")).value();i++) {
+                    ObjectReference slot=(ObjectReference)call(slots,"get","(I)Ljava/lang/Object;",vm.mirrorOf(i));
+                    if(!field(slot,"inventory").equals(inventory)||!((BooleanValue)banks.invokeMethod(thread,banks.methodsByName("isReserved").getFirst(),List.of(inventory,call(slot,"getSlotIndex","()I")),ObjectReference.INVOKE_SINGLE_THREADED)).value())continue;
+                    int x=intField(slot,"xDisplayPosition"),y=intField(slot,"yDisplayPosition");
+                    if(x==-10000||y==-10000)continue;
+                    if(!((BooleanValue)call(bounds,"contains","(II)Z",vm.mirrorOf(x+left),vm.mirrorOf(y+top))).value()||!((BooleanValue)call(bounds,"contains","(II)Z",vm.mirrorOf(x+left+16),vm.mirrorOf(y+top+16))).value())throw new AssertionError("Bank cell clipped");
+                    visible++;
+                }
+                if(visible!=intField(editor,"rows")*9)throw new AssertionError("Missing visible bank cells");
+                System.out.println("PASS fitted editor columns="+intField(editor,"columns")+" visible cells="+visible);return;
+            }
+            case "hotbar-state": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                ObjectReference inventory=field(player,"inventory"),remote=field(serverPlayer(player),"inventory");
+                String snapshot=inventoryNbt(inventory);
+                if(!snapshot.equals(inventoryNbt(remote)))throw new AssertionError("Client/server inventory differs");
+                ClassType banks=type("dev.gilbe.dynamicinventory.inventory.HotbarBanks");
+                for(ObjectReference actor:new ObjectReference[]{player,serverPlayer(player)}) {
+                    int count=((IntegerValue)banks.invokeMethod(thread,banks.methodsByName("count").getFirst(),List.of(actor),ObjectReference.INVOKE_SINGLE_THREADED)).value();
+                    if(count!=Integer.parseInt(args[1]))throw new AssertionError("Unexpected reservation "+count);
+                }
+                ArrayReference main=(ArrayReference)field(inventory,"mainInventory");
+                if(args[2].equals("sweep")) {
+                    for(int logical=9;logical<18;logical++)if(main.getValue(ownedRawIndex(inventory,logical))!=null)throw new AssertionError("Sweep refilled a subpanel cell");
+                    int[] expected={64,64,5};
+                    for(int i=0;i<3;i++)if(intField((ObjectReference)main.getValue(ownedRawIndex(inventory,18+i)),"stackSize")!=expected[i])throw new AssertionError("Incorrect Main sweep totals");
+                } else if(args[2].equals("transfer")) {
+                    if(main.getValue(ownedRawIndex(inventory,9))!=null || intField((ObjectReference)main.getValue(ownedRawIndex(inventory,18)),"stackSize")!=64 || intField((ObjectReference)main.getValue(ownedRawIndex(inventory,19)),"stackSize")!=5)throw new AssertionError("Panel-to-Main fallback failed");
+                } else {
+                    boolean mapped=args[2].startsWith("bank:");
+                    int expected=mapped?Integer.parseInt(args[2].substring(5))*9:Integer.parseInt(args[2]);
+                    ArrayReference reserved=mapped?(ArrayReference)banks.invokeMethod(thread,banks.methodsByName("slots").getFirst(),List.of(player),ObjectReference.INVOKE_SINGLE_THREADED):null;
+                    Set<Integer> identities=new HashSet<>();
+                    java.util.regex.Matcher ids=java.util.regex.Pattern.compile("\"identity\":\\{\"type\":3,\"value\":\"([0-9]+)\"\\}").matcher(snapshot);
+                    while(ids.find())if(!identities.add(Integer.parseInt(ids.group(1))))throw new AssertionError("Duplicate identity");
+                    int total=ownedLayoutInt(inventory,"mainSlots");
+                    if(identities.size()!=total)throw new AssertionError("Lost fixture identities: "+identities.size()+"/"+total);
+                    for(int logical=0;logical<total;logical++)if(!identities.contains(logical))throw new AssertionError("Missing identity "+logical);
+                    for(int logical=0;logical<9;logical++) {
+                        ObjectReference stack=(ObjectReference)main.getValue(logical);
+                        if(stack==null||intField(stack,"stackSize")!=1)throw new AssertionError("Lost fixture stack");
+                        int identity=((IntegerValue)call((ObjectReference)call(stack,"getTagCompound","()Lnet/minecraft/nbt/NBTTagCompound;"),"getInteger","(Ljava/lang/String;)I",vm.mirrorOf("identity"))).value();
+                        int wanted=mapped?9+((IntegerValue)reserved.getValue(expected+logical)).value():expected+logical;
+                        if(identity!=wanted)throw new AssertionError("Incorrect hotbar: "+logical+" -> "+identity+" wanted="+wanted);
+                    }
+                }
+                System.out.println("PASS synchronized hotbar state "+args[1]+" "+args[2]);return;
+            }
+            case "panel-ui-shift": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                ObjectReference host=field(client,"currentScreen"),container=field(player,"openContainer");
+                int id=Integer.parseInt(args[1]);
+                call(host,"handleMouseClick","(Lnet/minecraft/inventory/Slot;III)V",call(container,"getSlot","(I)Lnet/minecraft/inventory/Slot;",vm.mirrorOf(id)),vm.mirrorOf(id),vm.mirrorOf(0),vm.mirrorOf(1));
+                break;
+            }
+            case "panel-mouse-tweaks-shift": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                ObjectReference host=field(client,"currentScreen"),container=field(player,"openContainer");
+                ObjectReference remote=field(serverPlayer(player),"openContainer");
+                if(host==null || !Set.of("dev.gilbe.dynamicinventory.client.PlayerInventoryScreen","net.minecraft.client.gui.inventory.GuiChest").contains(host.referenceType().name())
+                    || !container.referenceType().name().equals(remote.referenceType().name()) || intField(container,"windowId")!=intField(remote,"windowId"))throw new AssertionError("Server has not opened the same test container");
+                ObjectReference context=make("yalter.mousetweaks.handlers.ContainerContext","()V");
+                if(!((BooleanValue)call(context,"refresh","(Lnet/minecraft/client/gui/GuiScreen;Z)Z",host,vm.mirrorOf(false))).value())throw new AssertionError("Mouse Tweaks refused fixture screen");
+                for(int i=1;i<args.length;i++)call(context,"clickSlot","(Lnet/minecraft/client/gui/GuiScreen;Lnet/minecraft/inventory/Slot;IZ)V",host,call(container,"getSlot","(I)Lnet/minecraft/inventory/Slot;",vm.mirrorOf(Integer.parseInt(args[i]))),vm.mirrorOf(0),vm.mirrorOf(true));
+                break;
+            }
+            case "panel-reserve-check": {
+                act(new String[]{"require-qualification","DI-Baseline-Hotbar-20261027-Qualification"});
+                ObjectReference panel=floatingPanel(field(client,"currentScreen")),groups=field(panel,"panels");
+                for(int i=0;i<((IntegerValue)call(groups,"size","()I")).value();i++) {
+                    ObjectReference group=(ObjectReference)call(groups,"get","(I)Ljava/lang/Object;",vm.mirrorOf(i));
+                    int size=((IntegerValue)call(field(group,"members"),"size","()I")).value();
+                    if(size!=Integer.parseInt(args[i+1]))throw new AssertionError("Panel "+i+" has "+size+" cells");
+                }
+                System.out.println("PASS Main-only reservation panel sizes="+String.join(",",Arrays.copyOfRange(args,1,args.length)));return;
+            }
+            case "world-status": {
+                ObjectReference server=(ObjectReference)call(client,"getIntegratedServer","()Lnet/minecraft/server/integrated/IntegratedServer;");
+                System.out.println("World="+(server==null ? "none" : call(server,"getFolderName","()Ljava/lang/String;")));
+                break;
+            }
             case "panel-menu-control": {
                 ClassType overlay=type("dev.gilbe.dynamicinventory.client.PanelSettingsOverlay");
                 ObjectReference view=(ObjectReference)overlay.getValue(overlay.fieldByName("active"));
                 if(view==null) throw new IllegalStateException("Open panel settings first");
                 pressGuiButton(view,Integer.parseInt(args[1]));
                 overlay.invokeMethod(thread,overlay.methodsByName("handleInput").getFirst(),List.of(field(client,"currentScreen")),ObjectReference.INVOKE_SINGLE_THREADED);
+                break;
+            }
+            case "attached-frame-info": {
+                ObjectReference host=field(client,"currentScreen");
+                ObjectReference panel=(ObjectReference)call(host,"dynamicinventory$panel","()Ldev/gilbe/dynamicinventory/client/NativeInventoryPanel;");
+                ArrayReference bounds=(ArrayReference)call(panel,"editorSectionBounds","(I)[I",vm.mirrorOf(1));
+                System.out.println("Attached player bounds="+bounds.getValues()+" columns="+call(panel,"visibleColumns","()I")+" rows="+call(panel,"visibleRows","()I")+" maxScroll="+call(panel,"maxScroll","()I"));
+                if(args.length>1 && ((IntegerValue)bounds.getValue(2)).value()!=Integer.parseInt(args[1]))throw new AssertionError("Unexpected attached player width");
                 break;
             }
             case "panel-preview": {
@@ -182,11 +445,13 @@ public class StorageHarness {
                 ObjectReference host=field(client,"currentScreen"), container=field(player,"openContainer");
                 if(!host.referenceType().name().equals("dev.gilbe.dynamicinventory.client.PlayerInventoryScreen")) throw new AssertionError("Player screen required");
                 for(int toggle=0;toggle<2;toggle++) {
+                    int beforeLeft=intField(host,"guiLeft"),beforeTop=intField(host,"guiTop"),beforeWidth=intField(field(host,"view"),"width");
                     ObjectReference button=field(host,"baublesButton");
                     int x=intField(button,"xPosition")+5,y=intField(button,"yPosition")+5;
                     call(host,"mouseClicked","(III)V",vm.mirrorOf(x),vm.mirrorOf(y),vm.mirrorOf(0));
                     call(host,"mouseMovedOrUp","(III)V",vm.mirrorOf(x),vm.mirrorOf(y),vm.mirrorOf(0));
                     ObjectReference panel=floatingPanel(host);
+                    if(intField(host,"guiLeft")!=beforeLeft||intField(host,"guiTop")!=beforeTop||intField(field(host,"view"),"width")!=beforeWidth)throw new AssertionError("Baubles recentered or resized player inventory");
                     if(panel==null || !((BooleanValue)call(panel,"detached",null)).value()) throw new AssertionError("Baubles toggle lost detached panels");
                     ObjectReference panes=(ObjectReference)call(panel,"bounds",null), fixed=field(panel,"fixed");
                     for(int i=0;i<((IntegerValue)call(panes,"size","()I")).value();i++) {
@@ -204,6 +469,24 @@ public class StorageHarness {
                 pressGuiButton(host,108);
                 if(!((BooleanValue)call(floatingPanel(host),"detached",null)).value()) throw new AssertionError("Player settings lost saved split layout");
                 System.out.println("PASS split player panels survive Baubles open/close and player settings without overlapping equipment or replacing the container"); return;
+            }
+            case "panel-clearance-check": {
+                act(new String[]{"require-qualification",args[1]});
+                ObjectReference host=field(client,"currentScreen");
+                int original=intField(host,"guiLeft");
+                try {
+                    host.setValue(fieldInfo(host.referenceType(),"guiLeft"),vm.mirrorOf(original+6));
+                    call(host,"positionSlots",null);
+                    ObjectReference panel=floatingPanel(host),machine=(ObjectReference)call(panel,"machineBounds",null);
+                    if(intField(machine,"x")!=original+6)throw new AssertionError("Cached host obstacle did not follow actual header");
+                    ObjectReference bounds=(ObjectReference)call(panel,"bounds",null),fixed=field(panel,"fixed");
+                    if(((IntegerValue)call(bounds,"size","()I")).value()!=3)throw new AssertionError("Crowded fixture unexpectedly fell back");
+                    for(int i=0;i<3;i++) {
+                        ObjectReference rect=(ObjectReference)call(bounds,"get","(I)Ljava/lang/Object;",vm.mirrorOf(i));
+                        for(int j=0;j<((IntegerValue)call(fixed,"size","()I")).value();j++)if(((BooleanValue)call(rect,"intersects",null,call(fixed,"get","(I)Ljava/lang/Object;",vm.mirrorOf(j)))).value())throw new AssertionError("Live header clips a panel");
+                    }
+                } finally { host.setValue(fieldInfo(host.referenceType(),"guiLeft"),vm.mirrorOf(original));rebuildScreen(host); }
+                System.out.println("PASS live header movement refits all panels before slot drawing");return;
             }
             case "native-layout-path": {
                 act(new String[]{"require-qualification",args[1]});
@@ -258,6 +541,47 @@ public class StorageHarness {
                 } finally { if(added) call(bookmarks,"removeItem",null,stack,null,vm.mirrorOf(0)); }
                 return;
             }
+            case "panel-transfer-info": {
+                ObjectReference screen=field(client,"currentScreen"), container=field(player,"openContainer");
+                System.out.println("container="+container.referenceType().name());
+                ObjectReference panel=floatingPanel(screen);
+                if(panel!=null){ObjectReference groups=field(panel,"panels");int count=((IntegerValue)call(groups,"size","()I")).value();
+                    for(int i=0;i<count;i++){ObjectReference group=(ObjectReference)call(groups,"get","(I)Ljava/lang/Object;",vm.mirrorOf(i));
+                        System.out.println("panel="+((StringReference)group.getValue(group.referenceType().fieldByName("id"))).value()+" members="+call(field(group,"members"),"toString","()Ljava/lang/String;"));}}
+                for(int i=0;i<((IntegerValue)call(field(container,"inventorySlots"),"size","()I")).value();i++){
+                    ObjectReference slot=(ObjectReference)call(container,"getSlot","(I)Lnet/minecraft/inventory/Slot;",vm.mirrorOf(i));
+                    if(!field(slot,"inventory").equals(field(player,"inventory")))continue;
+                    ObjectReference stack=(ObjectReference)call(slot,"getStack","()Lnet/minecraft/item/ItemStack;");
+                    System.out.println("slot="+i+" raw="+call(slot,"getSlotIndex","()I")+" count="+(stack==null?0:intField(stack,"stackSize")));}
+                break;
+            }
+            case "belt-registry-check": {
+                act(new String[]{"require-qualification",args[1]});
+                ClassType registry=type("cpw.mods.fml.common.registry.GameRegistry");
+                ObjectReference legacy=(ObjectReference)registry.invokeMethod(thread,registry.methodsByName("findItem").getFirst(),
+                    List.of(vm.mirrorOf("dynamicinventory"),vm.mirrorOf("creative_inventory_controller")),ObjectReference.INVOKE_SINGLE_THREADED);
+                ClassType upgrades=type("dev.gilbe.dynamicinventory.upgrades.InventoryUpgrades");
+                ObjectReference belt=(ObjectReference)upgrades.invokeMethod(thread,upgrades.methodsByName("creativeBelt").getFirst(),List.of(),ObjectReference.INVOKE_SINGLE_THREADED);
+                if(legacy==null||belt==null||legacy.equals(belt))throw new AssertionError("Saved registry identities were merged or removed");
+                ClassType item=type("net.minecraft.item.Item");
+                Method id=methods(item,"getIdFromItem","(Lnet/minecraft/item/Item;)I").getFirst();
+                int legacyId=((IntegerValue)item.invokeMethod(thread,id,List.of(legacy),ObjectReference.INVOKE_SINGLE_THREADED)).value();
+                int beltId=((IntegerValue)item.invokeMethod(thread,id,List.of(belt),ObjectReference.INVOKE_SINGLE_THREADED)).value();
+                if(legacyId<0||beltId<0||legacyId==beltId)throw new AssertionError("Invalid saved item IDs");
+                ObjectReference stack=make("net.minecraft.item.ItemStack","(Lnet/minecraft/item/Item;II)V",legacy,vm.mirrorOf(1),vm.mirrorOf(7));
+                ClassType info=type("codechicken.nei.api.ItemInfo");
+                boolean hidden=((BooleanValue)info.invokeMethod(thread,info.methodsByName("isHidden","(Lnet/minecraft/item/ItemStack;)Z").getFirst(),List.of(stack),ObjectReference.INVOKE_SINGLE_THREADED)).value();
+                if(!hidden)throw new AssertionError("Legacy compatibility entry is visible in NEI");
+                ObjectReference tag=make("net.minecraft.nbt.NBTTagCompound","()V");
+                call(tag,"setString","(Ljava/lang/String;Ljava/lang/String;)V",vm.mirrorOf("RegistryFixture"),vm.mirrorOf("preserved"));
+                call(stack,"setTagCompound","(Lnet/minecraft/nbt/NBTTagCompound;)V",tag);
+                call(legacy,"onUpdate","(Lnet/minecraft/item/ItemStack;Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;IZ)V",
+                    stack,field(client,"theWorld"),player,vm.mirrorOf(0),vm.mirrorOf(false));
+                if(!call(stack,"getItem","()Lnet/minecraft/item/Item;").equals(belt)||intField(stack,"stackSize")!=1
+                    ||((IntegerValue)call(stack,"getItemDamage","()I")).value()!=7||!call(stack,"getTagCompound","()Lnet/minecraft/nbt/NBTTagCompound;").equals(tag))
+                    throw new AssertionError("Legacy conversion did not preserve its item contents");
+                System.out.println("PASS distinct saved registry IDs, hidden legacy NEI entry, and stack/NBT-preserving Creative Belt conversion");return;
+            }
             case "upgrade-recipe-check": {
                 act(new String[]{"require-qualification",args[1]});
                 String helper=System.getProperty("dinv.helperClasses");
@@ -275,7 +599,7 @@ public class StorageHarness {
             case "controller-control": {
                 ObjectReference screen = field(client,"currentScreen");
                 if (!screen.referenceType().name().equals("dev.gilbe.dynamicinventory.client.InventoryControllerScreen"))
-                    throw new AssertionError("UHV controller screen did not open");
+                    throw new AssertionError("Creative Belt size editor did not open");
                 call(field(screen,"size"),"setText","(Ljava/lang/String;)V",vm.mirrorOf(args[1]));
                 pressGuiButton(screen,1); System.out.println("PASS controller UI submitted target "+args[1]); return;
             }
@@ -303,16 +627,19 @@ public class StorageHarness {
                     rebuildScreen(host); ObjectReference panel=floatingPanel(host);
                     overlay.invokeMethod(thread,overlay.methodsByName("open").getFirst(),List.of(host,panel),ObjectReference.INVOKE_SINGLE_THREADED);
                     ObjectReference view=(ObjectReference)overlay.getValue(overlay.fieldByName("active"));
-                    pressGuiButton(view,34); pressGuiButton(view,60);
+                    pressGuiButton(view,60);
+                    if(((IntegerValue)call(field(field(view,"panelDraft"),"entries"),"size","()I")).value()!=2)
+                        throw new AssertionError("One Add click must create exactly one side panel");
                     call(field(view,"nameField"),"setText","(Ljava/lang/String;)V",vm.mirrorOf("Tools"));
-                    for(int i=0;i<9;i++) pressGuiButton(view,65);
-                    pressGuiButton(view,66); pressGuiButton(view,50);
+                    panelMenuField(view,"slotFields",((StringReference)field(view,"selected")).value(),"9");
+                    pressGuiButton(view,50);
                     overlay.invokeMethod(thread,overlay.methodsByName("handleInput").getFirst(),List.of(host),ObjectReference.INVOKE_SINGLE_THREADED);
                     if(overlay.getValue(overlay.fieldByName("active"))!=null) throw new AssertionError("Panel apply failed");
                     if(!((BooleanValue)call(panel,"detached",null)).value()) throw new AssertionError("Multi-panel layout did not activate");
                     call(panel,"position",null);
                     ObjectReference bounds=(ObjectReference)call(panel,"bounds",null);
                     if(((IntegerValue)call(bounds,"size","()I")).value()!=2) throw new AssertionError("Missing satellite");
+                    checkPlayerPanelRoundTrip(host,panel);
                     ObjectReference states=field(panel,"panels");
                     Set<Integer> visited=new HashSet<>();
                     for(int i=0;i<2;i++) {
@@ -1047,7 +1374,6 @@ public class StorageHarness {
             }
             case "screen-fixtures":
             case "editor-fixtures":
-            case "presentation-fixtures":
             case "mui-lifecycle-fixtures": {
                 if (player == null || field(client, "currentScreen") == null)
                     throw new IllegalStateException("Open the disposable player inventory first");
@@ -1055,7 +1381,7 @@ public class StorageHarness {
                     case "screen-fixtures" -> "InventoryScreenFixtures";
                     case "editor-fixtures" -> "NativeEditorClientFixtures";
                     case "mui-lifecycle-fixtures" -> "Mui2LifecycleClientFixtures";
-                    default -> "PresentationClientFixtures";
+                    default -> throw new IllegalArgumentException(args[0]);
                 };
                 ClassType tests = type("dev.gilbe.dynamicinventory.qualification." + fixture);
                 tests.invokeMethod(thread, tests.methodsByName("run", "()V").getFirst(), List.of(), ObjectReference.INVOKE_SINGLE_THREADED);
@@ -1390,25 +1716,6 @@ public class StorageHarness {
                 ClassType capacity = type("dev.gilbe.dynamicinventory.inventory.InventoryCapacity");
                 capacity.invokeMethod(thread, capacity.methodsByName("useConfiguredCapacity").getFirst(), List.of(), ObjectReference.INVOKE_SINGLE_THREADED);
                 System.out.println("PASS outbound capacity and adapters, read-only server-list probe, pre-play adoption, mismatched adapters and missing metadata rejection, startup restoration");
-                break;
-            }
-            case "machine-mode": {
-                ClassType settings = type("dev.gilbe.dynamicinventory.client.InventoryViewSettings");
-                System.out.println("expandMachineInventory=" + settings.getValue(settings.fieldByName("expandMachineInventory")));
-                System.out.println("compactNativePanels=" + settings.getValue(settings.fieldByName("compactNativePanels")));
-                System.out.println("mui2Presentation=" + settings.getValue(settings.fieldByName("mui2Presentation")));
-                break;
-            }
-            case "presentation-check": {
-                ObjectReference screen = field(client, "currentScreen");
-                ObjectReference presenter = screen;
-                if (!screen.referenceType().name().equals("dev.gilbe.dynamicinventory.client.PlayerInventoryScreen"))
-                    presenter = (ObjectReference) call(screen, "dynamicinventory$panel", null);
-                if (presenter == null) throw new AssertionError("No native inventory presentation owner");
-                String status = ((StringReference) call(presenter, "presentationStatus", "()Ljava/lang/String;")).value();
-                System.out.println(status);
-                if (!status.contains("enabled=true") || !status.contains("canonicalContainer=true") || status.contains("drawCalls=0"))
-                    throw new AssertionError("MUI2 presentation is not active on the canonical container");
                 break;
             }
             case "capacity-info": {
@@ -1764,6 +2071,38 @@ public class StorageHarness {
                 if (args.length > 1 && !folder.equals(args[1])) throw new IllegalStateException("Fixture world differs from the requested reload target");
                 break;
             }
+            case "vanilla-panel-check": {
+                act(new String[]{"require-qualification", args[1]});
+                String fixtures=System.getProperty("dinv.vanillaFixtures");
+                if (fixtures != null) {
+                    if (!fixtures.replace('\\','/').endsWith("/build/classes/java/packTest")) throw new IllegalArgumentException("Explicit pack fixture directory required");
+                    ObjectReference url=(ObjectReference)call((ObjectReference)call(make("java.io.File","(Ljava/lang/String;)V",vm.mirrorOf(fixtures)),"toURI",null),"toURL",null);
+                    call(loader,"addURL","(Ljava/net/URL;)V",url);
+                    call(field(loader,"invalidClasses"),"remove","(Ljava/lang/Object;)Z",vm.mirrorOf("dev.gilbe.dynamicinventory.qualification.VanillaPanelClientFixtures"));
+                }
+                ClassType fixture=type("dev.gilbe.dynamicinventory.qualification.VanillaPanelClientFixtures");
+                fixture.invokeMethod(thread,fixture.methodsByName("run").getFirst(),List.of(),ObjectReference.INVOKE_SINGLE_THREADED);
+                break;
+            }
+            case "commands-file": {
+                act(new String[]{"require-qualification", args[1]});
+                for (String command : java.nio.file.Files.readAllLines(java.nio.file.Path.of(args[2]))) {
+                    if (command.isBlank() || command.startsWith("#")) continue;
+                    if (!command.startsWith("/") || command.length() > 32767) throw new IllegalArgumentException("Invalid fixture command");
+                    call(player,"sendChatMessage","(Ljava/lang/String;)V",vm.mirrorOf(command));
+                }
+                break;
+            }
+            case "lab-chunks-ready": {
+                act(new String[]{"require-qualification", args[1]});
+                ObjectReference server=(ObjectReference)call(client,"getIntegratedServer","()Lnet/minecraft/server/integrated/IntegratedServer;");
+                ObjectReference world=(ObjectReference)call(server,"worldServerForDimension","(I)Lnet/minecraft/world/WorldServer;",vm.mirrorOf(0));
+                for (int x : new int[]{-16,16}) for (int z : new int[]{-16,48}) {
+                    if (!((BooleanValue)call(world,"blockExists","(III)Z",vm.mirrorOf(x),vm.mirrorOf(4),vm.mirrorOf(z))).value())
+                        throw new IllegalStateException("Vanilla lab chunks are still loading");
+                }
+                break;
+            }
             case "world": {
                 if (player != null) throw new IllegalStateException("Refusing to replace an open world");
                 if (!args[1].startsWith("DI-Baseline-")) throw new IllegalArgumentException("Disposable test world name required");
@@ -1855,6 +2194,18 @@ public class StorageHarness {
                 System.out.println("Invoked creative pick-block at " + x + "," + y + "," + z);
                 break;
             }
+            case "lab-entities": {
+                act(new String[]{"require-qualification", args[1]});
+                System.out.println("player x="+player.getValue(fieldInfo(player.referenceType(),"posX"))+" y="+player.getValue(fieldInfo(player.referenceType(),"posY"))+" z="+player.getValue(fieldInfo(player.referenceType(),"posZ")));
+                ArrayReference entries=(ArrayReference)call(field(field(client,"theWorld"),"loadedEntityList"),"toArray","()[Ljava/lang/Object;");
+                for(Value entry:entries.getValues()) {
+                    ObjectReference entity=(ObjectReference)entry;
+                    String name=((StringReference)call(entity,"getCommandSenderName","()Ljava/lang/String;")).value();
+                    if(name.startsWith("Lab ") || entity.referenceType().name().contains("Cart") || entity.referenceType().name().contains("Minecart"))
+                        System.out.println(entity.referenceType().name()+" name="+name+" x="+entity.getValue(fieldInfo(entity.referenceType(),"posX"))+" z="+entity.getValue(fieldInfo(entity.referenceType(),"posZ")));
+                }
+                break;
+            }
             case "entity-open": {
                 act(new String[]{"require-qualification"});
                 ObjectReference entities = field(field(client, "theWorld"), "loadedEntityList");
@@ -1863,7 +2214,8 @@ public class StorageHarness {
                 for (Value entry : entries.getValues()) {
                     ObjectReference entity = (ObjectReference) entry;
                     StringReference name = (StringReference) call(entity, "getCommandSenderName", "()Ljava/lang/String;");
-                    if ((name != null && name.value().equals(args[1])) || entity.referenceType().name().equals(args[1])) selected = entity;
+                    List<String> selectors=Arrays.asList(args[1].split("\\|"));
+                    if ((name != null && selectors.contains(name.value())) || selectors.contains(entity.referenceType().name())) selected = entity;
                 }
                 if (selected == null) throw new AssertionError("Named fixture entity is not loaded: " + args[1]);
                 // Send the same interaction packet as vanilla, leaving entity GUI selection to the server.

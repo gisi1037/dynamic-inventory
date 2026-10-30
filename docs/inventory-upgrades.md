@@ -81,8 +81,12 @@ go through `InventoryResizing`. Do not resize synchronously from item/slot callb
 `UpgradeCapacityFixtures` checks policy boundaries. `/dinvupgradetest` is a runtime
 fixture available only in development builds and specifically named disposable
 upgrade qualification worlds; it is excluded from the production JAR.
+`UpgradeRegistryFixtures` exercises Forge's real ID insertion and consistency
+checks with both the retired controller and UHV belt present. It reproduces the
+invalid two-ID remap and checks distinct-ID loading in both orders, repeated
+registry reconstruction, hidden catalog entries and stack/NBT preservation.
 
-## Tiered belts and UHV controller (October 26)
+## Tiered belts and Creative Belt (October 26)
 
 Belts at LV, HV, IV, ZPM and UHV have configurable default bonuses of 9, 27, 54,
 108 and 189 storage slots. They do not stack; forced multiple belts use the largest
@@ -90,25 +94,32 @@ bonus. The existing `inventory_belt` ID remains LV. New IDs use `_hv`, `_iv`, `_
 `_uhv`. All retain Baubles equip/unequip and safe-shrink validation. New settings:
 `bonusSlotsHV`, `bonusSlotsIV`, `bonusSlotsZPM`, `bonusSlotsUHV` in the belt category.
 
-The reusable **UHV Inventory Controller** is craftable and usable in survival.
+The UHV tier is named **Creative Belt** and is craftable and usable in survival.
 Right-click while holding it to enter any whole storage size from 27 to 216
 (hotbar excluded). The server rechecks possession, bounds, container and opening
 agreement, then uses the existing resize transaction. An occupied tail, cursor or
 crafting grid refuses unsafe shrink. The fixed total supersedes belt bonuses;
 **Resume belt bonuses** restores equipment rules with that total as the new base.
 The chosen fixed capacity survives saves and death.
+It also remains a Baubles belt with the configured UHV bonus when ordinary
+equipment rules are enabled. Equip it through a belt slot; right-click opens the
+size menu. A hidden compatibility entry preserves the retired controller's
+distinct registry ID in existing saves. Old stacks convert into Creative Belts
+when carried, used or dropped, preserving their count and NBT. This avoids merging
+two existing world IDs onto one item, which Forge cannot load.
 
 Placeholder recipes are enabled by `belt.placeholderRecipes` when GregTech and
 Baubles are present. Each belt uses leather/hardened leather, two tier metal plates,
 a matching tier conveyor and circuit, and the previous belt (LV starts from a
 chest). Plates progress through steel, stainless steel, tungsten steel, naquadah
-alloy and neutronium. The controller upgrades a UHV belt with four neutronium
-plates, two UHV circuits and two nether stars. These crafting-table recipes are
+alloy and neutronium. The Creative Belt keeps the UHV belt recipe; the separate
+controller recipe has been removed. These crafting-table recipes are
 provisional, not final assembler/assembly-line balance.
 
 References were checked against local GTNH sources: the Tinkers Traveler's Belt
 recipe in NewHorizonsCoreMod `ScriptTinkersConstruct` uses hardened leather, a plate
 and circuit; GregTech conveyor/battery-pack progression supplies tier conventions
-and components. Texture placeholders extend the existing 16px belt art with GT
-voltage accents and marks. Packs can override each item at its standard Dynamic
-Inventory resource location.
+and components. The five belt textures use the supplied replacement artwork.
+Packs can override each item at its existing Dynamic Inventory resource location;
+LV retains `textures/items/inventory_belt.png`, and the higher tiers retain their
+`inventory_belt_hv`, `_iv`, `_zpm` and `_uhv` filenames.

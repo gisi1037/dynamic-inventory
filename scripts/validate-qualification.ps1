@@ -31,8 +31,7 @@ $preflightReports = @(
     'isolated/verification.json',
     'capacity-matrix/verification.json',
     'container-regression/verification.json',
-    'machine-modes/verification.json',
-    'native-presentation/verification.json'
+    'machine-modes/verification.json'
 )
 $fullPackReports = @(
     $preflightReports + @(
@@ -40,7 +39,6 @@ $fullPackReports = @(
     'full-pack-frames/verification.json',
     'gt-mui2/verification.json',
     'full-pack-modes/verification.json',
-    'full-pack-presentation/verification.json',
     'full-pack-preservation.json'
     )
 )

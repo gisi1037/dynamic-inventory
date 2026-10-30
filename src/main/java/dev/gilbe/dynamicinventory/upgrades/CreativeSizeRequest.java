@@ -65,7 +65,7 @@ public final class CreativeSizeRequest implements IMessage {
         if (target == null) return;
         ItemStack held = player.getHeldItem();
         if (held == null || held.stackSize < 1
-            || held.getItem() != InventoryUpgrades.creativeSizer
+            || held.getItem() != InventoryUpgrades.creativeBelt()
             || player.openContainer != player.inventoryContainer) return;
         try {
             InventoryUpgrades.setControlledCapacity(player, target);

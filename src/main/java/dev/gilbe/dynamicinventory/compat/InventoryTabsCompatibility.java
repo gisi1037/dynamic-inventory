@@ -33,7 +33,8 @@ public final class InventoryTabsCompatibility {
         GuiScreen screen = Minecraft.getMinecraft().currentScreen;
         if (!(screen instanceof PlayerInventoryScreen) && !(screen instanceof ContainerPanelAccess
             && ((ContainerPanelAccess) screen).dynamicinventory$panel() != null)) return false;
-        NativePanelFrame.draw(x, y, width, height, 2, null);
+        if (screen instanceof PlayerInventoryScreen) NativePanelFrame.drawPlayerFrame(x, y, width, height);
+        else NativePanelFrame.draw(x, y, width, height, 2, null);
         if (!tab.enabled) {
             // The selected tab overlaps the panel by four pixels. Leave that seam open,
             // instead of drawing a second bottom bevel across the panel's top edge.
@@ -49,6 +50,10 @@ public final class InventoryTabsCompatibility {
                 // bottom corners, without extending their outlines down into the panel.
                 int innerLeft = tab.id == 2 ? (screen instanceof PlayerInventoryScreen ? 4 : 2) : 0;
                 Gui.drawRect(x + innerLeft, seam, x + width, bottom, theme.panelFill);
+                // The panel's two-pixel highlight starts immediately to the right of this tab.
+                // Complete the inside corner with one matching pixel instead of leaving a square gap.
+                if (screen instanceof PlayerInventoryScreen)
+                    Gui.drawRect(x + width - 1, bottom - 1, x + width, bottom, theme.panelHighlight);
                 if (innerLeft > 0) {
                     Gui.drawRect(x, seam, x + 1, bottom, theme.panelOuter);
                     Gui.drawRect(

@@ -24,6 +24,11 @@ import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 public class ClientProxy extends CommonProxy {
 
     @Override
+    public void receiveHotbarSlots(int[] slots) {
+        dev.gilbe.dynamicinventory.client.HotbarControls.receive(slots);
+    }
+
+    @Override
     public void openInventoryController() {
         Minecraft client = Minecraft.getMinecraft();
         if (client.currentScreen == null && client.thePlayer != null
@@ -94,7 +99,17 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void postInit(FMLPostInitializationEvent event) {
         super.postInit(event);
+        dev.gilbe.dynamicinventory.client.HotbarControls.initialize();
+        if (Loader.isModLoaded("NotEnoughItems")) hideLegacyController();
         if (PackCompatibility.enabled()) PackClientCompatibility.initialize();
+    }
+
+    @cpw.mods.fml.common.Optional.Method(modid = "NotEnoughItems")
+    private static void hideLegacyController() {
+        net.minecraft.item.Item legacy = cpw.mods.fml.common.registry.GameRegistry
+            .findItem(DynamicInventory.MODID, "creative_inventory_controller");
+        if (legacy != null) codechicken.nei.api.API.hideItem(
+            new net.minecraft.item.ItemStack(legacy, 1, net.minecraftforge.oredict.OreDictionary.WILDCARD_VALUE));
     }
 
 }

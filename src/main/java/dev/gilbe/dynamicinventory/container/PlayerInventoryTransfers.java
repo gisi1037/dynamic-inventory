@@ -48,7 +48,17 @@ public final class PlayerInventoryTransfers {
                 moved = equipArmor(container, source);
                 if (!moved) {
                     int mainIndex = PlayerContainerLayout.mainIndex(inventory, id);
-                    moved = merge(container, source, mainIndex < InventoryLayout.HOTBAR_SLOTS ? storage : hotbar);
+                    if (mainIndex < InventoryLayout.HOTBAR_SLOTS) moved = merge(container, source, storage);
+                    else {
+                        moved = merge(container, source, hotbar);
+                        if (source.stackSize > 0) {
+                            int sourceId = id;
+                            int[] remainingStorage = java.util.Arrays.stream(storage)
+                                .filter(target -> target != sourceId)
+                                .toArray();
+                            moved = merge(container, source, remainingStorage) || moved;
+                        }
+                    }
                 }
             }
         if (!moved) return null;
@@ -84,6 +94,7 @@ public final class PlayerInventoryTransfers {
         if (source.isStackable()) {
             for (int id : destinations) {
                 Slot slot = container.getSlot(id);
+                if (reserved(slot)) continue;
                 ItemStack existing = slot.getStack();
                 if (existing == null || !slot.isItemValid(source)
                     || existing.getItem() != source.getItem()
@@ -102,6 +113,7 @@ public final class PlayerInventoryTransfers {
         for (int id : destinations) {
             if (source.stackSize == 0) break;
             Slot slot = container.getSlot(id);
+            if (reserved(slot)) continue;
             if (slot.getHasStack() || !slot.isItemValid(source)) continue;
             int count = Math.min(source.stackSize, Math.min(slot.getSlotStackLimit(), source.getMaxStackSize()));
             if (count <= 0) continue;
@@ -122,6 +134,11 @@ public final class PlayerInventoryTransfers {
                 ids[next++] = PlayerContainerLayout.containerId(inventory, main);
         }
         return ids;
+    }
+
+    private static boolean reserved(Slot slot) {
+        return slot.inventory instanceof InventoryPlayer inventory
+            && dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, slot.getSlotIndex());
     }
 
     private static int[] reversed(int[] source) {

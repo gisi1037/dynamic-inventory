@@ -25,9 +25,6 @@ public final class PanelRecipeAudit {
             Arrays.asList(
                 (Object[]) upgrades.getField("belts")
                     .get(null)));
-        expected.add(
-            upgrades.getField("creativeSizer")
-                .get(null));
         Class<?> manager = Class.forName("net.minecraft.item.crafting.CraftingManager");
         Object instance = method(manager, "getInstance", "func_77594_a").invoke(null);
         List<?> recipes = (List<?>) method(manager, "getRecipeList", "func_77592_b").invoke(instance);
@@ -48,8 +45,7 @@ public final class PanelRecipeAudit {
             found.add(result);
             count++;
         }
-        if (count != 6 || !found.equals(expected))
-            throw new AssertionError("Missing tier/controller recipes: " + count + "/6");
-        return "PASS all five GTNH belt recipes and UHV controller recipe resolve their ore ingredients";
+        if (count != 5 || !found.equals(expected)) throw new AssertionError("Missing belt recipes: " + count + "/5");
+        return "PASS all five GTNH belt recipes, including the Creative Belt, resolve their ore ingredients";
     }
 }

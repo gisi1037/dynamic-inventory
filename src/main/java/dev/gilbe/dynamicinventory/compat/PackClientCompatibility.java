@@ -68,7 +68,9 @@ public final class PackClientCompatibility {
                 if (Minecraft.getMinecraft().currentScreen instanceof PlayerInventoryScreen screen) {
                     position.setTopLeft();
                     position.setPos(screen.sortButtonX(), screen.sortButtonY());
-                    position.setEnabled(!screen.layoutSettingsOpen());
+                    position.setEnabled(
+                        !screen.layoutSettingsOpen() && (screen.floating() == null || screen.floating()
+                            .mainVisible()));
                 } else {
                     IPosSetter.TOP_RIGHT_HORIZONTAL.setButtonPos(group, position);
                 }
@@ -87,6 +89,11 @@ public final class PackClientCompatibility {
 
             @Override
             public boolean hideItemPanelSlot(GuiContainer gui, int x, int y, int width, int height) {
+                dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect hotbars = dev.gilbe.dynamicinventory.client.HotbarBankPanel
+                    .bounds(gui);
+                if (hotbars != null && hotbars
+                    .intersects(new dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect(x, y, width, height)))
+                    return true;
                 dev.gilbe.dynamicinventory.client.DetachedChestPanel panel = dev.gilbe.dynamicinventory.client.DetachedChestPanel
                     .of(gui);
                 return panel != null && panel.excludes(x, y, width, height);
@@ -129,7 +136,8 @@ public final class PackClientCompatibility {
             top,
             screen.sortButtonX(),
             screen.sortButtonY(),
-            !screen.layoutSettingsOpen());
+            !screen.layoutSettingsOpen() && (screen.floating() == null || screen.floating()
+                .mainVisible()));
     }
 
     public static void positionSortButtons(List<GuiButton> buttons, int left, int top, int x, int y, boolean enabled) {

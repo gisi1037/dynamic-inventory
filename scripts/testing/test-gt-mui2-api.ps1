@@ -36,26 +36,15 @@ function Snapshot([string] $Label) {
 function MainSignature($State) {
     return ($State.mainInventory | Select-Object inventoryIndex,item,count,damage,nbtCanonical | ConvertTo-Json -Depth 12 -Compress)
 }
-function Set-MachineMode([bool] $Expanded) {
-    Harness resume | Out-Null
-    Harness capture gt-api-settings | Out-Null
-    Harness layout-control 100 | Out-Null
-    $mode = Harness machine-mode
-    if (($mode -match 'expandMachineInventory=true') -ne $Expanded) { Harness layout-control 110 | Out-Null }
-    Check (((Harness machine-mode) -match 'expandMachineInventory=true') -eq $Expanded) "Machine layout preference set to expanded=$Expanded"
-    Harness layout-control 108 | Out-Null
-    Harness resume | Out-Null
-}
 Harness require-qualification $WorldName | Out-Null
 Harness background | Out-Null
-$originalExpanded = (Harness machine-mode) -match 'expandMachineInventory=true'
-Set-MachineMode $false
-Harness window 1920 1080 | Out-Null
+# A short viewport exercises automatic scrolling without an obsolete mode toggle.
+Harness window 1920 480 | Out-Null
 Harness command '/tp @p 0 4 0' | Out-Null
 Harness command '/setblock 1 4 0 minecraft:air' | Out-Null
 Harness command '/setblock 2 4 0 gregtech:gt.blockmachines 0 replace {mID:9231}' | Out-Null
 Harness block-open 2 4 0 | Out-Null
-Harness scale 0 | Out-Null
+Harness scale 2 | Out-Null
 $mapping = Harness foreign-check
 $match = [regex]::Match($mapping, 'ordinaryIds=\[([^\]]+)\]')
 Check $match.Success 'Actual GT buffer exposes its canonical player slot map'
@@ -102,7 +91,7 @@ Harness clear-chat | Out-Null
 Harness screenshot 'step3-ui-api-gt-mui2.png' | Out-Null
 Copy-Item (Join-Path $GameDirectory 'screenshots/step3-ui-api-gt-mui2.png') (Join-Path $EvidenceDirectory 'gt-mui2.png') -Force
 Harness resume | Out-Null
-Set-MachineMode $originalExpanded
+Harness window 1920 1080 | Out-Null
 Harness capture gt-api-final-player | Out-Null
 Harness scale 2 | Out-Null
 @{success=$true; prototype='0.8.0-dev'; packTarget=$packTarget; fullPack=$true;

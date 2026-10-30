@@ -56,6 +56,10 @@ public final class AttachedChestLayoutFixtures {
                         check(layout.width <= screen[0] && layout.height <= screen[1], "window bounds " + label);
                         check(layout.columns <= columns && layout.rows <= rows, "chosen layout limits " + label);
                         check(
+                            layout.playerWidth == Math
+                                .max(176, layout.columns * 18 + 16 + (layout.rows * layout.columns < storage ? 10 : 0)),
+                            "only overflowing player rows reserve a scrollbar gutter " + label);
+                        check(
                             layout.playerY >= chestHeight + 8 && layout.craftingY >= chestHeight + 8,
                             "lower band follows the chest " + label);
                         check(
@@ -110,16 +114,16 @@ public final class AttachedChestLayoutFixtures {
         // A large framebuffer must not turn Compact into a monitor-wide chest.
         AttachedChestLayout compactBudget = new AttachedChestLayout(1920, 1080, 72, 9, 8, false, 0, 0);
         check(
-            compactBudget.chestColumns == 19 && compactBudget.width == 372,
+            compactBudget.chestColumns == 19 && compactBudget.width == 368 && compactBudget.playerWidth == 178,
             "Compact chest width follows the inventory and crafting band");
-        check(compactBudget.craftingX == 196, "crafting follows the explicit lower-group gap");
+        check(compactBudget.craftingX == 189, "crafting follows the explicit lower-group gap");
         AttachedChestLayout narrow = new AttachedChestLayout(400, 360, 72, 9, 8, false, 0, 0);
         check(narrow.columns == 9, "a narrower chest screen retains a complete nine-column rectangle");
         AttachedChestLayout small = new AttachedChestLayout(382, 360, 72, 9, 8, false, 0, 0);
         check(small.columns == 9, "the smallest side-by-side chest screen retains nine columns");
         AttachedChestLayout wideBudget = new AttachedChestLayout(1920, 1080, 72, 18, 4, false, 0, 0);
         check(
-            wideBudget.chestColumns == 28 && wideBudget.width == 534,
+            wideBudget.chestColumns == 28 && wideBudget.width == 530 && wideBudget.playerWidth == 340,
             "Wide chest width follows the inventory and crafting band");
         AttachedChestLayout rectangular = new AttachedChestLayout(960, 540, 72, 9, 8, false, 0, 0, 243);
         check(rectangular.columns == 9 && 72 % rectangular.columns == 0, "player grid has no partial row");
@@ -131,7 +135,7 @@ public final class AttachedChestLayoutFixtures {
         for (int capacity : new int[] { 27, 54, 243, 486 }) {
             AttachedChestLayout budget = new AttachedChestLayout(960, 540, 72, 9, 8, false, 0, 0, capacity);
             check(
-                budget.width == 372 && budget.chestColumns * 18 + 26 <= budget.width,
+                budget.width == 368 && budget.chestColumns * 18 + 26 <= budget.width,
                 "chest capacity cannot widen either frame: " + capacity);
         }
         for (int gap : new int[] { 0, 4, 32, 128 }) {

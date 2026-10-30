@@ -46,7 +46,6 @@ public final class InventoryUpgradeTestCommand extends CommandBase {
             if (args[0].equals("recipes")) {
                 java.util.Set<net.minecraft.item.Item> outputs = new java.util.HashSet<>();
                 java.util.Collections.addAll(outputs, InventoryUpgrades.belts);
-                outputs.add(InventoryUpgrades.creativeSizer);
                 int recipes = 0;
                 for (Object object : net.minecraft.item.crafting.CraftingManager.getInstance()
                     .getRecipeList()) {
@@ -60,7 +59,7 @@ public final class InventoryUpgradeTestCommand extends CommandBase {
                             throw new AssertionError("Unresolved recipe ore ingredient");
                     recipes++;
                 }
-                if (recipes != 6) throw new AssertionError("Expected six placeholder recipes, got " + recipes);
+                if (recipes != 5) throw new AssertionError("Expected five placeholder recipes, got " + recipes);
                 report.addProperty("placeholderRecipes", recipes);
             }
             if (args[0].equals("admin-refusal")) {

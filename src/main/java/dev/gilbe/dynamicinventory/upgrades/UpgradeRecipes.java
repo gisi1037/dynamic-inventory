@@ -43,20 +43,6 @@ public final class UpgradeRecipes {
                     'I',
                     circuits[tier]));
         }
-        GameRegistry.addRecipe(
-            new ShapedOreRecipe(
-                new ItemStack(InventoryUpgrades.creativeSizer),
-                "PIP",
-                "SBS",
-                "PIP",
-                'P',
-                "plateNeutronium",
-                'I',
-                "circuitInfinite",
-                'S',
-                Items.nether_star,
-                'B',
-                InventoryUpgrades.belts[InventoryUpgrades.belts.length - 1]));
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })

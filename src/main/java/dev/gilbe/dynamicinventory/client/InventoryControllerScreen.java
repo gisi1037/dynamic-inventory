@@ -10,7 +10,7 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 import dev.gilbe.dynamicinventory.upgrades.CreativeSizeRequest;
 
-/** Small numeric editor opened by the held UHV item; never replaces an active inventory container. */
+/** Small numeric editor opened by the held Creative Belt; never replaces an active inventory container. */
 public final class InventoryControllerScreen extends GuiScreen {
 
     private GuiTextField size;
@@ -81,12 +81,7 @@ public final class InventoryControllerScreen extends GuiScreen {
         drawDefaultBackground();
         int left = width / 2 - 100, top = height / 2 - 58;
         drawRect(left, top, left + 200, top + 116, InventoryGuiTheme.get().settingsFill);
-        drawCenteredString(
-            fontRendererObj,
-            "UHV Inventory Controller",
-            width / 2,
-            top + 8,
-            InventoryGuiTheme.get().settingsText);
+        drawCenteredString(fontRendererObj, "Creative Belt", width / 2, top + 8, InventoryGuiTheme.get().settingsText);
         drawCenteredString(
             fontRendererObj,
             error.isEmpty() ? "Total storage (hotbar excluded)" : error,

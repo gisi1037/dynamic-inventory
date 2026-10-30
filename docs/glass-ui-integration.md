@@ -2,7 +2,7 @@
 
 Dynamic Inventory can read an optional color theme from the [Glass UI fork branch](https://github.com/gisi1037/Glass-UI/tree/codex/dynamic-inventory). The fork adapts Sampsa's GTNH Glass UI, based on Ranzu's [Shadow-UI](https://github.com/Ranzuu/Shadow-UI), for GTNH 2.9.0-RC-2 and Dynamic Inventory 0.8.0. The resource pack adds a small theme JSON file; its original raster artwork remains unchanged. Attribution and the upstream CC BY-NC-SA 4.0 license are retained in the fork.
 
-The local fork checkout lives at `resourcepacks/Glass-UI/` as a standalone Git repository. The main mod repository ignores that directory, keeping the resource-pack fork separate from private mod source. From a PowerShell terminal in the fork directory, run `./build-pack.ps1` to produce:
+The resource-pack fork is a separate repository. If cloned at `resourcepacks/Glass-UI/`, that directory is ignored by the mod repository. From a PowerShell terminal in the fork directory, run `./build-pack.ps1` to produce:
 
 ```text
 resourcepacks/Glass-UI/dist/Glass-UI-Dynamic-Inventory.zip
@@ -28,13 +28,15 @@ The fork's complete palette is in [inventory_theme.json](https://github.com/gisi
 
 The theme only changes client presentation. It does not change storage capacity, item positions, save data, or client/server inventory synchronization. Inventory borders are drawn as separate edges, so transparent panel centers and variable layouts do not require editing or stretching the original raster art. The Tinkers station view clips the obsolete fixed player-grid region from its existing background, including when a tall attached chest extends above the station's usual storage area. In short windows, the station reserves space for the player panel before choosing its chest layout, allowing oversized attached inventories such as compressed chests to use Tinkers' native scrolling layout. Native chest-slot coordinates are restored before each station draw and refreshed afterward to prevent frame-to-frame drift. Runtime qualification of these cases is pending.
 
-The layout dialog has two independent client preferences. **Containers: Full box** joins the native header and expanded inventory into a rectangle; **Containers: Compact** keeps the T-shaped silhouette. Full box is the default, saved as `B:compactNativePanels=false` in `config/dynamicinventory-client.cfg`. This setting changes panel geometry, not inventory state.
+Attached layouts remain the default. Panel-specific layout and style controls now
+live in the inventory panel menu; the old Full box/Compact and Vertical/Scroll
+settings have been removed. Transparent fills continue to reveal the world behind
+the interface without changing inventory contents.
 
-Separately, **Machines: Vertical** or **Machines: Scroll** controls the MUI1 and MUI2 machine inventory viewport. Vertical expands rows to fit the screen when possible and falls back to scrolling in short windows. Scroll keeps three rows visible and uses the scrollbar. This choice does not change the full-box/compact shape setting. Both panel shapes retain the active resource-pack transparency, so transparent centers continue to reveal the world behind the interface. Capacity and player-grid dimensions remain governed by their existing settings.
-
-The resource pack can be enabled or removed without changing saved inventory contents. Focused container-frame runtime qualification passed 172 checks against JAR SHA-256 `7641D71CE4AAC442AA4E479E2FCF8BF05FDF275C712E01001C7CF2930F2E5034`; see [the verification report](qualification/glass-ui/container-frames/verification.json). It covers Full box and Compact layouts for chests, the Galacticraft tab, and a Tinkers compressed chest at GUI scales 1, 2, 3, and Auto, including GUI bounds, canonical slots, stable chest-slot positions, and exact player-inventory/cursor preservation. The compressed chest also passed queued pickup, placement, and return checks at each scale.
-
-Earlier visual-theme evidence remains recorded against its original artifact SHA `ED03C558E6F73B730412DB16769476EC04A33297FEE85CA6EDE377E5EDDE66D4`; MUI1/MUI2 mode evidence remains at `23DEA7FC47953C3132E63A7FB41731D9B7B0180DCF018C33A71618C504DF5357`, and the full-pack GT-buffer mode evidence at `ED03C558E6F73B730412DB16769476EC04A33297FEE85CA6EDE377E5EDDE66D4`. Their report files retain those artifact hashes. The current artifact also passed [108 supported-container regression checks](qualification/glass-ui/merged-frame-regression/verification.json) across ten RC-2 interfaces: chests, double chests, crafting tables, furnaces, Tinkers stations with and without attached chests, Galacticraft, and three GT machines. A final 1920×1080 compressed-chest check fit GUI scale settings 1, 2, 3, and Auto. Nightly builds and other pack interfaces remain outside this qualification.
+Earlier development checks exercised resource-pack frames, GUI scales and selected
+container transfers. Their raw captures are local development records. See
+[testing](testing.md) and the [changelog](../CHANGELOG.md) for current release
+coverage; arbitrary resource packs and machine screens still need focused checks.
 
 ## Detached panels and existing packs
 

@@ -25,7 +25,7 @@ public final class InventoryViewLayout {
         totalRows = (storageSlots + columns - 1) / columns;
         visibleRows = Math.max(1, Math.min(Math.min(totalRows, preferredRows), (screenHeight - 132) / 18));
         boolean scroll = totalRows > visibleRows;
-        width = Math.max(176, columns * 18 + 16 + (scroll ? 10 : 0));
+        width = panelWidth(columns, scroll);
         gridX = (width - columns * 18 - (scroll ? 10 : 0)) / 2;
         hotbarY = 84 + visibleRows * 18 + 4;
         height = hotbarY + 24;
@@ -33,5 +33,10 @@ public final class InventoryViewLayout {
 
     public int maxScroll() {
         return totalRows - visibleRows;
+    }
+
+    /** Reserve a scrollbar gutter only when rows overflow, shared by owned and native attached inventories. */
+    public static int panelWidth(int columns, boolean scroll) {
+        return Math.max(176, columns * 18 + 16 + (scroll ? 10 : 0));
     }
 }

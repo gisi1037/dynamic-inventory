@@ -43,7 +43,7 @@ Invoke-Harness require-step3
 Invoke-Harness layout-math
 Copy-Item "$diagnostics/layout-math.json" (Join-Path $EvidenceDirectory 'layout-math.json') -Force
 $script:original = Inventory-Signature
-foreach ($preset in @(101, 102, 103)) {
+foreach ($preset in @(101, 102)) {
     Select-Preset $preset
     foreach ($scale in @(1, 2, 3, 0)) {
         Invoke-Harness scale $scale
@@ -67,8 +67,8 @@ Invoke-Harness layout-check
 Assert-Unchanged 'Wide preset after larger window resize'
 Invoke-Harness window 854 480
 Invoke-Harness scale 0
-Select-Preset 103
-Save-View tall
+Invoke-Harness layout-set 6 12
+Save-View narrow
 Invoke-Harness page down
 Invoke-Harness layout-check
 Invoke-Harness visible-click 71
@@ -76,8 +76,8 @@ Invoke-Harness visible-click 71
 Invoke-Harness page up
 Invoke-Harness scrollbar-bottom
 Invoke-Harness layout-check
-Assert-Unchanged 'Tall preset Page Up/Down, scrollbar and final-slot clicking'
-Save-View tall-scrolled
+Assert-Unchanged 'Custom narrow layout Page Up/Down, scrollbar and final-slot clicking'
+Save-View narrow-scrolled
 
 # Layout controls must not close the container or consume crafting inputs.
 Invoke-Harness visible-click 71

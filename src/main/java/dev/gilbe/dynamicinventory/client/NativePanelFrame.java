@@ -11,6 +11,29 @@ public final class NativePanelFrame extends Gui {
 
     private NativePanelFrame() {}
 
+    /** The player section and its tabs share the same four-pixel highlight and dark outline. */
+    public static void drawPlayerFrame(int x, int y, int width, int height) {
+        InventoryGuiTheme theme = InventoryGuiTheme.get();
+        GL11.glPushAttrib(GL11.GL_CURRENT_BIT | GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT);
+        try {
+            GL11.glDisable(GL11.GL_LIGHTING);
+            playerBorder(x, y, width, height, theme.panelOuter);
+            playerBorder(x + 1, y + 1, width - 2, height - 2, theme.panelShadow);
+            drawRect(x + 2, y + 2, x + width - 2, y + 4, theme.panelHighlight);
+            drawRect(x + 2, y + 4, x + 4, y + height - 2, theme.panelHighlight);
+            drawRect(x + 4, y + 4, x + width - 2, y + height - 2, theme.panelFill);
+        } finally {
+            GL11.glPopAttrib();
+        }
+    }
+
+    private static void playerBorder(int x, int y, int width, int height, int color) {
+        drawRect(x, y, x + width, y + 1, color);
+        drawRect(x, y + height - 1, x + width, y + height, color);
+        drawRect(x, y + 1, x + 1, y + height - 1, color);
+        drawRect(x + width - 1, y + 1, x + width, y + height - 1, color);
+    }
+
     public static void draw(int x, int y, int width, int height, int style, int[] nativeArea) {
         draw(x, y, width, height, style, 2, nativeArea);
     }

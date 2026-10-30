@@ -80,7 +80,7 @@ public final class NativeLayoutPatches {
 
     public static boolean expanded(GuiContainer gui) {
         Boolean preview = PREVIEW_MODES.get(gui);
-        return preview == null ? InventoryViewSettings.expandMachineInventory : preview;
+        return preview == null || preview;
     }
 
     /** Editor-only mode override. It is never written to the global settings or saved layout. */

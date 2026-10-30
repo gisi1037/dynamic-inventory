@@ -10,7 +10,6 @@ Set-Location -LiteralPath $projectRoot
 $java = 'C:/Program Files/Java/jdk-25/bin/java.exe'
 $diagnostics = Join-Path $GameDirectory 'diagnostics/dynamicinventory'
 $screenshots = Join-Path $GameDirectory 'screenshots'
-$clientConfig = Join-Path $GameDirectory 'config/dynamicinventory-client.cfg'
 $marker = Join-Path (Split-Path $GameDirectory -Parent) '.dynamicinventory-dev-instance'
 $packTarget = (Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).version
 New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
@@ -40,23 +39,6 @@ function MainSignature($State) {
 }
 function ContainerSignature($State) {
     return ($State.activeContainer.slots | Select-Object containerSlot,inventoryIndex,inventoryClass,slotClass,role,item,count,damage,nbtCanonical | ConvertTo-Json -Depth 12 -Compress)
-}
-function Set-ContainerMode([bool] $Compact) {
-    $wanted = if ($Compact) { 'true' } else { 'false' }
-    Harness resume | Out-Null
-    Harness capture container-frames-mode | Out-Null
-    Harness layout-control 100 | Out-Null
-    $current = Harness machine-mode
-    if ($current -notmatch "compactNativePanels=$wanted") {
-        Harness layout-control 111 | Out-Null
-        $current = Harness machine-mode
-    }
-    Check ($current -match "compactNativePanels=$wanted") "Container layout selects $(if ($Compact) {'Compact'} else {'Full box'})"
-    if (!(Test-Path -LiteralPath $clientConfig)) { throw "Missing client config: $clientConfig" }
-    $config = Get-Content -LiteralPath $clientConfig -Raw
-    Check ($config -match "(?i)B:compactNativePanels=$wanted\b") "Client config persists compactNativePanels=$wanted"
-    Harness layout-control 108 | Out-Null
-    Harness resume | Out-Null
 }
 function Open-Family([string] $Family) {
     Harness resume | Out-Null
@@ -199,28 +181,19 @@ Harness command '/setblock 1 4 0 minecraft:air' | Out-Null
 Harness command '/setblock 2 4 0 minecraft:air' | Out-Null
 
 $families = @('chest', 'galacticraft', 'tinkers-compressed')
-$modes = @(
-    @{ name = 'full-box'; compact = $false },
-    @{ name = 'compact'; compact = $true }
-)
-foreach ($mode in $modes) {
-    Set-ContainerMode ([bool] $mode.compact)
-    foreach ($family in $families) { Test-Family $family $mode.name }
-}
+foreach ($family in $families) { Test-Family $family 'full-box' }
 
-# Restore Full box through the real dialog control so the saved preference and UI agree.
-Set-ContainerMode $false
 $installedJar = Join-Path $GameDirectory 'mods/dynamicinventory-0.8.0-dev.jar'
 if (!(Test-Path -LiteralPath $installedJar)) { throw "Missing installed production JAR: $installedJar" }
 @{
     success = $true
     prototype = '0.8.0-dev'
     packTarget = $packTarget
-    modes = @('full-box', 'compact')
+    modes = @('full-box')
     families = $families
     scales = @(1, 2, 3, 0)
     checks = $checks
     jarSha256 = (Get-FileHash -LiteralPath $installedJar -Algorithm SHA256).Hash
-    scope = 'Actual full-pack chest, Galacticraft tab, and adjacent Tinkers compressed-chest/crafting-station frames; frame-mode persistence, GUI bounds, canonical slots, scale-by-scale player inventory and cursor conservation, and hovered first-slot screenshots. Window size is left unchanged.'
+    scope = 'Actual full-pack chest, Galacticraft tab, and adjacent Tinkers compressed-chest/crafting-station frames; shared-frame GUI bounds, canonical slots, scale-by-scale player inventory and cursor conservation, and hovered first-slot screenshots. Window size is left unchanged.'
 } | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $EvidenceDirectory 'verification.json')
 Write-Host "PASS full-pack container frames: $($checks.Count) checks."

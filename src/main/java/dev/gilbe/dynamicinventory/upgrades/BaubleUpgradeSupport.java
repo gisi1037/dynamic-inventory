@@ -20,7 +20,7 @@ import cpw.mods.fml.common.registry.GameRegistry;
 import dev.gilbe.dynamicinventory.DynamicInventory;
 
 /** Optional Baubles code stays behind the mod-presence guard in InventoryUpgrades. */
-final class BaubleUpgradeSupport extends Item implements IBauble {
+class BaubleUpgradeSupport extends Item implements IBauble {
 
     // Native item NBT supplies prediction only. The server ignores this tag when granting capacity.
     private static final String BASE_TAG = "dynamicinventoryBaseSlots";
@@ -33,7 +33,7 @@ final class BaubleUpgradeSupport extends Item implements IBauble {
         for (int tier = 0; tier < belts.length; tier++) {
             String id = tier == 0 ? "inventory_belt"
                 : "inventory_belt_" + UpgradeSettings.BELT_TIERS[tier].toLowerCase(java.util.Locale.ROOT);
-            belts[tier] = new BaubleUpgradeSupport(tier, id);
+            belts[tier] = tier == belts.length - 1 ? new CreativeBelt(tier, id) : new BaubleUpgradeSupport(tier, id);
             GameRegistry.registerItem(belts[tier], id);
         }
         return belts;
@@ -146,5 +146,26 @@ final class BaubleUpgradeSupport extends Item implements IBauble {
             UpgradeSettings.BELT_TIERS[tier] + " - " + StatCollector.translateToLocal("dynamicinventory.belt.tooltip"));
         lines.add(StatCollector.translateToLocal("dynamicinventory.belt.remove"));
         lines.add(StatCollector.translateToLocal("dynamicinventory.upgrade.rules"));
+    }
+
+    /** Only the final belt owns an active use action; lower tiers retain the shared Baubles equip hook. */
+    private static final class CreativeBelt extends BaubleUpgradeSupport {
+
+        private CreativeBelt(int tier, String id) {
+            super(tier, id);
+        }
+
+        @Override
+        public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player) {
+            if (world.isRemote) DynamicInventory.proxy.openInventoryController();
+            return stack;
+        }
+
+        @Override
+        public void addInformation(ItemStack stack, EntityPlayer player, List lines, boolean advanced) {
+            lines.add(StatCollector.translateToLocal("dynamicinventory.controller.tooltip"));
+            lines.add(StatCollector.translateToLocal("dynamicinventory.controller.fixed"));
+            super.addInformation(stack, player, lines, advanced);
+        }
     }
 }

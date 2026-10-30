@@ -11,10 +11,9 @@ public final class InventoryViewSettings {
     public static final int DEFAULT_ROWS = 8;
     public static int columns = DEFAULT_COLUMNS;
     public static int rows = DEFAULT_ROWS;
-    public static boolean expandMachineInventory = true;
-    public static boolean compactNativePanels = false;
-    public static boolean mui2Presentation = false;
     public static boolean automaticStorageScroll = true;
+    public static boolean centerLastRow = true;
+    public static boolean hotbarPanelVisible = false;
     public static int terminalSmallRows = 3;
     public static int terminalTallMinimumRows = 6;
     private static Configuration configuration;
@@ -39,32 +38,27 @@ public final class InventoryViewSettings {
             1,
             12,
             "Preferred visible storage rows; remaining rows scroll. Does not change capacity.");
-        expandMachineInventory = configuration
-            .get(
-                "layout",
-                "expandMachineInventory",
-                true,
-                "Expand machine inventories vertically when possible; otherwise use their native scroll view.")
-            .getBoolean(true);
-        compactNativePanels = configuration
-            .get(
-                "layout",
-                "compactNativePanels",
-                false,
-                "Keep native machine panels compact instead of joining them to the player inventory panel.")
-            .getBoolean(false);
-        mui2Presentation = configuration
-            .get(
-                "layout",
-                "mui2Presentation",
-                false,
-                "Experimental MUI2 panel and slot-background widgets. Native containers and item input remain in use.")
-            .getBoolean(false);
+        // Retire superseded preferences without carrying their old behavior into panel layouts.
+        configuration.getCategory("layout")
+            .remove("expandMachineInventory");
+        configuration.getCategory("layout")
+            .remove("compactNativePanels");
+        configuration.getCategory("layout")
+            .remove("mui2Presentation");
         automaticStorageScroll = configuration.get(
             "layout",
             "automaticStorageScroll",
             true,
             "Use a compact scroll panel for simple drawing-only GUIs backed by an already integrated vanilla storage container.")
+            .getBoolean(true);
+        hotbarPanelVisible = configuration
+            .getBoolean("showPanel", "hotbars", false, "Show the reserved hotbar rows in their own panel.");
+        centerLastRow = configuration
+            .get(
+                "layout",
+                "centerLastRow",
+                true,
+                "Center the incomplete final row of the main player inventory grid; false keeps it left-aligned.")
             .getBoolean(true);
         terminalSmallRows = configuration.getInt(
             "smallRows",
@@ -107,20 +101,20 @@ public final class InventoryViewSettings {
         }
     }
 
-    public static void setMachineInventoryExpanded(boolean expanded) {
-        expandMachineInventory = expanded;
+    public static void setCenterLastRow(boolean centered) {
+        centerLastRow = centered;
         if (configuration != null) {
-            configuration.get("layout", "expandMachineInventory", true)
-                .set(expanded);
+            configuration.get("layout", "centerLastRow", true)
+                .set(centered);
             configuration.save();
         }
     }
 
-    public static void setCompactNativePanels(boolean compact) {
-        compactNativePanels = compact;
+    public static void setHotbarPanelVisible(boolean visible) {
+        hotbarPanelVisible = visible;
         if (configuration != null) {
-            configuration.get("layout", "compactNativePanels", false)
-                .set(compact);
+            configuration.get("hotbars", "showPanel", false)
+                .set(visible);
             configuration.save();
         }
     }
@@ -138,12 +132,4 @@ public final class InventoryViewSettings {
         }
     }
 
-    public static void setMui2Presentation(boolean enabled) {
-        mui2Presentation = enabled && InventoryPresentation.available();
-        if (configuration != null) {
-            configuration.get("layout", "mui2Presentation", false)
-                .set(mui2Presentation);
-            configuration.save();
-        }
-    }
 }

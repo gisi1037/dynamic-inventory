@@ -12,7 +12,6 @@ Set-Location -LiteralPath $projectRoot
 $java = 'C:/Program Files/Java/jdk-25/bin/java.exe'
 $diagnostics = Join-Path $GameDirectory 'diagnostics/dynamicinventory'
 $screenshots = Join-Path $GameDirectory 'screenshots'
-$clientConfig = Join-Path $GameDirectory 'config/dynamicinventory-client.cfg'
 $evidenceFullPath = if ([IO.Path]::IsPathRooted($EvidenceDirectory)) { [IO.Path]::GetFullPath($EvidenceDirectory) }
     else { [IO.Path]::GetFullPath((Join-Path $projectRoot $EvidenceDirectory)) }
 New-Item -ItemType Directory -Force -Path $evidenceFullPath | Out-Null
@@ -67,31 +66,7 @@ function Save-View([string] $Name, [int] $SlotId) {
     Harness screenshot-hover $SlotId $filename | Out-Null
     Copy-Item (Join-Path $screenshots $filename) (Join-Path $EvidenceDirectory $filename) -Force
 }
-function Set-MachineMode([bool] $Expanded) {
-    $wanted = if ($Expanded) { 'true' } else { 'false' }
-    Harness capture machine-mode | Out-Null
-    Harness layout-control 100 | Out-Null
-    $current = Harness machine-mode
-    if ($current -notmatch "expandMachineInventory=$wanted") {
-        Harness layout-control 110 | Out-Null
-        $current = Harness machine-mode
-    }
-    Check ($current -match "expandMachineInventory=$wanted") "Client machine layout selects $(if ($Expanded) {'Vertical'} else {'Scroll'})"
-    if (!(Test-Path -LiteralPath $clientConfig)) { throw "Missing client config: $clientConfig" }
-    $config = Get-Content -LiteralPath $clientConfig -Raw
-    Check ($config -match "(?i)B:expandMachineInventory=$wanted\b") "Client config persists expandMachineInventory=$wanted"
-
-    $settingsMode = if ($Expanded) { 'vertical' } else { 'scroll' }
-    $settingsImage = "step3-machine-mode-$settingsMode-settings.png"
-    Harness clear-chat | Out-Null
-    Harness screenshot $settingsImage | Out-Null
-    if (Test-Path (Join-Path $screenshots $settingsImage)) {
-        Copy-Item (Join-Path $screenshots $settingsImage) (Join-Path $EvidenceDirectory $settingsImage) -Force
-    }
-    Harness layout-control 108 | Out-Null
-    Harness resume | Out-Null
-}
-function Test-Family([string] $Family, [string] $Mode, [bool] $Expanded) {
+function Test-Family([string] $Family, [string] $Mode) {
     if ($FullPack) {
         Harness resume | Out-Null
         Harness block-open 2 4 0 | Out-Null
@@ -111,14 +86,16 @@ function Test-Family([string] $Family, [string] $Mode, [bool] $Expanded) {
     Check ($fullHeight -match 'actual=(\d+).*visible=(\d+)') "$Family reports viewport dimensions at scale 1"
     $actual = [int]$Matches[1]
     $visible = [int]$Matches[2]
-    if ($Expanded) {
-        Check ($actual -eq $visible) "$Family Vertical mode shows the full viewport when the screen fits"
-    } else {
-        Check ($visible -eq 54) "$Family Scroll mode shows exactly three rows (54 GUI pixels)"
-    }
+    Check ($actual -eq $visible) "$Family automatic expansion shows the full viewport when the screen fits"
     Check ((MainSignature (Snapshot "$Family-$Mode-scale1")) -eq (MainSignature $before)) "$Family scale 1 preserves all player contents in $Mode mode"
 
-    $lastScroll = [math]::Max(0, $actual - $visible)
+    Harness scale 0 | Out-Null
+    $short = Harness scroll-info
+    Check ($short -match 'actual=(\d+).*visible=(\d+)') "$Family reports viewport dimensions at short-window scale"
+    $shortActual = [int]$Matches[1]
+    $shortVisible = [int]$Matches[2]
+    Check ($shortVisible -lt $shortActual) "$Family short-window scale retains scrolling in $Mode mode"
+    $lastScroll = [math]::Max(0, $shortActual - $shortVisible)
     if ($lastScroll -gt 0) {
         $speed = if ($Family -eq 'mui1') { 6 } else { 18 }
         $events = [int][math]::Ceiling($lastScroll / [double]$speed)
@@ -132,13 +109,6 @@ function Test-Family([string] $Family, [string] $Mode, [bool] $Expanded) {
         Check ($scrolled -match 'scroll=(\d+)' -and [int]$Matches[1] -ge $lastScroll) "$Family wheel input reaches the final rows in $Mode mode"
     }
 
-    Harness scale 0 | Out-Null
-    $short = Harness scroll-info
-    Check ($short -match 'actual=(\d+).*visible=(\d+)') "$Family reports viewport dimensions at short-window scale"
-    $shortActual = [int]$Matches[1]
-    $shortVisible = [int]$Matches[2]
-    Check ($shortVisible -lt $shortActual) "$Family short-window scale retains scrolling in $Mode mode"
-    if (!$Expanded) { Check ($shortVisible -eq 54) "$Family Scroll mode keeps three visible rows at short-window scale" }
     Harness foreign-check | Out-Null
     Check ((MainSignature (Snapshot "$Family-$Mode-scale0")) -eq (MainSignature $before)) "$Family short-window resize preserves all player contents in $Mode mode"
 
@@ -158,13 +128,9 @@ Harness background | Out-Null
 Harness resume | Out-Null
 Harness window 854 480 | Out-Null
 $families = if ($FullPack) { @('gt-buffer') } else { @('mui1', 'mui2') }
-foreach ($expanded in @($false, $true)) {
-    $mode = if ($expanded) { 'vertical' } else { 'scroll' }
-    Set-MachineMode $expanded
-    foreach ($family in $families) { Test-Family $family $mode $expanded }
-}
+foreach ($family in $families) { Test-Family $family 'automatic' }
 
-@{success=$true; prototype='0.8.0-dev'; fullPack=[bool]$FullPack; modes=@('scroll','vertical'); families=$families;
+@{success=$true; prototype='0.8.0-dev'; fullPack=[bool]$FullPack; modes=@('automatic'); families=$families;
     checks=$checks; jarSha256=$artifactSha256; provenanceScope=if ($FullPack) {'installed-file-only'} else {'immutable-source-launch-record'};
     developmentArtifactSha256=$developmentArtifactSha256;
     sourceLaunchId=if ($sourceLaunch) {$sourceLaunch.launchId} else {$null};
@@ -172,6 +138,6 @@ foreach ($expanded in @($false, $true)) {
     sourceLaunchManifest=if ($sourceLaunch) {$sourceLaunch.launchManifest} else {$null};
     sourceLaunchManifestSha256=if ($sourceLaunch) {$sourceLaunch.launchManifestSha256} else {$null};
     capturedAtUtc=[datetime]::UtcNow.ToString('o');
-    scope='Client machine layout preference, MUI1/MUI2 native viewport behavior or one actual full-pack GT buffer, and player inventory conservation'} |
+    scope='Automatic machine expansion and scrolling, MUI1/MUI2 native viewport behavior or one actual full-pack GT buffer, and player inventory conservation'} |
     ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $verificationPath -Encoding UTF8
-Write-Host "PASS machine layout modes: $($checks.Count) checks."
+Write-Host "PASS automatic machine layout: $($checks.Count) checks."

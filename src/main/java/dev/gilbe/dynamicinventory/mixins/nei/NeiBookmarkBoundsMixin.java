@@ -23,10 +23,12 @@ public abstract class NeiBookmarkBoundsMixin {
         DetachedChestPanel panel = DetachedChestPanel.of(gui);
         if (panel == null || !panel.detached()) return;
         Rectangle4i original = cir.getReturnValue();
+        java.util.List<Rect> obstacles = new java.util.ArrayList<>(panel.occupiedBounds());
+        Rect hotbars = dev.gilbe.dynamicinventory.client.HotbarBankPanel.bounds(gui);
+        if (hotbars != null) obstacles.add(hotbars);
         Rect fitted = InventoryPanelLayout
-            .freeRegion(new Rect(original.x, original.y, original.w, original.h), panel.occupiedBounds(), 40, 72);
+            .freeRegion(new Rect(original.x, original.y, original.w, original.h), obstacles, 40, 72);
         if (fitted == null) {
-            java.util.List<Rect> obstacles = new java.util.ArrayList<>(panel.occupiedBounds());
             fitted = InventoryPanelLayout.freeRegion(
                 new Rect(original.x, original.y, Math.max(original.w, gui.width / 2 - original.x - 2), original.h),
                 obstacles,

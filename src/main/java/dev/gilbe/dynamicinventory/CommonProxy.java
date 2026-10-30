@@ -22,6 +22,8 @@ public class CommonProxy {
 
     public void openInventoryController() {}
 
+    public void receiveHotbarSlots(int[] slots) {}
+
     /** Optional local viewer for actor-less widget factories. Server code should pass the owner explicitly. */
     public net.minecraft.entity.player.InventoryPlayer getClientInventory() {
         return null;
@@ -60,6 +62,8 @@ public class CommonProxy {
         BaselineDiagnostics.initialize(event.getModConfigurationDirectory());
         dev.gilbe.dynamicinventory.upgrades.UpgradeSettings.load(event.getModConfigurationDirectory());
         dev.gilbe.dynamicinventory.upgrades.InventoryUpgrades.register();
+        dev.gilbe.dynamicinventory.network.PanelTransferRequest.initialize();
+        dev.gilbe.dynamicinventory.network.HotbarRequest.initialize();
 
         DynamicInventory.LOG.info(
             "Dynamic Inventory {}: configured {} storage slots; adapter registration closes after startup",

@@ -96,7 +96,7 @@ public final class AttachedChestLayout {
         sideBySide = lowerAvailableWidth >= 176 + contentGap + craftingWidth;
         int inventoryWidth = lowerAvailableWidth - (sideBySide ? contentGap + craftingWidth : 0);
         columns = rectangularColumns(storage, requestedColumns, Math.min(18, (inventoryWidth - playerPadding) / 18));
-        playerWidth = Math.max(176, columns * 18 + playerPadding);
+        int reservedPlayerWidth = InventoryViewLayout.panelWidth(columns, true);
         // The first pass budgets the native viewport; the final pass receives its measured height.
         // Reserve that real extent so the lower panel cannot grow underneath the chest.
         int minimumTopHeight = Math.max(descriptionAbove ? 172 : 42, nativeChestHeight);
@@ -111,6 +111,7 @@ public final class AttachedChestLayout {
             - 42
             - (sideBySide ? 0 : craftingHeight + contentGap)) / 18;
         rows = Math.max(1, Math.min(Math.min(preferredRows, (storage + columns - 1) / columns), rowBudget));
+        playerWidth = InventoryViewLayout.panelWidth(columns, rows * columns < storage);
         playerHeight = rows * 18 + 42;
         int lowerPanelHeight = sideBySide ? Math.max(playerHeight, craftingHeight)
             : playerHeight + contentGap + craftingHeight;
@@ -122,7 +123,12 @@ public final class AttachedChestLayout {
         lowerHeight = lowerPanelHeight;
         // Match the lower band rather than filling the monitor. Otherwise a
         // Compact inventory on a large window sends crafting hundreds of pixels away.
-        int topBandWidth = Math.min(availableWidth, lowerWidth);
+        // Budget the native chest with a possible player scrollbar on both passes. Its measured height can
+        // reduce player rows later; letting that change chest columns would oscillate the two-pass layout.
+        int reservedLowerWidth = sideBySide ? reservedPlayerWidth + contentGap + craftingWidth
+            : Math.max(reservedPlayerWidth, craftingWidth);
+        if (descriptionBesideStack) reservedLowerWidth += GAP + 126;
+        int topBandWidth = Math.min(availableWidth, reservedLowerWidth);
         int desiredChestColumns = Math.max(5, (topBandWidth - (descriptionAbove ? GAP + 126 : 0) - 26) / 18);
         // The lower player/content layout owns the width. Never choose a larger divisor merely
         // because the monitor can fit it: more chest slots add rows and eventually a scrollbar.
