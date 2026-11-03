@@ -60,6 +60,23 @@ public final class PanelChrome extends Gui {
         return new Rect(panel.x + 10, panel.y + 1, 12, 12);
     }
 
+    public static void move(Rect target, boolean hovered, boolean enabled) {
+        GL11.glPushAttrib(GL11.GL_CURRENT_BIT | GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT);
+        try {
+            GL11.glDisable(GL11.GL_LIGHTING);
+            raisedButton(target, enabled, hovered);
+            int x = target.x + 5, y = target.y + 5, color = InventoryGuiTheme.get().label;
+            drawRect(x, y - 3, x + 1, y + 5, color);
+            drawRect(x - 3, y, x + 5, y + 1, color);
+            for (int sign : new int[] { -1, 1 }) {
+                drawRect(x - 1, y + sign * 2, x + 2, y + sign * 2 + 1, color);
+                drawRect(x + sign * 2, y - 1, x + sign * 2 + 1, y + 2, color);
+            }
+        } finally {
+            GL11.glPopAttrib();
+        }
+    }
+
     public static int corner(Rect panel, int x, int y) {
         if (!panel.contains(x, y)) return 0;
         int horizontal = x < panel.x + 8 ? 1 : x >= panel.right() - 8 ? 2 : 0;

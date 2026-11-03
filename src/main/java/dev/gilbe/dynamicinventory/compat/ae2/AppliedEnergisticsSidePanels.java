@@ -15,6 +15,7 @@ import net.minecraft.util.ResourceLocation;
 
 import org.lwjgl.opengl.GL11;
 
+import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.client.NativePanelFrame;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 
@@ -37,6 +38,7 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             slot,
             panel.linking ? new int[] { slot.xDisplayPosition - 195, slot.yDisplayPosition }
                 : new int[] { slot.xDisplayPosition - panel.left, slot.yDisplayPosition - panel.top });
+        for (Panel panel : panels) measure(panel);
     }
 
     public static AppliedEnergisticsSidePanels create(GuiContainer gui, ContainerInventoryRegion region) {
@@ -68,24 +70,41 @@ public final class AppliedEnergisticsSidePanels extends Gui {
     }
 
     public int width(int mainWidth) {
-        int widest = 0;
-        for (Panel panel : panels) widest = Math.max(widest, panel.width());
-        return mainWidth + GAP + widest;
+        int width = mainWidth;
+        for (Panel panel : panels) {
+            // Cell Workbench upgrade slots can become enabled without reinitializing the GUI.
+            // Reserve their possible column now so revealing them cannot push the toolbox off screen.
+            int contentWidth = 0;
+            for (Slot slot : panel.slots) contentWidth = Math.max(contentWidth, origins.get(slot)[0] + 16);
+            width += GAP + (panel.linking ? 47 : contentWidth + PADDING * 2);
+        }
+        return width;
     }
 
-    public int position(int mainWidth, int headerTop, int playerTop) {
+    public List<Rect> bounds(int left, int top) {
+        List<Rect> result = new ArrayList<>();
+        for (Panel panel : panels)
+            if (panel.visible()) result.add(new Rect(left + panel.x, top + panel.y, panel.width(), panel.height()));
+        return result;
+    }
+
+    public int position(int mainWidth, int headerTop) {
         int bottom = headerTop;
-        for (int i = 0; i < panels.size(); i++) {
-            Panel panel = panels.get(i);
-            panel.x = mainWidth + GAP;
-            // Cards align with the machine; the toolbox's first row aligns with the player grid.
-            panel.y = i == 0 ? headerTop : Math.max(bottom + GAP, playerTop + 14 - PADDING);
+        int nextX = mainWidth + GAP;
+        for (Panel panel : panels) {
+            measure(panel);
+            if (!panel.visible()) continue;
+            // Keep every native side inventory beside the machine. A borrowed tool must not
+            // occupy the player band's height or displace detached player panels to the right.
+            panel.x = nextX;
+            panel.y = headerTop;
             for (Slot slot : panel.slots) {
                 int[] origin = origins.get(slot);
                 slot.xDisplayPosition = panel.x + (panel.linking ? 0 : PADDING) + origin[0];
                 slot.yDisplayPosition = panel.y + (panel.linking ? 0 : PADDING) + origin[1];
             }
-            bottom = panel.y + panel.height();
+            bottom = Math.max(bottom, panel.y + panel.height());
+            nextX += panel.width() + GAP;
         }
         return bottom;
     }
@@ -96,6 +115,7 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
             for (Panel panel : panels) {
+                if (!panel.visible()) continue;
                 NativePanelFrame.draw(
                     left + panel.x,
                     top + panel.y,
@@ -120,7 +140,7 @@ public final class AppliedEnergisticsSidePanels extends Gui {
                 Minecraft.getMinecraft()
                     .getTextureManager()
                     .bindTexture(SLOTS);
-                for (Slot slot : panel.slots) drawTexturedModalRect(
+                for (Slot slot : panel.slots) if (slot.func_111238_b()) drawTexturedModalRect(
                     left + slot.xDisplayPosition - 1,
                     top + slot.yDisplayPosition - 1,
                     7,
@@ -133,11 +153,22 @@ public final class AppliedEnergisticsSidePanels extends Gui {
         }
     }
 
+    /** AE2 keeps disabled optional upgrade slots in the container so changing cells needs no new window. */
+    private void measure(Panel panel) {
+        panel.contentWidth = panel.contentHeight = 0;
+        for (Slot slot : panel.slots) if (slot.func_111238_b()) {
+            int[] origin = origins.get(slot);
+            panel.contentWidth = Math.max(panel.contentWidth, origin[0] + 16);
+            panel.contentHeight = Math.max(panel.contentHeight, origin[1] + 16);
+        }
+    }
+
     private static final class Panel {
 
         private final List<Slot> slots = new ArrayList<>();
         private final boolean linking;
-        private int left = Integer.MAX_VALUE, top = Integer.MAX_VALUE, right, bottom, x, y;
+        private int left = Integer.MAX_VALUE, top = Integer.MAX_VALUE, x, y;
+        private int contentWidth, contentHeight;
 
         private Panel(boolean linking) {
             this.linking = linking;
@@ -147,16 +178,18 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             slots.add(slot);
             left = Math.min(left, slot.xDisplayPosition);
             top = Math.min(top, slot.yDisplayPosition);
-            right = Math.max(right, slot.xDisplayPosition + 16);
-            bottom = Math.max(bottom, slot.yDisplayPosition + 16);
         }
 
         private int width() {
-            return linking ? 47 : right - left + PADDING * 2;
+            return linking ? 47 : visible() ? contentWidth + PADDING * 2 : 0;
         }
 
         private int height() {
-            return linking ? 96 : bottom - top + PADDING * 2;
+            return linking ? 96 : visible() ? contentHeight + PADDING * 2 : 0;
+        }
+
+        private boolean visible() {
+            return linking || contentWidth > 0;
         }
     }
 }

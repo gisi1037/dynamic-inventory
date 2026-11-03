@@ -1,0 +1,12 @@
+{
+  "version": "daily-2026-10-27+803",
+  "build": 803,
+  "profile": "daily-2026-10-27-803",
+  "archiveUrl": "https://github.com/GTNewHorizons/GTNH-Daily-Builds/releases/download/daily-2026-10-27%2B803/GTNH-daily-2026-10-27%2B803-mmcprism-java17-26.zip",
+  "archiveSha256": "4ED649CA1A35680E6B65F61568B87A88146D56F49BD1C0C46BA251E96B83D4F2",
+  "manifestSha256": "5373ECED151F749BAA186B429146F361E77777F7C7DBC1DDACBCAC3638FE54D8",
+  "instanceId": "GTNH-SFM-Daily-2026-10-27-803",
+  "memoryMiB": 4096,
+  "instanceName": "GTNH daily 803 - SFM Development",
+  "sharedInstanceMarker": ".sfm-dev-instance.json"
+}

@@ -3,6 +3,7 @@ package dev.gilbe.dynamicinventory.client;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
@@ -24,14 +25,16 @@ import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 import dev.gilbe.dynamicinventory.container.PlayerContainerLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 
-/** Shared native-slot panel controller for the owned player inventory and vanilla containers. */
+/** Shared native-slot panel controller for the owned player inventory and reviewed native containers. */
 public final class DetachedChestPanel extends Gui {
 
     private static final ResourceLocation ATLAS = new ResourceLocation("textures/gui/container/inventory.png");
     private final GuiContainer gui;
     private final ContainerPanelAccess access;
     private Rect machine;
-    private final Rect viewport, attached;
+    private final Rect viewport;
+    private Rect attached;
+    private Rect attachedControl;
     private final List<Rect> fixed = new ArrayList<>();
     private final String key;
     private final int style, border, crop, corners;
@@ -49,6 +52,7 @@ public final class DetachedChestPanel extends Gui {
     private int guideX = Integer.MIN_VALUE, guideY = Integer.MIN_VALUE;
     private boolean releaseOwned, usable;
     private boolean inherited;
+    private boolean previewBounds;
     private long revision = 1;
     private long resizePlanRevision = -1;
     private final java.util.Map<String, List<ResizePlan>> resizePlans = new java.util.HashMap<>();
@@ -94,6 +98,12 @@ public final class DetachedChestPanel extends Gui {
 
     public DetachedChestPanel(GuiContainer gui, Rect machine, Rect attached, int style, int border, int crop,
         int corners, List<Rect> auxiliary) {
+        this(gui, machine, attached, style, border, crop, corners, auxiliary, null, null);
+    }
+
+    /** Presentation-only framework binding. The caller supplies existing, canonical container slot IDs. */
+    public DetachedChestPanel(GuiContainer gui, Rect machine, Rect attached, int style, int border, int crop,
+        int corners, List<Rect> auxiliary, int[] ordinarySlots, String profileKey) {
         this.gui = gui;
         this.machine = machine;
         fixed.add(machine);
@@ -108,24 +118,35 @@ public final class DetachedChestPanel extends Gui {
         int count = InventoryLayout.of(Minecraft.getMinecraft().thePlayer.inventory)
             .mainSlots();
         slotIds = new int[count];
-        for (int i = 0; i < count; i++) slotIds[i] = region != null ? region.id(i)
-            : PlayerContainerLayout.containerId(Minecraft.getMinecraft().thePlayer.inventory, i);
+        if (ordinarySlots != null && ordinarySlots.length != count)
+            throw new IllegalArgumentException("Framework player slot count differs from its owner");
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < count; i++) {
+            slotIds[i] = ordinarySlots != null ? ordinarySlots[i]
+                : region != null ? region.id(i)
+                    : PlayerContainerLayout.containerId(Minecraft.getMinecraft().thePlayer.inventory, i);
+            if (slotIds[i] < 0 || slotIds[i] >= gui.inventorySlots.inventorySlots.size() || !seen.add(slotIds[i]))
+                throw new IllegalArgumentException("Invalid framework player slot mapping");
+        }
         viewport = new Rect(0, 8, gui.width, Math.max(0, gui.height - 36));
-        String adapter = gui instanceof PlayerInventoryScreen ? "dynamicinventory:player"
-            : InventoryUi.findAdapter(gui.inventorySlots)
-                .getId();
-        key = PlayerPanelProfiles.key(
-            adapter,
-            gui.inventorySlots.getClass()
-                .getName(),
-            gui.getClass()
-                .getName());
+        String adapter = profileKey != null ? null
+            : gui instanceof PlayerInventoryScreen ? "dynamicinventory:player"
+                : InventoryUi.findAdapter(gui.inventorySlots)
+                    .getId();
+        key = profileKey != null ? profileKey
+            : PlayerPanelProfiles.key(
+                adapter,
+                gui.inventorySlots.getClass()
+                    .getName(),
+                gui.getClass()
+                    .getName());
         reload();
     }
 
     public static DetachedChestPanel of(GuiScreen screen) {
         if (screen instanceof PlayerInventoryScreen player) return player.floating();
         if (!(screen instanceof ContainerPanelAccess access)) return null;
+        if (access.dynamicinventory$floating() != null) return access.dynamicinventory$floating();
         NativeInventoryPanel nativePanel = access.dynamicinventory$panel();
         return nativePanel == null ? null : nativePanel.floating();
     }
@@ -142,7 +163,11 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public PanelLayoutReference layoutReference() {
-        return new PanelLayoutReference(machine, viewport);
+        return new PanelLayoutReference(profileMachine(), viewport);
+    }
+
+    private Rect profileMachine() {
+        return gui instanceof PlayerInventoryScreen player ? player.panelLayoutReferenceBounds() : machine;
     }
 
     public String selected() {
@@ -164,6 +189,17 @@ public final class DetachedChestPanel extends Gui {
 
     public boolean detached() {
         return main().profile.detached && usable;
+    }
+
+    public boolean isInherited() {
+        return inherited;
+    }
+
+    /** Carry an unsaved inherited mode choice across a framework's dynamic widget rebuild. */
+    public void transientDetached(boolean detached) {
+        main().profile = main().profile.detached(detached);
+        refit();
+        position();
     }
 
     public PlayerPanelProfile preference() {
@@ -191,26 +227,62 @@ public final class DetachedChestPanel extends Gui {
         return dev.gilbe.dynamicinventory.inventory.HotbarBanks.excluded(Minecraft.getMinecraft().thePlayer.inventory);
     }
 
-    /** A split panel is a storage group, not the vanilla storage-to-hotbar transfer region. */
+    /** Only the player inventory uses panel routing; open containers keep their native Shift-click rules. */
     public boolean quickMoveToMain(int sourceId) {
-        if (!detached() || blocked() || Minecraft.getMinecraft().thePlayer.inventory.getItemStack() != null)
-            return false;
+        if (!(gui instanceof PlayerInventoryScreen) || !detached()
+            || blocked()
+            || gui.inventorySlots != Minecraft.getMinecraft().thePlayer.inventoryContainer
+            || Minecraft.getMinecraft().thePlayer.inventory.getItemStack() != null) return false;
         int logical = -1;
-        for (int i = 9; i < slotIds.length; i++) if (slotId(i) == sourceId) logical = i;
-        if (logical < 9) return false;
-        boolean subpanel = false;
-        for (Panel panel : panels) if (!panel.main() && panel.members.contains(logical - 9)) subpanel = true;
-        if (!subpanel) return false;
-        int[] destinations = new int[9 + main().members.size()];
-        System.arraycopy(slotIds, 0, destinations, 0, 9);
-        for (int i = 0; i < main().members.size(); i++) destinations[i + 9] = slotId(main().members.get(i) + 9);
-        dev.gilbe.dynamicinventory.network.PanelTransferRequest.send(
+        for (int i = 0; i < slotIds.length; i++) if (slotId(i) == sourceId) logical = i;
+        if (logical < 0 || logical >= 9 && excluded().contains(logical - 9)) return false;
+        int[] hotbar = java.util.Arrays.copyOf(slotIds, 9);
+        int[] storage = mainStorageSlots();
+        int[] destinations = dev.gilbe.dynamicinventory.container.PanelTransferTargets
+            .quickMove(sourceId, hotbar, storage, main().layout.columns);
+        if (destinations.length > 0) dev.gilbe.dynamicinventory.network.PanelTransferRequest.send(
             gui.inventorySlots,
             InventoryLayout.of(Minecraft.getMinecraft().thePlayer.inventory)
                 .revision(),
             sourceId,
-            destinations);
+            destinations,
+            java.util.Arrays.stream(storage)
+                .anyMatch(id -> id == sourceId) ? 9 : destinations.length);
         return true;
+    }
+
+    private int[] mainStorageSlots() {
+        return main().members.stream()
+            .mapToInt(member -> slotId(member + 9))
+            .toArray();
+    }
+
+    /** Layout membership without temporary hotbar reservations; those are enforced separately on both peers. */
+    public int[] mainStorageIndices() {
+        return PlayerPanelProfiles.panels(key)
+            .automaticMainSlots(slotIds.length - 9, detached());
+    }
+
+    /** Canonical membership, including hidden rows; native sort buttons always belong to Main. */
+    public int[] sortSlots(int sourceId) {
+        if (!detached() || blocked()) return null;
+        if (sourceId < 0) return mainStorageSlots();
+        for (Panel panel : panels) {
+            int[] ids = panel.members.stream()
+                .mapToInt(member -> slotId(member + 9))
+                .toArray();
+            for (int id : ids) if (id == sourceId) return ids;
+        }
+        return null; // Hotbar and machine sorting retain their native rules.
+    }
+
+    /** Prefer Main storage, then its hotbar, without exposing machine or satellite slots to NEI. */
+    public int[] itemSpawnSlots() {
+        if (!detached() || blocked()) return null;
+        int[] storage = mainStorageSlots();
+        int[] result = java.util.Arrays.copyOf(storage, storage.length + 9);
+        System.arraycopy(slotIds, 0, result, storage.length, 9);
+        return result;
     }
 
     public void apply(PlayerPanelProfile value) throws IOException {
@@ -223,16 +295,28 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public void apply(PlayerPanelSet set, PlayerPanelProfile mainProfile, boolean global) throws IOException {
+        boolean wasDetached = detached();
         // Validate effective geometry before publishing either disk or live state.
         if (global) {
             List<PlayerPanelSet.Entry> entries = new ArrayList<>();
-            for (PlayerPanelSet.Entry entry : set.entries) entries.add(entry.profile(key, null));
+            for (PlayerPanelSet.Entry entry : set.entries) entries.add(
+                new PlayerPanelSet.Entry(
+                    entry.id,
+                    entry.name,
+                    entry.slots,
+                    entry.resolve(key),
+                    java.util.Collections.emptyMap()));
             set = new PlayerPanelSet(entries);
         }
         List<Panel> before = new ArrayList<>(panels);
         boolean wasInherited = inherited;
         inherited = false;
-        load(set, mainProfile);
+        previewBounds = true;
+        try {
+            load(set, mainProfile);
+        } finally {
+            previewBounds = false;
+        }
         if (mainProfile.detached && !usable) {
             panels.clear();
             panels.addAll(before);
@@ -241,9 +325,8 @@ public final class DetachedChestPanel extends Gui {
             throw new IOException("Not enough space for all panels");
         }
         try {
-            if (global) PlayerPanelProfiles
-                .applyGlobalPanels(set, key, mainProfile, new PanelLayoutReference(machine, viewport));
-            else PlayerPanelProfiles.applyPanels(set, key, mainProfile);
+            if (global) PlayerPanelProfiles.applyGlobalPanels(set, key, mainProfile, layoutReference());
+            else PlayerPanelProfiles.applyPanels(set, key, mainProfile, layoutReference());
         } catch (IOException failure) {
             panels.clear();
             panels.addAll(before);
@@ -253,6 +336,7 @@ public final class DetachedChestPanel extends Gui {
         }
         inherited = !PlayerPanelProfiles.hasOverride(key);
         refit();
+        if (gui instanceof PlayerInventoryScreen player && wasDetached != detached()) player.playerPanelModeChanged();
         position();
     }
 
@@ -262,8 +346,16 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public void reload() {
+        boolean initialized = !panels.isEmpty(), wasDetached = initialized && detached();
+        try {
+            PlayerPanelProfiles.establishReference(key, layoutReference());
+        } catch (IOException failure) {
+            message("Could not save panel layout reference");
+        }
         inherited = !PlayerPanelProfiles.hasOverride(key);
         load(PlayerPanelProfiles.panels(key), PlayerPanelProfiles.resolve(key));
+        if (initialized && gui instanceof PlayerInventoryScreen player && wasDetached != detached())
+            player.playerPanelModeChanged();
         position();
     }
 
@@ -307,6 +399,7 @@ public final class DetachedChestPanel extends Gui {
     }
 
     private Rect recoveryControl() {
+        if (attachedControl != null) return attachedControl;
         return gui instanceof PlayerInventoryScreen ? new Rect(attached.right() - 68, attached.y + 1, 12, 12)
             : PanelChrome.control(attached);
     }
@@ -314,9 +407,50 @@ public final class DetachedChestPanel extends Gui {
     public List<Rect> occupiedBounds() {
         List<Rect> result = new ArrayList<>(fixed);
         result.addAll(bounds());
+        if (attachedControl != null && (!detached() || !mainVisible())) result.add(attachedControl);
         if (detached() && !mainVisible()) result.add(recoveryControl());
         // Temporary Shift controls draw over NEI; pressing Shift must not repaginate bookmarks/results.
         return result;
+    }
+
+    public int logicalSlot(int containerSlot) {
+        for (int i = 0; i < slotIds.length; i++) if (slotIds[i] == containerSlot) return i;
+        return -1;
+    }
+
+    /** A framework can reserve a clear button position outside its native machine controls. */
+    public void attachedControl(Rect bounds) {
+        attachedControl = bounds;
+    }
+
+    /** Reconcile a framework's native geometry after its own layout pass. */
+    public void hostBounds(Rect machine, Rect attached, List<Rect> auxiliary) {
+        boolean changed = this.machine.x != machine.x || this.machine.y != machine.y
+            || this.machine.width != machine.width
+            || this.machine.height != machine.height;
+        this.machine = machine;
+        this.attached = attached;
+        if (changed) {
+            fixed.clear();
+            fixed.add(machine);
+            fixed.addAll(auxiliary);
+            refit(!inherited);
+        } else auxiliaryBounds(auxiliary);
+    }
+
+    /** Native optional inventories can change size without reopening their container. */
+    public void auxiliaryBounds(List<Rect> auxiliary) {
+        if (captured != null) return;
+        boolean changed = fixed.size() != auxiliary.size() + 1;
+        for (int i = 0; !changed && i < auxiliary.size(); i++) {
+            Rect a = auxiliary.get(i), b = fixed.get(i + 1);
+            changed = a.x != b.x || a.y != b.y || a.width != b.width || a.height != b.height;
+        }
+        if (!changed) return;
+        fixed.clear();
+        fixed.add(machine);
+        fixed.addAll(auxiliary);
+        refit(true);
     }
 
     public boolean inPlayer(int x, int y) {
@@ -326,6 +460,7 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public boolean inside(int x, int y) {
+        if (attachedControl != null && (!detached() || !mainVisible()) && attachedControl.contains(x, y)) return true;
         if (resizeControlsVisible()) for (Panel panel : panels) {
             Rect toolbar = resizeToolbar(panel);
             if (toolbar != null && toolbar.contains(x, y)) return true;
@@ -336,6 +471,8 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public boolean excludes(int x, int y, int width, int height) {
+        if (attachedControl != null && (!detached() || !mainVisible())
+            && attachedControl.intersects(new Rect(x, y, width, height))) return true;
         if (!detached()) return false;
         Rect cell = new Rect(x, y, width, height);
         if (!mainVisible() && recoveryControl().intersects(cell)) return true;
@@ -352,6 +489,10 @@ public final class DetachedChestPanel extends Gui {
     }
 
     private void refit() {
+        refit(false);
+    }
+
+    private void refit(boolean retainFitted) {
         List<Rect> obstacles = new ArrayList<>(fixed);
         if (main().profile.detached && !main().profile.visible) obstacles.add(recoveryControl());
         usable = true;
@@ -360,10 +501,13 @@ public final class DetachedChestPanel extends Gui {
                 panel.layout = null;
                 continue;
             }
-            Rect requested = panel.profile.requested(viewport);
-            if (inherited) requested = PlayerPanelProfiles.inheritedBounds(requested, machine, viewport);
+            Rect requested = retainFitted && panel.layout != null ? panel.layout.bounds
+                : previewBounds ? panel.profile.requested(viewport)
+                    : PlayerPanelProfiles.requestedBounds(key, panel.profile, profileMachine(), viewport);
+            Rect fittingViewport = previewBounds ? viewport
+                : PlayerPanelProfiles.fittingViewport(key, panel.profile, profileMachine(), viewport);
             panel.layout = InventoryPanelLayout
-                .fit(requested, viewport, obstacles, panel.members.size(), margin(panel), panel.main());
+                .fit(requested, fittingViewport, obstacles, panel.members.size(), margin(panel), panel.main());
             if (panel.layout == null) {
                 usable = false;
                 break;
@@ -639,7 +783,9 @@ public final class DetachedChestPanel extends Gui {
 
     /** Recheck the live player header: other inventory integrations can move it after initGui. */
     private void refreshClearance() {
-        if (!(gui instanceof PlayerInventoryScreen player) || captured != null) return;
+        if (!(gui instanceof PlayerInventoryScreen player)) return;
+        attached = player.attachedPanelBounds();
+        if (captured != null || player.draggingPlayerSection()) return;
         List<Rect> current = player.fixedPanelBounds();
         boolean changed = current.size() != fixed.size();
         for (int i = 0; !changed && i < current.size(); i++) {
@@ -655,7 +801,7 @@ public final class DetachedChestPanel extends Gui {
             fixed.clear();
             fixed.addAll(current);
             machine = current.get(0);
-            refit();
+            refit(true);
         }
     }
 
@@ -666,6 +812,15 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public void background(Runnable nativeDraw, int nativeWidth, int nativeHeight) {
+        background(nativeDraw, nativeWidth, nativeHeight, 0, Integer.MAX_VALUE);
+    }
+
+    public void background(Runnable nativeDraw, int nativeWidth, int nativeHeight, int nativeLeft, int cropBottom) {
+        background(nativeDraw, nativeWidth, nativeHeight, nativeLeft, cropBottom, true);
+    }
+
+    public void background(Runnable nativeDraw, int nativeWidth, int nativeHeight, int nativeLeft, int cropBottom,
+        boolean virtualViewport) {
         position();
         NativePanelFrame.draw(machine.x, machine.y, machine.width, machine.height, style, border, crop, corners, null);
         int w = access.dynamicinventory$width(), h = access.dynamicinventory$height();
@@ -673,17 +828,21 @@ public final class DetachedChestPanel extends Gui {
         int screenW = gui.width, screenH = gui.height;
         Minecraft mc = Minecraft.getMinecraft();
         int scale = new ScaledResolution(mc, mc.displayWidth, mc.displayHeight).getScaleFactor();
+        int bottom = Math
+            .min(machine.bottom() - 4, cropBottom == Integer.MAX_VALUE ? machine.bottom() - 4 : machine.y + cropBottom);
         GL11.glPushAttrib(GL11.GL_SCISSOR_BIT);
         try {
             GL11.glEnable(GL11.GL_SCISSOR_TEST);
             GL11.glScissor(
                 (machine.x + 4) * scale,
-                Math.max(0, mc.displayHeight - (machine.bottom() - 4) * scale),
+                Math.max(0, mc.displayHeight - bottom * scale),
                 Math.max(0, machine.width - 8) * scale,
-                Math.max(0, machine.height - 8) * scale);
-            access.dynamicinventory$bounds(nativeWidth, nativeHeight, machine.x, machine.y);
-            gui.width = 2 * machine.x + nativeWidth;
-            gui.height = 2 * machine.y + nativeHeight;
+                Math.max(0, bottom - machine.y - 4) * scale);
+            access.dynamicinventory$bounds(nativeWidth, nativeHeight, machine.x - nativeLeft, machine.y);
+            if (virtualViewport) {
+                gui.width = 2 * (machine.x - nativeLeft) + nativeWidth;
+                gui.height = 2 * machine.y + nativeHeight;
+            }
             nativeDraw.run();
         } finally {
             gui.width = screenW;
@@ -695,6 +854,15 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public void drawPanels() {
+        drawPanels(true);
+    }
+
+    /** Framework widgets retain their own slot artwork and item rendering. */
+    public void drawPanels(boolean drawSlotBackgrounds) {
+        drawPanels(drawSlotBackgrounds, null);
+    }
+
+    public void drawPanels(boolean drawSlotBackgrounds, Consumer<Rect> inheritedFrame) {
         position();
         Minecraft mc = Minecraft.getMinecraft();
         GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT);
@@ -703,7 +871,8 @@ public final class DetachedChestPanel extends Gui {
                 if (panel.layout == null) continue;
                 Rect bounds = panel.layout.bounds;
                 PlayerPanelProfile profile = panel.profile;
-                NativePanelFrame.draw(
+                if (inheritedFrame != null && profile.frameStyle < 0) inheritedFrame.accept(bounds);
+                else NativePanelFrame.draw(
                     bounds.x,
                     bounds.y,
                     bounds.width,
@@ -724,7 +893,8 @@ public final class DetachedChestPanel extends Gui {
                     Slot slot = gui.inventorySlots.getSlot(slotId(member + 9));
                     if (slot.xDisplayPosition != -10000) visible.add(slot);
                 }
-                ResourceSlotGrid.draw(visible, access.dynamicinventory$left(), access.dynamicinventory$top());
+                if (drawSlotBackgrounds)
+                    ResourceSlotGrid.draw(visible, access.dynamicinventory$left(), access.dynamicinventory$top());
                 if (panel.maxScroll() > 0) {
                     Rect track = panel.layout.scrollbar();
                     int thumb = Math
@@ -752,6 +922,10 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public void drawControl() {
+        drawControl(InventoryGuiTheme.get().label);
+    }
+
+    public void drawControl(int inheritedLabelColor) {
         if (captured != null && (!org.lwjgl.opengl.Display.isActive() || blocked())) cancel();
         Minecraft mc = Minecraft.getMinecraft();
         int mx = org.lwjgl.input.Mouse.getX() * gui.width / mc.displayWidth;
@@ -783,7 +957,7 @@ public final class DetachedChestPanel extends Gui {
                             labelWidth),
                         bounds.x + 24,
                         bounds.y + 4,
-                        InventoryGuiTheme.get().label);
+                        panel.profile.frameStyle < 0 ? inheritedLabelColor : InventoryGuiTheme.get().label);
                 }
                 if (!PanelSettingsOverlay.isOpen(gui) && control.contains(mx, my)) {
                     String text = "Left: " + (detached() ? "attach" : "detach") + "  Right: panel settings";
@@ -804,6 +978,7 @@ public final class DetachedChestPanel extends Gui {
     }
 
     private Rect control(Rect bounds) {
+        if (!detached() && attachedControl != null) return attachedControl;
         return gui instanceof PlayerInventoryScreen && !detached() ? new Rect(bounds.right() - 68, bounds.y + 1, 12, 12)
             : PanelChrome.control(bounds);
     }
@@ -924,7 +1099,21 @@ public final class DetachedChestPanel extends Gui {
                     message("Not enough screen space for all panels");
                 } else {
                     selected = PlayerPanelSet.MAIN;
-                    save();
+                    if (gui instanceof PlayerInventoryScreen player) player.playerPanelModeChanged();
+                    // Inheriting interfaces share the saved global mode, without acquiring an override.
+                    if (inherited) {
+                        try {
+                            PlayerPanelProfiles.setGlobal(
+                                PlayerPanelProfiles.global()
+                                    .detached(main().profile.detached));
+                            position();
+                        } catch (IOException failure) {
+                            main().profile = before;
+                            refit();
+                            if (gui instanceof PlayerInventoryScreen player) player.playerPanelModeChanged();
+                            message("Could not save global panel mode");
+                        }
+                    } else save();
                 }
                 return true;
             }
@@ -1024,14 +1213,22 @@ public final class DetachedChestPanel extends Gui {
             PlayerPanelSet set = PlayerPanelProfiles.panels(key);
             for (Panel panel : panels) set = set.replace(
                 set.get(panel.id)
-                    .profile(key, displayedProfile(panel.id)));
-            PlayerPanelProfiles.applyPanels(set, key, displayedProfile(PlayerPanelSet.MAIN));
-            inherited = !PlayerPanelProfiles.hasOverride(key);
+                    .profile(key, savedProfile(panel)));
+            PlayerPanelProfiles.applyPanels(set, key, savedProfile(main()), layoutReference());
+            // A global layout's authored coordinates belong to its global reference. Once saved as
+            // an interface override, use the normalized profiles belonging to the new reference too.
+            reload();
         } catch (IOException failure) {
             reload();
             message("Could not save panel layout");
         }
         position();
+    }
+
+    private PlayerPanelProfile savedProfile(Panel panel) {
+        // Attached mode still retains the fitted breakout bounds. Preserve them when toggling,
+        // rather than interpreting the old global anchors against this interface's reference.
+        return panel.layout == null ? panel.profile : panel.profile.atBounds(panel.layout.bounds, viewport);
     }
 
     private static void message(String text) {

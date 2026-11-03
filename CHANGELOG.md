@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.8.0 Alpha 3 — 2026-11-02
+
+Targets Minecraft 1.7.10 / GTNH 2.9.0. Install matching versions on client and
+server and select `-Ddynamicinventory.profile=gtnh-2.9.0` on both sides.
+
+- Added reviewed modular panel hosts for Iron Chests, Baby Chest, Compressed Chest,
+  Forestry and HarvestCraft machines, AE2 machines and terminal/tool families,
+  Et Futurum, Ender IO and Extra Utilities. Unsupported subclasses remain excluded.
+- Added detached player panels to shared MUI2 interfaces, including machine-themed
+  frames and slots. Corrected controller layouts and split-button placement.
+- Corrected chest margins and texture crops, HarvestCraft header gaps, Forestry
+  attach/detach spacing, GUI-scale anchors, and inventory placement after reopening.
+  Automatic layouts keep player storage below machine/player sections.
+- Kept compact and wide player sections vertically aligned and added dragging of
+  the character/crafting section. Global attachment settings persist across hosts.
+- Moved AE2 pins, wireless controls and Network Tool side panels away from player
+  inventory panels; retained native upgrade slots, terminal switches and tooltips.
+- Ground pickups and container-to-player transfers target Main and the active
+  hotbar while detached, including offscreen Main rows. Attached mode restores
+  normal automatic destinations across ordinary storage. Manual panel placement
+  remains available.
+- Scoped Main sorts to Main, protected saved hotbar rows from native BogoSorter
+  buttons/hotkeys, and added the opposite-half Main fallback when the hotbar is full.
+- Fixed AE2 Interface Terminal pattern extraction using raw inventory destinations
+  that could select Backhand. It now uses canonical expanded player slots and
+  inserts only when the whole pattern stack fits.
+- Added immediate client hotbar swaps with ordered server confirmation, replay of
+  pending swaps, and recovery after refused swaps. Older servers retain the
+  response-based path until updated.
+- Fixed panel settings remaining blocked by a stale modal after closing another
+  native screen. Added build/install-without-launch tooling and offline test labs;
+  Prism retains control of game Java selection.
+
+Validation includes the production build and Checkstyle, focused headless panel,
+Main-routing, hotbar prediction, packet, slot-identity and menu-lifecycle checks.
+Manual visual acceptance was reported for chest, Forestry and the previously
+supported AE2 interfaces. Newly added families still require gameplay testing.
+
+Known issues: intermittent wireless terminal openings can still be refused when
+AE2 constructs an empty placeholder instead of the expected terminal. A client
+hang was also observed while returning from AE2 crafting confirmation during
+debugger tracing; the available records do not establish its cause. These issues
+are not claimed fixed by this release. Voluntary inventory-size reduction is not
+included.
+
 ## 0.8.0 Alpha 2 — 2026-10-30
 
 Updated GitHub prerelease, targeting Minecraft 1.7.10 / GTNH

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('rc2-integration', 'daily-2026-10-19')]
+    [ValidateSet('rc2-integration', 'daily-2026-10-19', 'daily-2026-10-27-803')]
     [string] $Profile = 'rc2-integration',
     [string] $LaunchManifest = '',
     [string] $EvidenceDirectory = '',

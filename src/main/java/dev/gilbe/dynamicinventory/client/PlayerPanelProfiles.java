@@ -27,6 +27,7 @@ public final class PlayerPanelProfiles {
     private static PlayerPanelSet panels = PlayerPanelSet.DEFAULT;
     private static Map<String, PlayerPanelSet> interfacePanels = new TreeMap<>();
     private static PanelLayoutReference reference;
+    private static Map<String, PanelLayoutReference> interfaceReferences = new TreeMap<>();
 
     private PlayerPanelProfiles() {}
 
@@ -39,25 +40,31 @@ public final class PlayerPanelProfiles {
         interfacePanels.clear();
         legacy = 0;
         reference = null;
+        interfaceReferences.clear();
         if (!Files.isRegularFile(file)) return;
         try {
             if (Files.size(file) > 1048576) throw new IllegalArgumentException("Panel profiles too large");
             JsonObject root = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
                 .getAsJsonObject();
-            boolean modern = "6".equals(
+            boolean anchored = "7".equals(
                 root.get("schemaVersion")
                     .getAsString());
-            boolean collection = java.util.Arrays.asList("3", "4", "5", "6")
+            boolean modern = anchored || "6".equals(
+                root.get("schemaVersion")
+                    .getAsString());
+            boolean collection = java.util.Arrays.asList("3", "4", "5", "6", "7")
                 .contains(
                     root.get("schemaVersion")
                         .getAsString());
             if (root.has("panels") != collection) throw new IllegalArgumentException("Invalid panel collection schema");
             if (root.entrySet()
-                .size() != (root.has("panelLayouts") ? 5 : root.has("panels") ? 4 : 3) + (modern ? 1 : 0)
+                .size()
+                != (root.has("panelLayouts") ? 5 : root.has("panels") ? 4 : 3) + (modern ? 1 : 0) + (anchored ? 1 : 0)
                 || !root.get("schemaVersion")
                     .getAsString()
-                    .matches("[123456]")
+                    .matches("[1234567]")
                 || root.has("globalReference") != modern
+                || root.has("interfaceReferences") != anchored
                 || root.has("panelLayouts") != (modern || "5".equals(
                     root.get("schemaVersion")
                         .getAsString())))
@@ -75,7 +82,7 @@ public final class PlayerPanelProfiles {
             }
             PanelLayoutReference loadedReference = modern && !root.get("globalReference")
                 .isJsonNull() ? PanelLayoutReference.fromJson(root.getAsJsonObject("globalReference")) : null;
-            PlayerPanelSet loadedPanels = java.util.Arrays.asList("3", "4", "5", "6")
+            PlayerPanelSet loadedPanels = java.util.Arrays.asList("3", "4", "5", "6", "7")
                 .contains(
                     root.get("schemaVersion")
                         .getAsString()) ? PlayerPanelSet.fromJson(root.getAsJsonArray("panels"))
@@ -100,13 +107,26 @@ public final class PlayerPanelProfiles {
                 loadedPanels = loadedGlobal.detached || keys.isEmpty() ? scoped(loadedPanels, null)
                     : PlayerPanelSet.DEFAULT;
             }
+            Map<String, PanelLayoutReference> loadedReferences = new TreeMap<>();
+            if (anchored) for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject("interfaceReferences")
+                .entrySet()) {
+                    validateKey(entry.getKey());
+                    if (!loaded.containsKey(entry.getKey()) && !loadedSets.containsKey(entry.getKey()))
+                        throw new IllegalArgumentException("Orphan panel reference");
+                    loadedReferences.put(
+                        entry.getKey(),
+                        PanelLayoutReference.fromJson(
+                            entry.getValue()
+                                .getAsJsonObject()));
+                }
             panels = loadedPanels;
             interfacePanels = loadedSets;
             global = loadedGlobal;
             overrides = loaded;
             reference = loadedReference;
+            interfaceReferences = loadedReferences;
             legacy = root.get("schemaVersion")
-                .getAsInt() < 6 ? root.get("schemaVersion")
+                .getAsInt() < 7 ? root.get("schemaVersion")
                     .getAsInt() : 0;
         } catch (IOException | RuntimeException invalid) {
             DynamicInventory.LOG.warn("Ignoring invalid player panel profiles {}", file, invalid);
@@ -144,6 +164,33 @@ public final class PlayerPanelProfiles {
     public static InventoryPanelLayout.Rect inheritedBounds(InventoryPanelLayout.Rect requested,
         InventoryPanelLayout.Rect machine, InventoryPanelLayout.Rect viewport) {
         return reference == null ? requested : reference.adapt(requested, machine, viewport);
+    }
+
+    public static InventoryPanelLayout.Rect requestedBounds(String key, PlayerPanelProfile profile,
+        InventoryPanelLayout.Rect machine, InventoryPanelLayout.Rect viewport) {
+        boolean custom = hasOverride(key);
+        PanelLayoutReference origin = custom ? interfaceReferences.get(key) : reference;
+        return origin == null ? profile.requested(viewport)
+            : custom ? origin.adaptCustom(profile, machine) : origin.adapt(profile, machine, viewport);
+    }
+
+    /** Automatic fitting keeps inventory panels out of the space above their machine. */
+    public static InventoryPanelLayout.Rect fittingViewport(String key, PlayerPanelProfile profile,
+        InventoryPanelLayout.Rect machine, InventoryPanelLayout.Rect viewport) {
+        PanelLayoutReference origin = hasOverride(key) ? interfaceReferences.get(key) : reference;
+        if (origin != null && origin.placedAbove(profile)) return viewport;
+        int top = Math.max(viewport.y, Math.min(viewport.bottom(), machine.y));
+        return new InventoryPanelLayout.Rect(viewport.x, top, viewport.width, viewport.bottom() - top);
+    }
+
+    /** Older layouts learn their current authored viewport once, without changing allocations or appearance. */
+    public static void establishReference(String key, PanelLayoutReference origin) throws IOException {
+        if (hasOverride(key)) {
+            if (interfaceReferences.containsKey(key)) return;
+            Map<String, PanelLayoutReference> next = new TreeMap<>(interfaceReferences);
+            next.put(key, origin);
+            commit(global, overrides, panels, interfacePanels, reference, next);
+        } else if (reference == null) commit(global, overrides, panels, interfacePanels, origin);
     }
 
     public static void save(String key, PlayerPanelProfile profile) throws IOException {
@@ -202,6 +249,11 @@ public final class PlayerPanelProfiles {
 
     /** One atomic write for allocations, all panel geometries and the selected Main scope. */
     public static void applyPanels(PlayerPanelSet nextPanels, String key, PlayerPanelProfile main) throws IOException {
+        applyPanels(nextPanels, key, main, null);
+    }
+
+    public static void applyPanels(PlayerPanelSet nextPanels, String key, PlayerPanelProfile main,
+        PanelLayoutReference origin) throws IOException {
         Map<String, PlayerPanelProfile> next = new TreeMap<>(overrides);
         Map<String, PlayerPanelSet> sets = new TreeMap<>(interfacePanels);
         if (key != null) {
@@ -218,7 +270,15 @@ public final class PlayerPanelProfiles {
                 sets.put(key, local);
             }
         }
-        commit(key == null ? main : global, next, key == null ? scoped(nextPanels, null) : panels, sets);
+        Map<String, PanelLayoutReference> origins = new TreeMap<>(interfaceReferences);
+        if (key != null && origin != null && (next.containsKey(key) || sets.containsKey(key))) origins.put(key, origin);
+        commit(
+            key == null ? main : global,
+            next,
+            key == null ? scoped(nextPanels, null) : panels,
+            sets,
+            reference,
+            origins);
     }
 
     /** Saving a global layout also makes the current interface inherit it, preserving unrelated interfaces. */
@@ -288,9 +348,15 @@ public final class PlayerPanelProfiles {
     private static void commit(PlayerPanelProfile preference, Map<String, PlayerPanelProfile> profiles,
         PlayerPanelSet nextPanels, Map<String, PlayerPanelSet> nextLayouts, PanelLayoutReference nextReference)
         throws IOException {
+        commit(preference, profiles, nextPanels, nextLayouts, nextReference, interfaceReferences);
+    }
+
+    private static void commit(PlayerPanelProfile preference, Map<String, PlayerPanelProfile> profiles,
+        PlayerPanelSet nextPanels, Map<String, PlayerPanelSet> nextLayouts, PanelLayoutReference nextReference,
+        Map<String, PanelLayoutReference> origins) throws IOException {
         if (file == null) throw new IllegalStateException("Player panel preferences not initialized");
         JsonObject root = new JsonObject(), entries = new JsonObject();
-        root.addProperty("schemaVersion", 6);
+        root.addProperty("schemaVersion", 7);
         root.add("globalReference", nextReference == null ? null : nextReference.toJson());
         root.add("panels", nextPanels.toJson());
         root.add("global", preference.toJson());
@@ -305,6 +371,15 @@ public final class PlayerPanelProfiles {
             entry.getValue()
                 .toJson());
         root.add("panelLayouts", layouts);
+        Map<String, PanelLayoutReference> nextOrigins = new TreeMap<>(origins);
+        nextOrigins.keySet()
+            .removeIf(key -> !profiles.containsKey(key) && !nextLayouts.containsKey(key));
+        JsonObject references = new JsonObject();
+        for (Map.Entry<String, PanelLayoutReference> entry : nextOrigins.entrySet()) references.add(
+            entry.getKey(),
+            entry.getValue()
+                .toJson());
+        root.add("interfaceReferences", references);
         byte[] encoded = new GsonBuilder().setPrettyPrinting()
             .serializeNulls()
             .create()
@@ -332,6 +407,7 @@ public final class PlayerPanelProfiles {
         global = preference;
         overrides = new TreeMap<>(profiles);
         reference = nextReference;
+        interfaceReferences = nextOrigins;
         legacy = 0;
     }
 }

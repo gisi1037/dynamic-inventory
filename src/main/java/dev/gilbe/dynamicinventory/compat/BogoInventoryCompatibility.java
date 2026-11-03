@@ -21,6 +21,7 @@ public final class BogoInventoryCompatibility {
     private BogoInventoryCompatibility() {}
 
     public static void initialize() {
+        dev.gilbe.dynamicinventory.network.PanelSortRequest.initialize();
         if (!Loader.isModLoaded("TConstruct")) return;
         IBogoSortAPI.getInstance()
             .addCompat(CraftingStationContainer.class, BogoInventoryCompatibility::addChestGroup);

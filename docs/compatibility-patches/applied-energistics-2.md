@@ -1,9 +1,37 @@
 # Applied Energistics 2
 
-**Loaded ID:** `appliedenergistics2`. **Status:** initial native machine/storage/terminal
-adapters implemented; visual review and broader gameplay qualification pending.
+**Loaded ID:** `appliedenergistics2`. **Status:** native machine/storage/terminal
+adapters implemented; Gilbert completed visual review of the previously supported
+screens on 2026-11-02. Newly added standalone tools and broader gameplay qualification
+remain pending.
 Java owner: `AppliedEnergisticsCompatibility`, with shared seams in `compat/ae2`
 and `mixins/appliedenergistics2`.
+
+## Modular panels (nightly 803)
+
+The pinned `rv3-beta-1093-GTNH` integration enables shared modular inventory panels
+for the 27 exact machine/terminal/tool pairs listed below. Compatibility revision 3
+requires both peers to agree on the modular-panel integration. Attached mode
+stays the default; detach, split panels, profiles, global inheritance and Main-only
+NEI spawning use the same controller as the other reviewed native screens.
+Native machine/network actions and AE2's AppEngSlot flags, locked slots and
+callback owners remain intact.
+Open AE2 containers bypass player-panel Shift-click routing and retain AE2's native
+machine/network transfer behavior, including when the player inventory is detached.
+
+Upgrade, view-cell, encoder and borrowed network-tool frames retain their actual
+slots and join the detached fitter's obstacle list. Their frames still draw after
+the main native sheet. Optional/ghost artwork uses native slot coordinates only
+during that sheet's draw, restoring displayed coordinates before item rendering.
+AE2 keeps the real viewport for terminal scissor calculations.
+
+`scripts/testing/add-ae2-panel-lab.ps1` appends labeled stations behind the
+HarvestCraft rows in the existing disposable lab. The six terminal parts have
+isolated powered cable networks with a Drive and Interface. The supply chest has
+a charged Portable Cell/core Wireless Terminal, storage cells and a network tool;
+link the Wireless Terminal through Security before wireless testing. Pack-disabled
+blocks receive markers. Placement verification reads blocks/parts without opening
+UIs; visual and gameplay review belongs to the player.
 
 ## First batch
 
@@ -37,6 +65,8 @@ The shared container/slot/transfer seams used here agree between those tags.
 | Spatial Link Chamber | `SpatialLinkChamber` |
 | ME Interface (block and part) | `Interface` |
 | Cell Workbench | `CellWorkbench` |
+| Network Tool | `NetworkTool` |
+| Advanced Network Tool | `AdvancedNetworkTool` |
 | ME Terminal, core wireless terminal and ME Chest network view | `MEMonitorable` |
 | Crafting Terminal | `CraftingTerm` |
 | Pattern Terminal | `PatternTerm` |
@@ -50,6 +80,14 @@ and `appeng.client.gui.implementations.Gui<suffix>`. It uses the existing native
 editor (F10), nine player columns, texture crop 4, and the machine Vertical/Scroll
 preference. Native machine slots, restrictions and synchronization remain AE2's.
 
+The standalone Network Tool and Advanced Network Tool now use these same modular
+panels. Their native 3×3/5×5 upgrade grids, held-tool lock and facade toggle remain
+owned by AE2. These two additions still need installed visual/gameplay review.
+
+On 2026-11-02 Gilbert reported visual testing complete for the other AE2 screens.
+This records player visual review; it does not imply dedicated-server or exhaustive
+gameplay qualification.
+
 AE2 casts real slots to `AppEngSlot` and transfers by the slot's player-side flag.
 The shared additional-slot factory therefore creates native `SlotPlayerInv` or
 `SlotDisabled` instances and preserves AE2's locked raw player indices. This
@@ -59,7 +97,9 @@ counts can vary with the attached toolbox, so there is no fixed-count assumption
 
 Upgradeable machines put the upgrade cards and borrowed network-tool contents in
 separate frames to the right of the main machine/player frame. Cards align with
-the machine header; toolbox rows align with the player grid where space permits.
+the machine header; the borrowed toolbox occupies the next column to their right,
+also aligned with the machine header. Both frames are included in the reserved
+machine width and detached-panel collision bounds, keeping the player band clear.
 The 3x3 and 5x5 toolbox layouts follow their real backing inventory, and preserve
 native slot IDs, restrictions, callbacks and item ownership. Shared palette,
 frame style and border width apply to all three frames.
@@ -85,9 +125,15 @@ Security's encoder now has its own frame, retaining native input/output slots an
 arrow artwork. The ME Interface's frame fill also covers the one-pixel boundary
 below its native texture, avoiding a transparent horizontal seam.
 
-All transfers stay native; there is no generic destination or hotbar fallback.
-Such a fallback could duplicate a native action that changes items but returns
-null. AE2's custom server packet dispatcher also checks the existing opening gate
+Native transfer callbacks retain ownership of their sources; there is no retry
+after a native action. On the reviewed 2.9.0 Interface Terminal, pattern extraction's
+player-insertion helper uses the bound canonical player slots rather than the raw
+inventory adaptor, which includes Backhand. It checks that the entire stack fits
+before insertion because the native caller clears its pattern source only on full
+success. Expanded Main storage is included, detached subpanel destinations and
+reserved hotbars are excluded, and encoded pattern data is preserved. Attached
+mode permits all ordinary storage destinations.
+AE2's custom server packet dispatcher also checks the existing opening gate
 for registered hosts, while base custom synchronization waits for agreement before
 advancing its caches. Unregistered AE2 screens keep their previous behavior.
 
@@ -196,6 +242,21 @@ using the same boundary for the native draw and the replacement frame fill.
 
 The native editor's Widgets page also provides independent Pins X/Y offsets for
 the actual pin-state button. Saved layouts without these fields keep zero offsets.
+The pin-state button defaults to the next free row in AE2's outer left control column,
+rather than below the browser where it could overlap a detached inventory panel.
+The Universal Wireless Terminal's magnet mode, magnet filter and restock controls
+share that column below Pins. The separate Interface Terminal host uses the same
+wireless controls column. Alternate terminal modes reflow from live visibility
+after state synchronization, preventing Crafting and Level buttons from overlapping
+other modes. The primary left column ends with the four alternate destinations in
+native order: Crafting, Pattern, Extended Pattern, Interface, Level, excluding the
+active mode. The Universal Wireless Interface Terminal reserves a ten-row browser
+minimum when there is room for that column and at least one player row; wired
+Interface Terminals keep their existing row policy. Very short viewports retain
+the outer-column fallback rather than clipping navigation below the screen. All state variants retain their native button objects,
+visibility and click handlers.
+Upgrade side frames follow AE2's enabled optional slots, so the Cell Workbench
+shows five card slots for a standard cell and updates when a different cell is inserted.
 Crafting Tweaks buttons anchor to the real crafting matrix, or the reviewed virtual
 pattern-grid origin, rather than assuming native container slot 1 is the matrix.
 Diagnostic Terminal crops the old 208px texture's transparent right strip and stepped

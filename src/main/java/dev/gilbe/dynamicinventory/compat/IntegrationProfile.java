@@ -15,7 +15,9 @@ public enum IntegrationProfile {
     RC2_MUI2("rc2-mui2", "rc2", false, false),
     RC2_BACKHAND("rc2-backhand", "rc2", true, false),
     RC2("rc2-integration", "rc2", true, true),
-    DAILY_2026_10_19("daily-2026-10-19", "daily-2026-10-19", true, true);
+    DAILY_2026_10_19("daily-2026-10-19", "daily-2026-10-19", true, true),
+    DAILY_2026_10_27_803("daily-2026-10-27-803", "daily-2026-10-27-803", true, true),
+    RELEASE_2_9_0("gtnh-2.9.0", "gtnh-2.9.0", true, true);
 
     private static final Properties PINS = loadPins();
     // Freeze once, before inventory classes load. Changing a system property mid-session

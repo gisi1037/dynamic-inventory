@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -30,7 +31,8 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
             || mc.thePlayer.openContainer != gui.inventorySlots
             || PanelSettingsOverlay.isOpen(gui)
             || gui instanceof PlayerInventoryScreen screen && screen.layoutSettingsOpen()
-            || !(gui instanceof PlayerInventoryScreen) && ((ContainerPanelAccess) gui).dynamicinventory$panel() == null)
+            || !(gui instanceof PlayerInventoryScreen) && ((ContainerPanelAccess) gui).dynamicinventory$panel() == null
+                && DetachedChestPanel.of(gui) == null)
             return null;
         return PANELS.computeIfAbsent(gui, ignored -> new HotbarBankPanel());
     }
@@ -42,7 +44,10 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
 
     public static void draw(GuiContainer gui) {
         HotbarBankPanel panel = panel(gui);
-        if (panel != null) panel.paint(gui);
+        if (panel != null) {
+            panel.layoutSlots(gui);
+            panel.paint(gui, true);
+        }
     }
 
     private List<Rect> obstacles(GuiContainer gui) {
@@ -61,7 +66,21 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
                 access.dynamicinventory$height()));
     }
 
-    private void paint(GuiContainer gui) {
+    public static void layout(GuiContainer gui) {
+        HotbarBankPanel panel = panel(gui);
+        if (panel != null) panel.layoutSlots(gui);
+    }
+
+    public static void drawFramework(GuiContainer gui) {
+        drawFramework(gui, null, InventoryGuiTheme.get().label);
+    }
+
+    public static void drawFramework(GuiContainer gui, Consumer<Rect> frame, int labelColor) {
+        HotbarBankPanel panel = panel(gui);
+        if (panel != null && panel.bounds != null) panel.paint(gui, false, frame, labelColor);
+    }
+
+    private void layoutSlots(GuiContainer gui) {
         Minecraft mc = Minecraft.getMinecraft();
         int count = HotbarBanks.count(mc.thePlayer);
         Rect viewport = new Rect(0, 8, gui.width, Math.max(0, gui.height - 16));
@@ -111,36 +130,60 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
             fitRefused = false;
         }
         scroll = Math.min(scroll, count - rows);
+        placeSlots(gui);
+    }
+
+    private List<Slot> placeSlots(GuiContainer gui) {
+        Minecraft mc = Minecraft.getMinecraft();
+        DetachedChestPanel floating = DetachedChestPanel.of(gui);
+        ContainerPanelAccess access = (ContainerPanelAccess) gui;
+        List<Slot> visible = new ArrayList<>();
+        for (Slot slot : gui.inventorySlots.inventorySlots) {
+            int raw = slot.inventory == mc.thePlayer.inventory ? slot.getSlotIndex() : -1;
+            if (raw < 0 && floating != null) {
+                int logical = floating.logicalSlot(slot.slotNumber);
+                if (logical >= 0) raw = dev.gilbe.dynamicinventory.inventory.InventoryLayout.of(mc.thePlayer.inventory)
+                    .rawIndex(logical);
+            }
+            if (raw < 0 || !HotbarBanks.isReserved(mc.thePlayer.inventory, raw)) continue;
+            int index = HotbarBanks.bankIndex(mc.thePlayer.inventory, raw);
+            int row = index / 9 - scroll;
+            slot.xDisplayPosition = slot.yDisplayPosition = -10000;
+            if (row < 0 || row >= rows) continue;
+            slot.xDisplayPosition = bounds.x + 25 + index % 9 % columns * 18 - access.dynamicinventory$left();
+            slot.yDisplayPosition = bounds.y + 18
+                + (row * rowStride + index % 9 / columns) * 18
+                - access.dynamicinventory$top();
+            visible.add(slot);
+        }
+        return visible;
+    }
+
+    private void paint(GuiContainer gui, boolean drawSlotBackgrounds) {
+        paint(gui, drawSlotBackgrounds, null, InventoryGuiTheme.get().label);
+    }
+
+    private void paint(GuiContainer gui, boolean drawSlotBackgrounds, Consumer<Rect> frame, int labelColor) {
+        if (bounds == null) return;
+        Minecraft mc = Minecraft.getMinecraft();
         GL11.glPushAttrib(
             GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT | GL11.GL_DEPTH_BUFFER_BIT);
         try {
             GL11.glDisable(GL11.GL_LIGHTING);
             GL11.glDisable(GL11.GL_DEPTH_TEST);
-            NativePanelFrame.draw(bounds.x, bounds.y, bounds.width, bounds.height, 2, 2, 0, 2, null);
-            if (bounds.width >= 80)
-                mc.fontRenderer.drawString("Hotbars", bounds.x + 7, bounds.y + 5, InventoryGuiTheme.get().label);
-            mc.fontRenderer.drawString("X", bounds.right() - 13, bounds.y + 5, InventoryGuiTheme.get().label);
-            ContainerPanelAccess access = (ContainerPanelAccess) gui;
-            List<Slot> visible = new ArrayList<>();
-            for (Slot slot : gui.inventorySlots.inventorySlots) {
-                if (slot.inventory != mc.thePlayer.inventory
-                    || !HotbarBanks.isReserved(mc.thePlayer.inventory, slot.getSlotIndex())) continue;
-                int index = HotbarBanks.bankIndex(mc.thePlayer.inventory, slot.getSlotIndex());
-                int row = index / 9 - scroll;
-                slot.xDisplayPosition = slot.yDisplayPosition = -10000;
-                if (row < 0 || row >= rows) continue;
-                slot.xDisplayPosition = bounds.x + 25 + index % 9 % columns * 18 - access.dynamicinventory$left();
-                slot.yDisplayPosition = bounds.y + 18
-                    + (row * rowStride + index % 9 / columns) * 18
-                    - access.dynamicinventory$top();
-                visible.add(slot);
-            }
-            ResourceSlotGrid.draw(visible, access.dynamicinventory$left(), access.dynamicinventory$top());
+            if (frame != null) frame.accept(bounds);
+            else NativePanelFrame.draw(bounds.x, bounds.y, bounds.width, bounds.height, 2, 2, 0, 2, null);
+            if (bounds.width >= 80) mc.fontRenderer.drawString("Hotbars", bounds.x + 7, bounds.y + 5, labelColor);
+            mc.fontRenderer.drawString("X", bounds.right() - 13, bounds.y + 5, labelColor);
+            if (drawSlotBackgrounds) ResourceSlotGrid.draw(
+                placeSlots(gui),
+                ((ContainerPanelAccess) gui).dynamicinventory$left(),
+                ((ContainerPanelAccess) gui).dynamicinventory$top());
             for (int row = 0; row < rows; row++) mc.fontRenderer.drawString(
                 Integer.toString(row + scroll + 1),
                 bounds.x + 6,
                 bounds.y + 22 + row * rowStride * 18,
-                InventoryGuiTheme.get().label);
+                labelColor);
         } finally {
             GL11.glPopAttrib();
         }

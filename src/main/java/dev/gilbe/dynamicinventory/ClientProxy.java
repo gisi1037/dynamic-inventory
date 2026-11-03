@@ -29,6 +29,16 @@ public class ClientProxy extends CommonProxy {
     }
 
     @Override
+    public void receiveHotbarCapability(long revision, int next) {
+        dev.gilbe.dynamicinventory.client.HotbarControls.capability(revision, next);
+    }
+
+    @Override
+    public void receiveHotbarSwap(dev.gilbe.dynamicinventory.network.HotbarSwapReply reply) {
+        dev.gilbe.dynamicinventory.client.HotbarControls.receive(reply);
+    }
+
+    @Override
     public void openInventoryController() {
         Minecraft client = Minecraft.getMinecraft();
         if (client.currentScreen == null && client.thePlayer != null
@@ -100,6 +110,7 @@ public class ClientProxy extends CommonProxy {
     public void postInit(FMLPostInitializationEvent event) {
         super.postInit(event);
         dev.gilbe.dynamicinventory.client.HotbarControls.initialize();
+        dev.gilbe.dynamicinventory.client.MainInventoryRoutingClient.initialize();
         if (Loader.isModLoaded("NotEnoughItems")) hideLegacyController();
         if (PackCompatibility.enabled()) PackClientCompatibility.initialize();
     }

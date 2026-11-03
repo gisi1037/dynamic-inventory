@@ -15,6 +15,7 @@ public final class DreamcraftCompatibility {
             InventoryUiAdapter
                 .builder("dynamicinventory:discovered/guibabychest", "com.dreammaster.modbabychest.ContainerBabyChest")
                 .gui("com.dreammaster.modbabychest.GuiBabyChest")
+                .compatibilityRevision(2)
                 .layout(
                     NativeUiLayout.builder()
                         .topPadding(0)

@@ -21,11 +21,42 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         // Subpackages organize integrations; these guards still control whether
         // their mixins load. Moving a class must never change its side/mod guard.
         List<String> mixins = new ArrayList<>();
+        if (PackCompatibility.enabled() && loadedMods.contains("EnderIO")
+            && loadedMods.contains("endercore")
+            && OptionalInventoryAdapters.reviewedVersion("EnderIO")
+            && OptionalInventoryAdapters.reviewedVersion("endercore")) {
+            mixins.addAll(
+                Arrays.asList(
+                    "enderio.NativeMergeMixin",
+                    "enderio.BaseTransferMixin",
+                    "enderio.ConduitContainerMixin",
+                    "enderio.CapacitorTransferMixin",
+                    "enderio.InventoryPanelSlotsMixin"));
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient())
+                mixins.addAll(
+                    Arrays.asList(
+                        "enderio.EnderGuiMixin",
+                        "enderio.ConduitGuiMixin",
+                        "enderio.ConduitSlotVisibilityMixin"));
+        }
+        if (PackCompatibility.enabled() && loadedMods.contains("ExtraUtilities")
+            && OptionalInventoryAdapters.reviewedVersion("ExtraUtilities")) {
+            mixins.addAll(Arrays.asList("extrautils.NativeMergeMixin", "extrautils.ItemOwnerMixin"));
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient())
+                mixins.addAll(Arrays.asList("extrautils.FilingCabinetGuiMixin", "extrautils.PlayerWidgetMixin"));
+        }
         if (loadedMods.contains("NotEnoughItems")
             && OptionalInventoryAdapters.profileVersion("NotEnoughItems", "NotEnoughItems")
             && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient())
-            mixins.addAll(Arrays.asList("nei.NeiPanelOverlapMixin", "nei.NeiBookmarkBoundsMixin"));
+            mixins.addAll(
+                Arrays.asList(
+                    "nei.NeiPanelOverlapMixin",
+                    "nei.NeiBookmarkBoundsMixin",
+                    "nei.NeiPanelSpawningMixin",
+                    "nei.NeiPlayerSectionOriginMixin"));
         if (PackCompatibility.enabled() && loadedMods.contains("Forestry")
             && OptionalInventoryAdapters.reviewedVersion("Forestry")) {
             mixins.addAll(
@@ -43,6 +74,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "appliedenergistics2.AeContainerMixin",
                     "appliedenergistics2.AeOpeningActionsMixin",
                     "appliedenergistics2.AePlayerInventoryAdaptorMixin"));
+            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0)
+                mixins.add("appliedenergistics2.AeInterfacePatternTransferMixin");
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient())
                 mixins.addAll(
@@ -62,7 +95,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
             Arrays.asList(
                 "bogosorter.BogoPlayerSlotsMixin",
                 "bogosorter.BogoRefillMixin",
-                "bogosorter.BogoOpeningActionsMixin"));
+                "bogosorter.BogoOpeningActionsMixin",
+                "bogosorter.BogoPanelSortMixin"));
         if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
             mixins.add("craftingtweaks.CraftingTweakOpeningActionsMixin");
         if (PackCompatibility.enabled() && loadedMods.contains("OpenBlocks")) mixins
@@ -92,8 +126,11 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                 PackCompatibility.require("etfuturum", "EtFuturum");
                 mixins.add("etfuturum.EtFuturumEnchantmentGuiMixin");
             }
-            if (PackCompatibility.enabled() && loadedMods.contains("bogosorter"))
-                mixins.add("bogosorter.BogoSortButtonMixin");
+            if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.addAll(
+                Arrays.asList(
+                    "bogosorter.BogoSortButtonMixin",
+                    "bogosorter.BogoClientPanelSortMixin",
+                    "bogosorter.BogoPanelSortButtonMixin"));
             if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
                 mixins.add("craftingtweaks.CraftingTweakButtonMixin");
             if (loadedMods.contains("modularui2")) mixins.add("modularui2.Mui2InventoryResizeMixin");

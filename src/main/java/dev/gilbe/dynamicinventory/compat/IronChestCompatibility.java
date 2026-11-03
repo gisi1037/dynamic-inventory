@@ -13,6 +13,7 @@ public final class IronChestCompatibility {
         InventoryUi.register(
             InventoryUiAdapter.builder("dynamicinventory:ironchest", "cpw.mods.ironchest.ContainerIronChest")
                 .gui("cpw.mods.ironchest.client.GUIChest")
+                .compatibilityRevision(2)
                 .layout(
                     NativeUiLayout.builder()
                         .topPadding(0)

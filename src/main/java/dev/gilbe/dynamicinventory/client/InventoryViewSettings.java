@@ -16,12 +16,27 @@ public final class InventoryViewSettings {
     public static boolean hotbarPanelVisible = false;
     public static int terminalSmallRows = 3;
     public static int terminalTallMinimumRows = 6;
+    public static int playerSectionAnchorX = -1, playerSectionAnchorY = -1;
     private static Configuration configuration;
 
     private InventoryViewSettings() {}
 
     public static void initialize(File file) {
         configuration = new Configuration(file);
+        playerSectionAnchorX = configuration.getInt(
+            "anchorX",
+            "playerSection",
+            -1,
+            -1,
+            10000,
+            "Detached character/crafting section position; -1 uses its default.");
+        playerSectionAnchorY = configuration.getInt(
+            "anchorY",
+            "playerSection",
+            -1,
+            -1,
+            10000,
+            "Detached character/crafting section position; -1 uses its default.");
         boolean legacyDefault = configuration.hasKey("layout", "visibleRows")
             && !configuration.hasKey("layout", "defaultsVersion");
         columns = configuration.getInt(
@@ -97,6 +112,18 @@ public final class InventoryViewSettings {
                 .set(columns);
             configuration.get("layout", "visibleRows", DEFAULT_ROWS)
                 .set(rows);
+            configuration.save();
+        }
+    }
+
+    public static void setPlayerSectionPosition(int x, int y) {
+        playerSectionAnchorX = Math.max(-1, Math.min(10000, x));
+        playerSectionAnchorY = Math.max(-1, Math.min(10000, y));
+        if (configuration != null) {
+            configuration.get("playerSection", "anchorX", -1)
+                .set(playerSectionAnchorX);
+            configuration.get("playerSection", "anchorY", -1)
+                .set(playerSectionAnchorY);
             configuration.save();
         }
     }

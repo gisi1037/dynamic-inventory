@@ -3,39 +3,32 @@
   "configurations": [
     {
       "type": "java",
-      "name": "GTNH: Launch and debug RC-2 inventory integration client",
       "request": "attach",
+      "name": "GTNH: Attach shared GTNH2.9 / Java26",
       "hostName": "localhost",
-      "port": 5005,
-      "preLaunchTask": "GTNH: Start integration client for debugger"
+      "port": 5010,
+      "sourcePaths": [
+        "${workspaceFolder}/src/main/java"
+      ]
     },
     {
       "type": "java",
-      "name": "GTNH: Launch and debug Backhand compatibility client",
+      "name": "GTNH: Attach to shared Inventory + SFM nightly 803 (5007)",
       "request": "attach",
       "hostName": "localhost",
-      "port": 5005,
-      "preLaunchTask": "GTNH: Start Backhand client for debugger"
+      "port": 5007
     },
     {
       "type": "java",
-      "name": "GTNH: Launch and debug RC-2 compatibility client",
+      "name": "GTNH: Launch and debug source fixture",
       "request": "attach",
       "hostName": "localhost",
       "port": 5005,
-      "preLaunchTask": "GTNH: Start RC-2 client for debugger"
+      "preLaunchTask": "GTNH: Start source fixture for debugger"
     },
     {
       "type": "java",
-      "name": "GTNH: Launch and debug Minecraft",
-      "request": "attach",
-      "hostName": "localhost",
-      "port": 5005,
-      "preLaunchTask": "GTNH: Start client for debugger"
-    },
-    {
-      "type": "java",
-      "name": "GTNH: Attach to running debug client",
+      "name": "GTNH: Attach to RC-2 or source fixture (5005)",
       "request": "attach",
       "hostName": "localhost",
       "port": 5005

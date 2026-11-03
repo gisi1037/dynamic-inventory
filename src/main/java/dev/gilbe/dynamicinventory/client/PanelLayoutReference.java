@@ -16,15 +16,33 @@ public final class PanelLayoutReference {
     }
 
     public Rect adapt(Rect panel, Rect currentMachine, Rect currentViewport) {
-        int sourceCenter = currentViewport.x
-            + (int) Math.round((machine.x + machine.width / 2.0 - viewport.x) * currentViewport.width / viewport.width);
-        int sourceBottom = currentViewport.y
-            + (int) Math.round((machine.bottom() - (double) viewport.y) * currentViewport.height / viewport.height);
+        return adapt(PlayerPanelProfile.at(panel, currentViewport), currentMachine, currentViewport);
+    }
+
+    /** Reconstruct authored bounds before translating the group; screen percentages must not scale panel gaps. */
+    public Rect adapt(PlayerPanelProfile profile, Rect currentMachine, Rect currentViewport) {
+        Rect panel = profile.requested(viewport);
         return new Rect(
-            panel.x + currentMachine.x + currentMachine.width / 2 - sourceCenter,
-            panel.y + currentMachine.bottom() - sourceBottom,
+            panel.x + currentMachine.x + currentMachine.width / 2 - machine.x - machine.width / 2,
+            panel.y + currentMachine.bottom() - machine.bottom(),
             panel.width,
             panel.height);
+    }
+
+    /** Custom interfaces follow their own origin without the global adjustment for a different machine size. */
+    public Rect adaptCustom(PlayerPanelProfile profile, Rect currentMachine) {
+        Rect panel = profile.requested(viewport);
+        return new Rect(
+            panel.x + currentMachine.x - machine.x,
+            panel.y + currentMachine.y - machine.y,
+            panel.width,
+            panel.height);
+    }
+
+    /** Only an authored, non-overlapping position above the machine permits automatic fitting there. */
+    public boolean placedAbove(PlayerPanelProfile profile) {
+        Rect authored = profile.requested(viewport);
+        return authored.y < machine.y && !authored.intersects(machine);
     }
 
     public JsonObject toJson() {

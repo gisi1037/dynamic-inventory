@@ -19,6 +19,10 @@ public final class BuiltinInventoryUiAdapters {
         if (OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial"))
             AppliedEnergisticsCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("etfuturum")) EtFuturumCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("EnderIO")
+            && OptionalInventoryAdapters.reviewedVersion("endercore")) EnderIoCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("ExtraUtilities"))
+            ExtraUtilitiesCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("avaritiaddons")) AvaritiaddonsCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("dreamcraft")) DreamcraftCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("alchgrate"))

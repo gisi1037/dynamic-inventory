@@ -63,7 +63,8 @@ public abstract class ForestrySlotUtilMixin {
             return true;
 
         List<Slot> storage = new ArrayList<>();
-        for (int id : binding.getStorageSlotIds()) storage.add(container.getSlot(id));
+        for (int id : dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting
+            .filter(container, binding.getStorageSlotIds())) storage.add(container.getSlot(id));
         List<Slot> hotbar = new ArrayList<>();
         for (int id : binding.getHotbarSlotIds()) hotbar.add(container.getSlot(id));
         if (logical >= 0) {

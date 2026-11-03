@@ -13,6 +13,16 @@ public final class PlayerInventoryWidgetGroup extends SlotGroupWidget {
     private final InventoryScrollWidget viewport;
     private final List<ItemSlot> hotbar = new ArrayList<>();
     private final int initialRows;
+    private boolean detachedPresentation;
+
+    public boolean isDetachedPresentation() {
+        return detachedPresentation;
+    }
+
+    public void setDetachedPresentation(boolean detached) {
+        detachedPresentation = detached;
+        viewport.setDetachedPresentation(detached);
+    }
 
     public PlayerInventoryWidgetGroup(InventoryScrollWidget viewport, int initialRows) {
         this.viewport = viewport;

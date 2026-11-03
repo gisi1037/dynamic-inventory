@@ -45,6 +45,15 @@ public final class PlayerPanelSet {
         return members(id, capacity, Collections.emptySet());
     }
 
+    /** Attached presentation has no separate inventories; all storage is available to native automatic routes. */
+    public int[] automaticMainSlots(int capacity, boolean detached) {
+        return detached ? members(MAIN, capacity).stream()
+            .mapToInt(Integer::intValue)
+            .toArray()
+            : java.util.stream.IntStream.range(0, capacity)
+                .toArray();
+    }
+
     public List<Integer> members(String id, int capacity, Set<Integer> excluded) {
         if (!MAIN.equals(id)) {
             List<Integer> active = new ArrayList<>();

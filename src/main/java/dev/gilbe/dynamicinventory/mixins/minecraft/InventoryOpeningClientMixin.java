@@ -60,12 +60,19 @@ public abstract class InventoryOpeningClientMixin implements ClientGateAccess {
     private void dynamicinventory$contents(S30PacketWindowItems packet, CallbackInfo ci) {
         if (dynamicinventory$resize.filter(gameController.thePlayer)
             || dynamicinventory$gate.filter(gameController, packet.func_148911_c())) ci.cancel();
+        else dev.gilbe.dynamicinventory.client.HotbarControls
+            .preserveContents(gameController.thePlayer, packet.func_148911_c(), packet.func_148910_d());
     }
 
     @Inject(method = "handleSetSlot", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$slot(S2FPacketSetSlot packet, CallbackInfo ci) {
         if (dynamicinventory$resize.filter(gameController.thePlayer)
             || dynamicinventory$gate.filter(gameController, packet.func_149175_c())) ci.cancel();
+        else if (dev.gilbe.dynamicinventory.client.HotbarControls.deferSlot(
+            gameController.thePlayer,
+            packet.func_149175_c(),
+            packet.func_149173_d(),
+            packet.func_149174_e())) ci.cancel();
     }
 
     @Inject(method = "handleWindowProperty", at = @At("HEAD"), cancellable = true)

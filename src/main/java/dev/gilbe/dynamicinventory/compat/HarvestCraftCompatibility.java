@@ -1,5 +1,8 @@
 package dev.gilbe.dynamicinventory.compat;
 
+import dev.gilbe.dynamicinventory.api.InventoryUi;
+import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
+
 /**
  * HarvestCraft 1.3.15-GTNH's ordinary processing inventories use vanilla slot synchronization and
  * progress properties. Keep their recipe/bait checks and custom result-slot callbacks in native code.
@@ -21,10 +24,14 @@ public final class HarvestCraftCompatibility {
     }
 
     private static void register(String id, String type, int nativeSlots) {
-        NativeMachineAdapters.machine(
-            "dynamicinventory:harvestcraft/" + id,
-            "com.pam.harvestcraft.Container" + type,
-            "com.pam.harvestcraft.Gui" + type,
-            nativeSlots);
+        InventoryUi.register(
+            InventoryUiAdapter.builder("dynamicinventory:harvestcraft/" + id, "com.pam.harvestcraft.Container" + type)
+                .gui("com.pam.harvestcraft.Gui" + type)
+                .expectedNativeSlots(nativeSlots)
+                .layout(NativeMachineAdapters.LAYOUT)
+                // Revision 3 also identifies the shared modular-panel integration on the peer.
+                .compatibilityRevision(3)
+                .extraTransfers(NativeMachineAdapters.nativeThenHotbar())
+                .build());
     }
 }

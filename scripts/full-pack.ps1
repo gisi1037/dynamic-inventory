@@ -1,5 +1,6 @@
 param(
     [switch] $PrepareOnly,
+    [switch] $NoLaunch,
     [switch] $ExperimentalInventoryIntegration,
     [switch] $VisualPreview,
     [string] $QualificationManifest = 'docs/qualification/rc2-opening-gate-qualified/build-verification.json',
@@ -21,7 +22,20 @@ if ($pack.version -notmatch '^[A-Za-z0-9_+.-]+$') { throw 'Pack version contains
 $instancesRoot = Join-Path $env:APPDATA 'PrismLauncher\instances'
 $target = Join-Path $instancesRoot $pack.instanceId
 $marker = Join-Path $target '.dynamicinventory-dev-instance'
+$sharedInstance = $pack.sharedInstanceMarker -eq '.sfm-dev-instance.json'
+if ($pack.sharedInstanceMarker -and !$sharedInstance) { throw 'Unrecognized shared-instance marker.' }
+if ($sharedInstance) {
+    $marker = Join-Path $target '.sfm-dev-instance.json'
+    if (!(Test-Path -LiteralPath $marker)) { throw 'Prepare the marked SFM instance before deploying Inventory to it.' }
+}
 $launcher = Join-Path $env:LOCALAPPDATA 'Programs\PrismLauncher\prismlauncher.exe'
+function Assert-SharedInstanceStopped {
+    if (!$sharedInstance) { return }
+    $running = @(Get-CimInstance Win32_Process -Filter "Name='java.exe' OR Name='javaw.exe'" | Where-Object {
+        $_.CommandLine -and ($_.CommandLine.Contains($target) -or $_.CommandLine.Contains($pack.instanceId))
+    })
+    if ($running.Count) { throw 'Save and close the shared SFM game before deploying its Inventory build.' }
+}
 
 if (-not (Test-Path -LiteralPath $launcher)) { throw "Prism Launcher was not found: $launcher" }
 if (-not (Test-Path -LiteralPath $marker)) {
@@ -55,6 +69,11 @@ if (-not (Test-Path -LiteralPath $marker)) {
 
 $installed = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
 if ($installed.archiveSha256 -ne $pack.archiveSha256) { throw 'Instance baseline differs from config. Use a new instanceId for a different pack build.' }
+if ($sharedInstance -and ($installed.instanceId -ne $pack.instanceId -or $installed.packRelease -ne $pack.version)) {
+    throw 'Shared SFM instance identity differs from the selected pack.'
+}
+Assert-SharedInstanceStopped
+if ($sharedInstance -and !$PSBoundParameters.ContainsKey('DebugPort')) { $DebugPort = 5007 }
 $memoryMiB = if ($pack.memoryMiB) { [int] $pack.memoryMiB } else { 8192 }
 if ($memoryMiB -lt 4096 -or $memoryMiB -gt 32768) { throw 'Pack memoryMiB is outside the supported range.' }
 $cfg = Join-Path $target 'instance.cfg'
@@ -69,13 +88,18 @@ if ($PrepareOnly) {
 # Fail before building or changing the deployed JAR/config if the qualified
 # game runtime is unavailable. Source fixtures use GTNHGradle's own toolchain.
 $runtimeJava = 'C:\Program Files\Java\jdk-25\bin\javaw.exe'
-if (!(Test-Path -LiteralPath $runtimeJava)) { throw 'The qualified Oracle Java 25 game runtime was not found.' }
+if ($sharedInstance) {
+    # SFM owns its runtime; retain the shared instance's existing Java selection.
+    $runtimeJava = [regex]::Match($text, '(?m)^JavaPath=(.*)$').Groups[1].Value.Trim().Trim('"')
+}
+if (!(Test-Path -LiteralPath $runtimeJava)) { throw 'The selected game runtime was not found.' }
 
 # Pack downloads and runtime adapter selection are separate identities. A daily must
 # be selected explicitly; never infer compatible adapters from a similar version string.
 $profile = switch ([string]$pack.version) {
     '2.9.0-RC-2' { 'rc2-integration' }
     '2.9.0-nightly-2026-10-19' { 'daily-2026-10-19' }
+    'daily-2026-10-27+803' { 'daily-2026-10-27-803' }
     default { throw 'No reviewed integration profile exists for this pack version.' }
 }
 if ($pack.PSObject.Properties['profile'] -and [string]$pack.profile -ne $profile) {
@@ -92,7 +116,7 @@ if (!$VisualPreview) {
     $qualified = & (Join-Path $PSScriptRoot 'validate-qualification.ps1') -ManifestPath $qualificationPath -Stage $qualificationStage
 }
 $referenceFile = if ($profile -eq 'rc2-integration') { 'pack-compatibility-rc2.json' }
-    else { 'pack-compatibility-daily-2026-10-19.json' }
+    else { "pack-compatibility-$profile.json" }
 $reference = Get-Content (Join-Path $projectRoot $referenceFile) -Raw | ConvertFrom-Json
 foreach ($entry in $reference.installedFiles) {
     $installedMod = Join-Path $target ('.minecraft/mods/' + $entry.file)
@@ -102,6 +126,7 @@ foreach ($entry in $reference.installedFiles) {
     }
 }
 $mods = Join-Path $target '.minecraft/mods'
+Assert-SharedInstanceStopped
 foreach ($old in Get-ChildItem -LiteralPath $mods -Filter 'dynamicinventory-*.jar' -File) {
     try { $handle = [IO.File]::Open($old.FullName, 'Open', 'Read', 'None'); $handle.Dispose() }
     catch { throw 'Close the running test game before replacing its inventory mod JAR.' }
@@ -161,7 +186,7 @@ if ($text -match '(?m)^JvmArgs=') {
     $text = [regex]::Replace($text, '(?m)^JvmArgs=.*', [System.Text.RegularExpressions.MatchEvaluator]{ param($match) 'JvmArgs=' + $encodedJvm })
 } else { $text += "`nJvmArgs=$encodedJvm`n" }
 Set-Content -LiteralPath $cfg -Value $text -Encoding UTF8
-if ($VisualPreview) { Write-Host "Installed UNQUALIFIED visual preview in the isolated GTNH $($pack.version) development instance; backup: $backup." }
+if ($VisualPreview) { Write-Host "Installed UNQUALIFIED visual preview in the GTNH $($pack.version) development instance; backup: $backup." }
 else { Write-Host "Installed qualified experimental inventory in GTNH $($pack.version); prior jars/config backed up at $backup." }
 Write-Host 'Create a NEW disposable world. Wide layouts show native inline Baubles; narrow layouts keep the expanded inventory with an equipment side panel.'
-& $launcher --launch $pack.instanceId
+if (!$NoLaunch) { & $launcher --launch $pack.instanceId }

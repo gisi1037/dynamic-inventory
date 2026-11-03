@@ -2,11 +2,13 @@ package dev.gilbe.dynamicinventory.client;
 
 import org.lwjgl.input.Keyboard;
 
+import com.cleanroommc.modularui.api.IMuiScreen;
 import com.cleanroommc.modularui.api.event.KeyboardInputEvent;
 import com.cleanroommc.modularui.api.event.MouseInputEvent;
 
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import dev.gilbe.dynamicinventory.compat.mui2.Mui2PanelAccess;
 
 /** Registered only when ModularUI2 is loaded; runs before its GUI input dispatchers. */
 public final class Mui2PendingInputEvents {
@@ -28,11 +30,26 @@ public final class Mui2PendingInputEvents {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void beforeMouseInput(MouseInputEvent.Pre event) {
-        cancelMouseInput(event);
+        if (cancelMouseInput(event)) return;
+        if (!(event.gui instanceof IMuiScreen mui) || !(mui.getScreen() instanceof Mui2PanelAccess access)) return;
+        access.dynamicinventory$detachedPanels()
+            .update(mui.getScreen());
+        if (PanelSettingsOverlay.handleMouse(event.gui) || NativeInventoryPanel.handlePointer(event.gui)
+            || NativeInventoryPanel.handleWheel(event.gui)) event.setCanceled(true);
+        access.dynamicinventory$detachedPanels()
+            .update(mui.getScreen());
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void beforeKeyboardInput(KeyboardInputEvent.Pre event) {
-        cancelKeyboardInput(event);
+        if (cancelKeyboardInput(event)) return;
+        if (PanelSettingsOverlay.handleKeyboard(event.gui)) {
+            event.setCanceled(true);
+            return;
+        }
+        DetachedChestPanel panel = DetachedChestPanel.of(event.gui);
+        if (panel != null && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE
+            && Keyboard.getEventKeyState()
+            && panel.cancel()) event.setCanceled(true);
     }
 }

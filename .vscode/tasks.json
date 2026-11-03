@@ -1,107 +1,11 @@
 {
   "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}"
+  },
   "tasks": [
     {
-      "label": "GTNH: Build external MUI2 example mod",
-      "dependsOn": ["GTNH: Build mod"],
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "--project-dir=examples/mui2-test-mod", "build"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Run RC-2 inventory integration client",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25", "-PinventoryProfile=rc2-integration", "-PinventoryStorageTests"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Run RC-2 inventory integration server",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runServer25", "-PinventoryProfile=rc2-integration", "-PinventoryStorageTests"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Start integration client for debugger",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25", "--debug-jvm", "-PinventoryProfile=rc2-integration", "-PinventoryStorageTests"],
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "minecraft",
-        "pattern": {"regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$", "message": 1},
-        "background": {"activeOnStart": true, "beginsPattern": ".*",
-          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"}
-      }
-    },
-    {
-      "label": "GTNH: Run Backhand compatibility client",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25", "-PinventoryProfile=rc2-backhand", "-PinventoryStorageTests"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Run Backhand qualification server",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runServer25", "-PinventoryProfile=rc2-backhand", "-PinventoryStorageTests"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Start Backhand client for debugger",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25", "--debug-jvm", "-PinventoryProfile=rc2-backhand", "-PinventoryStorageTests"],
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "minecraft",
-        "pattern": {"regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$", "message": 1},
-        "background": {"activeOnStart": true, "beginsPattern": ".*",
-          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"}
-      }
-    },
-    {
-      "label": "GTNH: Run RC-2 compatibility client",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25", "-PinventoryProfile=rc2-mui2", "-PinventoryStorageTests"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Run RC-2 qualification server",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runServer25", "-PinventoryProfile=rc2-mui2", "-PinventoryStorageTests"],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Start RC-2 client for debugger",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25", "--debug-jvm", "-PinventoryProfile=rc2-mui2", "-PinventoryStorageTests"],
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "minecraft",
-        "pattern": {"regexp": "^(THIS_PATTERN_IS_INTENTIONALLY_UNUSED)$", "message": 1},
-        "background": {"activeOnStart": true, "beginsPattern": ".*",
-          "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"}
-      }
-    },
-    {
-      "label": "GTNH: Build mod",
+      "label": "GTNH: Build and launch shared2.9 (Java26)",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -109,33 +13,212 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/scripts/gradle.ps1",
-        "build"
+        "${workspaceFolder}/scripts/shared-pack.ps1"
       ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "Official GTNH2.9.0 shared SFM+Inventory instance; Java26 game, JDK25 Gradle; old instances/worlds preserved."
+    },
+    {
+      "label": "GTNH: Build and install shared2.9 (no launch)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/shared-pack.ps1",
+        "-NoLaunch"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "Official GTNH2.9.0 shared SFM+Inventory instance; Java26 game, JDK25 Gradle; old instances/worlds preserved."
+    },
+    {
+      "label": "GTNH: Build mod",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "build",
+        "-PinventoryProfile=gtnh-2.9.0"
+      ],
+      "problemMatcher": [],
+      "detail": "Build the production mod and run build checks against the current nightly APIs.",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": []
+      "type": "process",
+      "command": "powershell.exe"
     },
     {
-      "label": "GTNH: Run development client",
-      "type": "process",
-      "command": "powershell.exe",
+      "label": "GTNH: Format code",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
         "-File",
         "${workspaceFolder}/scripts/gradle.ps1",
-        "runClient25"
+        "spotlessApply",
+        "-PinventoryProfile=gtnh-2.9.0"
       ],
-      "problemMatcher": []
+      "problemMatcher": [],
+      "detail": "Apply the repository code formatter.",
+      "type": "process",
+      "command": "powershell.exe"
     },
     {
-      "label": "GTNH: Start client for debugger",
+      "label": "GTNH: Build and install nightly pack (no launch)",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/full-pack.ps1",
+        "-ExperimentalInventoryIntegration",
+        "-VisualPreview",
+        "-PackConfig",
+        "pack-daily-2026-10-27-803.json",
+        "-DebugPort",
+        "5007",
+        "-NoLaunch"
+      ],
+      "problemMatcher": [],
+      "detail": "Build and install Inventory in the shared SFM nightly 803 client without launching Minecraft. Save and close that game first.",
+      "runOptions": {
+        "instanceLimit": 1
+      },
       "type": "process",
-      "command": "powershell.exe",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Build and launch nightly pack",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/full-pack.ps1",
+        "-ExperimentalInventoryIntegration",
+        "-VisualPreview",
+        "-PackConfig",
+        "pack-daily-2026-10-27-803.json",
+        "-DebugPort",
+        "5007"
+      ],
+      "problemMatcher": [],
+      "detail": "Build Inventory and deploy to the shared SFM nightly 803 instance; save and close that game first. Debug port 5007.",
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Build and launch RC-2 pack",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/full-pack.ps1",
+        "-ExperimentalInventoryIntegration",
+        "-VisualPreview",
+        "-PackConfig",
+        "pack-baseline.json",
+        "-DebugPort",
+        "5005"
+      ],
+      "problemMatcher": [],
+      "detail": "Install a preview in the marked RC-2 Prism instance; close that game first. Debug port 5005.",
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Watch F9 GUI templates",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/tools/Watch-InventoryUiTemplates.ps1",
+        "-GameDirectory",
+        "${env:APPDATA}/PrismLauncher/instances/${input:watchInstance}/.minecraft",
+        "-InsertIntoSource"
+      ],
+      "problemMatcher": [],
+      "detail": "Choose nightly or RC-2, then press F9 in game. Inserts inactive block-commented suggestions. Stop with Ctrl+C.",
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Check editor layouts",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/testing/test-native-editor.ps1",
+        "-Profile",
+        "${input:editorProfile}",
+        "-Build"
+      ],
+      "problemMatcher": [],
+      "detail": "Compile fixtures and run headless editor/geometry checks without launching or controlling Minecraft.",
+      "group": "test",
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Check F9 generator",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/testing/test-ui-template-tools.ps1"
+      ],
+      "problemMatcher": [],
+      "detail": "Check generation, source insertion and watcher behavior using disposable files.",
+      "group": "test",
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Build external MUI2 example mod",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "--project-dir=examples/mui2-test-mod",
+        "build"
+      ],
+      "problemMatcher": [],
+      "detail": "Build the separate API consumer example after building this mod.",
+      "dependsOn": [
+        "GTNH: Build mod"
+      ],
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Run source fixture client",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy",
@@ -143,9 +226,44 @@
         "-File",
         "${workspaceFolder}/scripts/gradle.ps1",
         "runClient25",
-        "--debug-jvm"
+        "-PinventoryProfile=${input:fixtureProfile}",
+        "-PinventoryStorageTests"
       ],
-      "isBackground": true,
+      "problemMatcher": [],
+      "detail": "Choose a small deobfuscated fixture. This is separate from the Prism full pack.",
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Run source fixture server",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "runServer25",
+        "-PinventoryProfile=${input:fixtureProfile}",
+        "-PinventoryStorageTests"
+      ],
+      "problemMatcher": [],
+      "detail": "Choose the same fixture profile as the client for dedicated-server checks.",
+      "type": "process",
+      "command": "powershell.exe"
+    },
+    {
+      "label": "GTNH: Start source fixture for debugger",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/gradle.ps1",
+        "runClient25",
+        "--debug-jvm",
+        "-PinventoryProfile=${input:fixtureProfile}",
+        "-PinventoryStorageTests"
+      ],
       "problemMatcher": {
         "owner": "minecraft",
         "pattern": {
@@ -157,12 +275,15 @@
           "beginsPattern": ".*",
           "endsPattern": ".*Listening for transport dt_socket at address: 5005.*"
         }
-      }
+      },
+      "detail": "Used by the F5 source-fixture configuration.",
+      "hide": true,
+      "isBackground": true,
+      "type": "process",
+      "command": "powershell.exe"
     },
     {
       "label": "GTNH: Prepare Minecraft sources",
-      "type": "process",
-      "command": "powershell.exe",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy",
@@ -172,62 +293,76 @@
         "setupDecompWorkspace",
         "eclipse"
       ],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Run development server",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/gradle.ps1",
-        "runServer25"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "GTNH: Generate GUI templates on F9 (RC-2)",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/tools/Watch-InventoryUiTemplates.ps1"
-      ],
       "problemMatcher": [],
-      "runOptions": { "instanceLimit": 1 }
+      "detail": "One-time source/IDE setup or repair of generated workspace files.",
+      "type": "process",
+      "command": "powershell.exe"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "watchInstance",
+      "type": "pickString",
+      "description": "Prism instance to watch for F9 captures",
+      "options": [
+        "GTNH-Dev-Shared-2.9.0-J26",
+        {
+          "label": "Nightly 803 (shared with SFM)",
+          "value": "GTNH-SFM-Daily-2026-10-27-803"
+        },
+        {
+          "label": "Nightly 795 (previous)",
+          "value": "GTNH-Dynamic-Inventory-Daily-2026-10-19-795"
+        },
+        {
+          "label": "RC-2",
+          "value": "GTNH-Dynamic-Inventory-Dev-RC2"
+        }
+      ],
+      "default": "GTNH-Dev-Shared-2.9.0-J26"
     },
     {
-      "label": "GTNH: Build and launch UI preview (unqualified)",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-        "${workspaceFolder}/scripts/full-pack.ps1",
-        "-ExperimentalInventoryIntegration", "-VisualPreview"
+      "id": "editorProfile",
+      "type": "pickString",
+      "description": "API profile for headless editor checks",
+      "options": [
+        "daily-2026-10-27-803",
+        "daily-2026-10-19",
+        "rc2-integration"
       ],
-      "problemMatcher": []
+      "default": "daily-2026-10-27-803"
     },
     {
-      "label": "GTNH: Build and launch experimental RC-2 full-pack test",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}/scripts/full-pack.ps1",
-        "-ExperimentalInventoryIntegration",
-        "-QualificationManifest",
-        "docs/qualification/rc2-opening-gate-qualified/build-verification.json"
+      "id": "fixtureProfile",
+      "type": "pickString",
+      "description": "Small source fixture profile (choose the same profile on both peers)",
+      "options": [
+        {
+          "label": "Current nightly 803 integration",
+          "value": "daily-2026-10-27-803"
+        },
+        {
+          "label": "RC-2 inventory integration",
+          "value": "rc2-integration"
+        },
+        {
+          "label": "Previous nightly 795 integration",
+          "value": "daily-2026-10-19"
+        },
+        {
+          "label": "RC-2 MUI2",
+          "value": "rc2-mui2"
+        },
+        {
+          "label": "RC-2 Backhand",
+          "value": "rc2-backhand"
+        },
+        {
+          "label": "Isolated core",
+          "value": "isolated"
+        }
       ],
-      "problemMatcher": []
+      "default": "daily-2026-10-27-803"
     }
   ]
 }

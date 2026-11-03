@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import appeng.api.config.Settings;
@@ -16,6 +17,7 @@ import appeng.client.gui.widgets.MEGuiTextField;
 import appeng.core.AEConfig;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.client.NativeUiAnchors;
+import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
 import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.NativeScreenMargins;
 import dev.gilbe.dynamicinventory.client.TerminalViewportLayout;
@@ -43,6 +45,21 @@ public abstract class AeSecurityGuiMixin implements NativeUiAnchors, AppliedEner
 
     private boolean dynamicinventory$registered() {
         return InventoryUi.findAdapter(((GuiMEMonitorable) (Object) this).inventorySlots) != null;
+    }
+
+    @Inject(method = "initGui", at = @At("RETURN"), remap = true)
+    private void dynamicinventory$sidebarPins(CallbackInfo ci) {
+        if (!dynamicinventory$registered() || pinsStateButton == null) return;
+        ContainerPanelAccess access = (ContainerPanelAccess) this;
+        int column = access.dynamicinventory$left() - 36;
+        int next = access.dynamicinventory$top() + 8;
+        for (net.minecraft.client.gui.GuiButton button : access.dynamicinventory$buttons()) {
+            if (button != pinsStateButton && button.visible && button.xPosition == column)
+                next = Math.max(next, button.yPosition + Math.max(20, button.height + 4));
+        }
+        // Capture this as the native origin before the shared decorator applies any saved Pins X/Y offsets.
+        pinsStateButton.xPosition = column;
+        pinsStateButton.yPosition = next;
     }
 
     @Inject(method = "calculateRowsCount", at = @At("RETURN"), cancellable = true)

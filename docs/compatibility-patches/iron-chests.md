@@ -2,6 +2,7 @@
 
 **Loaded ID:** `IronChest`. **Pinned version:** `6.1.13` in RC-2 and the October 19 daily.
 **Status:** native adapter implemented; focused daily runtime smoke passed for all 11 block tiers.
+Gilbert confirmed visual review complete for all chest interfaces on 2026-11-02.
 Owner: [IronChestCompatibility](../../src/main/java/dev/gilbe/dynamicinventory/compat/IronChestCompatibility.java).
 
 Every block tier uses the exact container `cpw.mods.ironchest.ContainerIronChest`
@@ -9,6 +10,12 @@ and GUI `cpw.mods.ironchest.client.GUIChest`. One adapter registers this inspect
 pair with native transfers, zero header padding and zero background inset. It
 uses the shared native panel and in-game editor without replacing chest slots,
 ownership, packets or validation. No arbitrary subclasses are included.
+
+The storage-panel batch adds the shared detach/split controls to this exact pair.
+All eleven tiers can use movable player panels and the panel menu; attached
+remains the default. Adapter revision 2 also enables the server-validated
+subpanel-to-Main transfer path. Chest slots and DirtChest filtering remain native.
+The shared nightly 803 lab is created by `scripts/testing/setup-storage-panel-lab.ps1`.
 
 | Block metadata | Tier | Native slots | Grid |
 | --- | --- | --- | --- |
@@ -53,4 +60,4 @@ DirtChest and Dark Steel passed appended-slot shift transfers and NEI wheel
 transfers in both directions, with exact typed-NBT conservation. DirtChest rejected
 the non-dirt probe. This is focused coverage at 1920×1080 and GUI scale 2; further
 layout/resize checks and visual tuning remain separate from the registration.
-Raw development captures are not published; see the [testing guide](../testing.md).
+Raw local qualification captures are excluded from the public repository.

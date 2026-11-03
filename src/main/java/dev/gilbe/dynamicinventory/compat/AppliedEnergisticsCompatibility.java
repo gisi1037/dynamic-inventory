@@ -6,8 +6,22 @@ import dev.gilbe.dynamicinventory.api.NativeUiLayout;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsContainerAccess;
 
-/** Exact native machine and terminal hosts reviewed in AE2 1080/1089. */
+/** Exact native machine and terminal hosts reviewed in the pinned AE2 profiles. */
 public final class AppliedEnergisticsCompatibility {
+
+    private static final String[][] HOSTS = { { "grinder", "Grinder" }, { "condenser", "Condenser" },
+        { "chest", "Chest" }, { "sky_chest", "SkyChest" }, { "drive", "Drive" },
+        { "vibration_chamber", "VibrationChamber" }, { "inscriber", "Inscriber" },
+        { "advanced_inscriber", "AdvancedInscriber" }, { "io_port", "IOPort" },
+        { "crystal_growth_chamber", "CrystalGrowthChamber" }, { "molecular_assembler", "MAC" },
+        { "wireless_access_point", "Wireless" }, { "security_terminal", "Security" }, { "quantum_link_chamber", "QNB" },
+        { "spatial_io_port", "SpatialIOPort" }, { "spatial_link_chamber", "SpatialLinkChamber" },
+        { "interface", "Interface" }, { "cell_workbench", "CellWorkbench" }, { "network_tool", "NetworkTool" },
+        { "advanced_network_tool", "AdvancedNetworkTool" }, { "me_terminal", "MEMonitorable" },
+        { "crafting_terminal", "CraftingTerm" }, { "pattern_terminal", "PatternTerm" },
+        { "extended_pattern_terminal", "PatternTermEx" }, { "portable_cell", "MEPortableCell" },
+        { "interface_terminal", "InterfaceTerminal" },
+        { "crafting_diagnostic_terminal", "CraftingDiagnosticTerminal" } };
 
     private static final NativeUiLayout LAYOUT = NativeUiLayout.builder()
         .fixedPlayerColumns(9)
@@ -22,32 +36,20 @@ public final class AppliedEnergisticsCompatibility {
     private AppliedEnergisticsCompatibility() {}
 
     public static void registerInventoryAdapters() {
-        machine("grinder", "Grinder");
-        machine("condenser", "Condenser");
-        machine("chest", "Chest");
-        machine("sky_chest", "SkyChest");
-        machine("drive", "Drive");
-        machine("vibration_chamber", "VibrationChamber");
-        machine("inscriber", "Inscriber");
-        machine("advanced_inscriber", "AdvancedInscriber");
-        machine("io_port", "IOPort");
-        machine("crystal_growth_chamber", "CrystalGrowthChamber");
-        machine("molecular_assembler", "MAC");
-        machine("wireless_access_point", "Wireless");
-        machine("security_terminal", "Security");
-        machine("quantum_link_chamber", "QNB");
-        machine("spatial_io_port", "SpatialIOPort");
-        machine("spatial_link_chamber", "SpatialLinkChamber");
-        machine("interface", "Interface");
-        machine("cell_workbench", "CellWorkbench");
         // Core wireless access uses the same MEMonitorable host as the wired ME Terminal.
-        machine("me_terminal", "MEMonitorable");
-        machine("crafting_terminal", "CraftingTerm");
-        machine("pattern_terminal", "PatternTerm");
-        machine("extended_pattern_terminal", "PatternTermEx");
-        machine("portable_cell", "MEPortableCell");
-        machine("interface_terminal", "InterfaceTerminal");
-        machine("crafting_diagnostic_terminal", "CraftingDiagnosticTerminal");
+        for (String[] host : HOSTS) machine(host[0], host[1]);
+    }
+
+    static boolean panelHost(InventoryUiAdapter adapter, String container) {
+        if (adapter.getCompatibilityRevision() < 3) return false;
+        for (String[] host : HOSTS) if (adapter.getId()
+            .equals("dynamicinventory:ae2_" + host[0])
+            && container.equals("appeng.container.implementations.Container" + host[1])
+            && container.equals(adapter.getContainerClassName())
+            && adapter.getGuiClassName()
+                .equals("appeng.client.gui.implementations.Gui" + host[1]))
+            return true;
+        return false;
     }
 
     private static void machine(String id, String type) {
@@ -56,6 +58,7 @@ public final class AppliedEnergisticsCompatibility {
             InventoryUiAdapter
                 .builder("dynamicinventory:ae2_" + id, "appeng.container.implementations.Container" + type)
                 .gui(gui)
+                .compatibilityRevision(3)
                 .layout(AppliedEnergisticsBackground.hasSidePanels(gui) ? SIDE_LAYOUT : LAYOUT)
                 // AE2 casts every real slot to AppEngSlot and routes by isPlayerSide(), not fixed ranges.
                 // Its addSlotToContainer override also assigns the slot's owning container for callbacks.

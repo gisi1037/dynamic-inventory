@@ -112,7 +112,11 @@ public final class InventoryTransfers {
         for (int id : safe) {
             if (id < 0 || id >= container.inventorySlots.size() || id == sourceId) return null;
         }
-        return PlayerInventoryTransfers.transferTo(container, player, sourceId, safe);
+        return PlayerInventoryTransfers.transferTo(
+            container,
+            player,
+            sourceId,
+            dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, safe));
     }
 
     private static boolean validSource(Container container, EntityPlayer player, int sourceId) {

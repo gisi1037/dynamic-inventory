@@ -22,12 +22,14 @@ public final class ContainerInventoryRegion implements PlayerInventoryBinding {
 
     public final int nativeSlotCount;
     public final InventoryPlayer inventory;
+    private final Container container;
     private final InventoryShape shape;
     private final int[] ids;
 
     private ContainerInventoryRegion(Container container, InventoryPlayer inventory,
         PlayerInventorySlotFactory factory) {
         this.inventory = inventory;
+        this.container = container;
         shape = InventoryLayout.of(inventory);
         ids = new int[shape.mainSlots()];
         nativeSlotCount = container.inventorySlots.size();
@@ -185,7 +187,7 @@ public final class ContainerInventoryRegion implements PlayerInventoryBinding {
             result[i] = result[other];
             result[other] = swap;
         }
-        return result;
+        return dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, result);
     }
 
     public int[] hotbar() {

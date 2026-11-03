@@ -26,22 +26,24 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 import io.netty.buffer.ByteBuf;
 
-/** Client layouts choose destinations; the server only permits moves within the owner's ordinary inventory. */
+/** Player-inventory layouts choose destinations; an open machine/container always uses its native transfer path. */
 public final class PanelTransferRequest implements IMessage {
 
     private static final Map<EntityPlayerMP, Deque<PanelTransferRequest>> PENDING = new WeakHashMap<>();
     private static SimpleNetworkWrapper channel;
     private int window, source = -1;
+    private int preferred;
     private long revision;
     private int[] destinations = new int[0];
 
     public PanelTransferRequest() {}
 
-    private PanelTransferRequest(int window, long revision, int source, int[] destinations) {
+    private PanelTransferRequest(int window, long revision, int source, int[] destinations, int preferred) {
         this.window = window;
         this.revision = revision;
         this.source = source;
         this.destinations = destinations.clone();
+        this.preferred = preferred;
     }
 
     public static void initialize() {
@@ -53,15 +55,21 @@ public final class PanelTransferRequest implements IMessage {
     }
 
     public static void send(Container container, long revision, int source, int[] destinations) {
-        channel.sendToServer(new PanelTransferRequest(container.windowId, revision, source, destinations));
+        send(container, revision, source, destinations, destinations.length);
+    }
+
+    public static void send(Container container, long revision, int source, int[] destinations, int preferred) {
+        channel.sendToServer(new PanelTransferRequest(container.windowId, revision, source, destinations, preferred));
     }
 
     @Override
     public void fromBytes(ByteBuf bytes) {
-        if (bytes.readableBytes() < 20) return;
+        if (bytes.readableBytes() < 24) return;
         window = bytes.readInt();
         revision = bytes.readLong();
         int candidate = bytes.readInt(), count = bytes.readInt();
+        preferred = bytes.readInt();
+        if (preferred < 0 || preferred > count) return;
         if (count < 1 || count > InventoryShape.MAX_STORAGE + 9 || bytes.readableBytes() != count * 4) return;
         destinations = new int[count];
         for (int i = 0; i < count; i++) destinations[i] = bytes.readInt();
@@ -73,7 +81,8 @@ public final class PanelTransferRequest implements IMessage {
         bytes.writeInt(window)
             .writeLong(revision)
             .writeInt(source)
-            .writeInt(destinations.length);
+            .writeInt(destinations.length)
+            .writeInt(preferred);
         for (int id : destinations) bytes.writeInt(id);
     }
 
@@ -96,7 +105,7 @@ public final class PanelTransferRequest implements IMessage {
         if (player.isDead || player.getHealth() <= 0
             || container == null
             || container.windowId != window
-            || !dev.gilbe.dynamicinventory.compat.VanillaPanelHosts.supports(container)
+            || container != player.inventoryContainer
             || InventoryLayout.of(player.inventory)
                 .revision() != revision
             || !InventoryUi.isOpeningReady(player)
@@ -105,7 +114,7 @@ public final class PanelTransferRequest implements IMessage {
             || !ordinary(container, player, source)) return;
         Set<Integer> unique = new HashSet<>();
         for (int id : destinations) if (id == source || !unique.add(id) || !ordinary(container, player, id)) return;
-        PlayerInventoryTransfers.transferTo(container, player, source, destinations);
+        PlayerInventoryTransfers.transferTo(container, player, source, destinations, preferred);
         player.inventory.markDirty();
         container.detectAndSendChanges();
     }

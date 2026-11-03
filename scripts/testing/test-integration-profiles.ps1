@@ -24,7 +24,8 @@ $cases=@(
     @('rc2-mui2','2.9.0-RC-2','1.8.16','false','false'),
     @('rc2-backhand','2.9.0-RC-2','1.8.16','false','true'),
     @('rc2-integration','2.9.0-RC-2','1.8.16','true','true'),
-    @('daily-2026-10-19','2.9.0-nightly-2026-10-19','1.8.17','true','true'))
+    @('daily-2026-10-19','2.9.0-nightly-2026-10-19','1.8.17','true','true'),
+    @('daily-2026-10-27-803','daily-2026-10-27+803','1.8.17','true','true'))
 foreach($case in $cases){
     & $runtime.Java "-Ddynamicinventory.profile=$($case[0])" -cp $classes `
         dev.gilbe.dynamicinventory.qualification.IntegrationProfileFixtures @case
@@ -74,7 +75,8 @@ if($LASTEXITCODE -ne 0){throw 'Could not compile optional pack-version fixtures'
 Copy-Item src/main/resources/integration-profiles.properties $guardClasses -Force
 $guardCases=@(
     @('rc2-integration','1.9.6-GTNH','2.9.84','1.12.22-GTNH','6.1.13','2.6.60-GTNH'),
-    @('daily-2026-10-19','1.9.6-GTNH','2.9.93','1.12.22-GTNH','6.1.13','2.6.64-GTNH'))
+    @('daily-2026-10-19','1.9.6-GTNH','2.9.93','1.12.22-GTNH','6.1.13','2.6.64-GTNH'),
+    @('daily-2026-10-27-803','1.9.6-GTNH','2.9.98','1.12.22-GTNH','6.1.13','2.6.64-GTNH'))
 foreach($case in $guardCases){
     & $runtime.Java "-Ddynamicinventory.profile=$($case[0])" -cp $guardClasses `
         dev.gilbe.dynamicinventory.qualification.PackCompatibilityFixtures $case[1] $case[2] $case[3] $case[4] $case[5]
@@ -88,16 +90,16 @@ if($LaunchManifest){
     if(!$launch.offlineOnly -or [string]$launch.classpath -notlike "*$projectRoot*"){
         throw 'Expected this workspace offline fixture classpath'
     }
-    foreach($profile in @('rc2-integration','daily-2026-10-19')){
+    foreach($profile in @('rc2-integration','daily-2026-10-19','daily-2026-10-27-803')){
         & $runtime.Java "-Ddynamicinventory.profile=$profile" -cp $launch.classpath `
             dev.gilbe.dynamicinventory.qualification.EarlyNetworkFixtures
         if($LASTEXITCODE -ne 0){throw "Early network checks failed: $profile"}
         $networkAssertions+=7
     }
 }
-@{success=$true;checks=106;profiles=@($cases|ForEach-Object{$_[0]});java8Compiled=$true;
-    optionalPackVersionAssertions=50;
+@{success=$true;checks=142;profiles=@($cases|ForEach-Object{$_[0]});java8Compiled=$true;
+    optionalPackVersionAssertions=75;
     earlyNetworkAssertions=$networkAssertions;
     pinsSha256=(Get-FileHash src/main/resources/integration-profiles.properties).Hash;
     capturedAtUtc=[datetime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $report
-Write-Host 'PASS: 56 early profile-selection and 50 optional pack-version checks'
+Write-Host 'PASS: 67 early profile-selection and 75 optional pack-version checks'

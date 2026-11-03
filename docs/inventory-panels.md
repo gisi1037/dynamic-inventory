@@ -5,21 +5,70 @@ player inventory and all eleven vanilla container families: chests, crafting,
 furnaces, dispensers/droppers, hoppers, brewing, enchanting, beacons, anvils,
 merchants and horses. Double/trapped/ender chests, chest/hopper minecarts and
 chested donkey/mule inventories share their native family. The pack's Et Futurum
-brewing, enchanting and anvil replacements are admitted explicitly too. Other
-modded machine GUIs keep their attached layout. No storage capacity is granted
-by panels. See the [vanilla UI lab](vanilla-ui-lab.md) for the test world.
+brewing, enchanting and anvil replacements are admitted explicitly too. The next
+storage batch adds all eleven Iron Chests tiers, Baby Chest and Compressed Chest.
+HarvestCraft's reviewed processing machines also support separate panels; the
+nightly lab includes its seven enabled machines (the Grinder is pack-disabled).
+AE2's 27 exact reviewed machine, terminal and standalone tool families support separate panels,
+including their native upgrade, view-cell and network-tool side frames.
 
+Sorting a detached player-storage panel affects only that panel's members,
+including offscreen rows. The Main header's sort button sorts Main; native pins
+and locked-slot rules still apply. In the player inventory screen, Shift-clicking
+Main first fills the hotbar. Any remainder goes to the opposite half of Main,
+divided at a row boundary; it never uses satellite panels. Open container screens
+continue to use their native Shift-click transfer behavior, with automatic player
+destinations restricted to Main and its active hotbar while detached. Ground pickups use the same
+Main-only rule; subpanels and reserved hotbar rows are skipped for both existing
+stack merges and empty slots. Main includes its offscreen rows. If it is full,
+items remain on the ground or in the source container. Manual placement into a
+subpanel remains available. The server stores the player's Main membership for
+pickups before the next login's layout synchronization, and an open supported
+interface uses its own Main membership. This routing requires the updated mod on
+both client and server. Attached mode uses the normal full-inventory routes again;
+saved subpanel allocations remain available when detaching later.
+Other modded machine GUIs keep their attached layout. No storage capacity is granted
+by panels. See the [vanilla UI lab](vanilla-ui-lab.md) and
+[storage panel lab](storage-panel-batches.md) for the test worlds.
+
+MUI2 detached panels inherit their machine's native background artwork, tint and
+label color, including steam and machine-specific themes. Native slot artwork
+continues to be drawn by the existing widgets. Explicit frame-style overrides
+still use the selected unified inventory style; hotbar-bank frames follow the
+native MUI2 theme as well.
 Attached inventory bands use the same compact side padding as the player
 inventory. Extra scrollbar space is reserved only when storage rows overflow;
 an inventory that fits in full no longer widens the surrounding frame for an
 unused scrollbar. Native machine controls still retain their required width.
 
-Click the small panel icon to detach/reattach; right-click it for settings. Drag a
+Click the small panel icon to detach/reattach; right-click it for settings.
+For interfaces using the global default, this saves a shared attach/detach toggle
+and keeps the blue global outline. Reopening this or another inheriting interface
+uses the same mode. A mode-only change in the panel menu has the same behavior.
+Saving geometry, allocation or style edits creates an override; custom layouts
+continue to save their own breakout mode independently.
+Automatic fitting places inventory panels below or beside their machine, including
+when reopening MUI2 screens. Space above the machine is used only when the saved
+layout explicitly placed that panel there; valid authored above/beside positions
+remain intact. If no permitted space fits a usable panel, the interface stays
+attached. Fitting never rewrites the saved layout or creates an override.
+Drag a
 title to move a panel and a corner to resize. The frame follows the pointer while
 whole rows/columns fit inside it; overflow scrolls. Main keeps all nine hotbar
 slots and wraps them into additional rows when its storage grid is narrower than nine columns.
 Dragging and corner resizing follow the current cursor each rendered frame;
 clicks and the saved layout are still committed through the normal input events.
+Wide and Compact use the same vertical anchor for the character/crafting section.
+NEI's per-frame potion-offset recentering is bypassed only for this owned player
+screen, so it preserves both that shared anchor and the saved dragged position.
+With the inventory detached, drag the small four-arrow handle beside its layout
+button to move the character, armor, crafting and Baubles section together.
+It follows the cursor each frame, uses weak alignment and snaps clear of inventory
+panels on release. Escape cancels the drag; right-clicking the handle resets its
+position. The saved position is a separate client presentation preference, so
+moving this section does not create a custom inventory-panel override or translate
+the inventory panels. Reattaching returns the combined inventory to a fitting
+default position; detaching restores the saved character-section position.
 Hold **Shift** during a corner resize to snap to the nearest complete rows and
 columns, including the space for Main's wrapped hotbar. The opposite corner
 stays fixed, and neighboring frames and screen edges still limit the size.
@@ -63,9 +112,13 @@ keep their own positions. A subtle **blue** outline around the split button mean
 Global; an **orange** outline means Custom. Hover the button for an explanation.
 Applying an unchanged layout
 does not create a custom override.
-Schema 6 stores the reference machine and viewport when **Make global default**
-is clicked. Older defaults continue to load; save the default once after updating
-to establish its reference. The schema 5 file is backed up before migration.
+Schema 7 stores the reference machine and viewport for global and custom layouts.
+Panel offsets and gaps use authored GUI pixels, so changing GUI scale does not
+spread the group apart. Global layouts follow the machine's bottom center;
+custom layouts retain their own offset from its origin. Screen edges and fixed
+controls can still require fitting when the group cannot fit at a larger scale.
+Older layouts learn their reference on first opening, retaining names, allocations
+and styling. Their exact original configuration is backed up before migration.
 
 In **Profiles**, type a name and choose **Save profile** to keep the current
 panel draft as a reusable layout. The same name offers **Update profile**.
@@ -91,8 +144,8 @@ server item-stack transaction is needed.
 Resize and movement never reorder item stacks or change server slots. Membership
 uses stable storage indices, so editing another panel does not shift unchanged
 panels. Added capacity goes to Main; a temporarily unavailable reservation returns
-when capacity grows. Native sorting still sorts the entire inventory, across all
-panels; these are not item-type filters. Armor, offhand, crafting and Baubles remain
+when capacity grows. Native sorting is limited to the selected detached panel;
+these are not item-type filters. Armor, offhand, crafting and Baubles remain
 in their native sections. A separate Baubles pane stays in place and is included in the fitter and NEI exclusions. If floating panels cannot fit, the complete attached
 inventory is displayed without overwriting the saved preferences.
 With detached player panels, Baubles grows horizontally within the crafting
@@ -101,10 +154,20 @@ Opening it keeps the player inventory anchored and expands to the right, subject
 to the screen edge. Floating panels refit around the live crafting/equipment
 panes, inventory tabs and sidebar controls rather than covering them. Fitting
 does not overwrite their saved preferred positions.
-Shift-clicking a detached subpanel, including Mouse Tweaks' held-Shift sweep, targets Main's hotbar and assigned storage
+In the player inventory, Shift-clicking a detached subpanel, including Mouse Tweaks' held-Shift sweep, targets Main's hotbar and assigned storage
 slots, including when the hotbar is full. The server validates the current window,
 capacity revision and ownership of every destination before moving any items.
-The source and other subpanels are excluded.
+The source and other subpanels are excluded. Shift-clicking Main storage targets
+its hotbar first, then the opposite half of Main if items remain. The halves split
+at a row boundary, including hidden rows. Shift-clicking the hotbar targets only
+Main's assigned storage.
+A full destination leaves the source in place instead of spilling into satellites.
+When a container or machine is open, all panels bypass these rules and use that
+host's native Shift-click transfers, including filters, outputs and network actions.
+NEI spawning prefers Main's storage and then its hotbar, including its normal
+merge and infinite-stack paths. Full Main panels do not spill spawned items into
+other panels or machine slots. NEI's own server permissions still authorize every
+slot spawn; normal world pickup and machine output routing are unaffected.
 
 For texture packs, choose **Style > Frame: Original** to use the active inventory
 texture for edges, corners and fill. Slot artwork always uses the active atlas,
@@ -132,6 +195,9 @@ The rows are hidden from the native player/chest inventory by default;
 real slots. Items can be rearranged there normally. Normal pickup and shared
 automatic transfers skip reserved cells. Releasing a row returns those cells and
 their contents to ordinary storage.
+BogoSorter also excludes these cells from its native sort buttons and hotkeys,
+including MUI1 and MUI2 player slots. Panel sort scopes cannot include a reserved
+row; Bogo's existing pins and access restrictions still apply.
 
 Bind **Cycle reserved hotbars**, **Swap reserved hotbar 1**, and subsequent row
 keys in Minecraft Controls under **Dynamic Inventory Hotbars**. The player settings
@@ -139,8 +205,11 @@ screen also lets you bind the cycle key and select a row to bind directly. Keys
 start unbound to avoid pack conflicts. Cycling exchanges the main hotbar with
 stored rows in sequence; a row key exchanges it with that particular stored row.
 **Show/hide reserved hotbars** opens the inventory with the editor visible or
-hidden. These gameplay keys operate while no other screen is open. Swaps run on
-the server and require an empty cursor, no item in use and the player's own
+hidden. These gameplay keys operate while no other screen is open. With an updated
+server, swaps appear immediately on the client. The server confirms the actual
+contents; rapid cycles retain their order, and a refused swap restores the server's
+contents. Older servers keep the existing response-based behavior. Swaps require
+an empty cursor, no item in use and the player's own
 container. Reservations persist in Forge's persisted player data. The initial
 editor integration covers the player inventory and supported native container
 screens; other UI frameworks retain their existing presentation.
@@ -192,3 +261,17 @@ panel allocation, dragging, persistence and slot identity checks. The nightly
 openings exercised Et Futurum brewing/enchanting and Railcraft's chest cart using
 the native chest GUI. Optional Et Futurum anvil, multiplayer and full machine
 gameplay actions still need separate qualification.
+
+MUI2 screens using the standard player inventory binding also expose the same panel
+controls. The attached inventory remains the default. Detaching projects the existing
+synced widgets into the shared layout without replacing slots, item handlers, slot
+IDs or native machine transfer groups. Native MUI2 slot artwork is retained. Layouts
+are keyed by screen owner/name and tile or held-item type; GregTech machine IDs
+separate different machine types sharing the same framework wrapper. Closing or
+rebuilding a screen restores its native widget geometry. Machine-only screens and
+unrecognized manually constructed player slot groups are left untouched.
+
+MUI2 places the attached split button outside the machine frame, avoiding native
+control strips. Inventory-row siblings such as multiblock controller buttons lose
+the added responsive padding when detached; their original geometry is restored
+when reattached. Native machine slots and callbacks remain intact.

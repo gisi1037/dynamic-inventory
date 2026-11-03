@@ -72,8 +72,10 @@ public abstract class ContainerRegionMixin implements ExpandedContainerAccess {
     @Inject(method = "mergeItemStack", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$merge(ItemStack stack, int start, int end, boolean reverse,
         CallbackInfoReturnable<Boolean> cir) {
-        if (dynamicinventory$region == null) return;
-        int[] ids = dynamicinventory$region.destinations(start, end, reverse);
+        Container container = (Container) (Object) this;
+        int[] ids = dynamicinventory$region == null ? null : dynamicinventory$region.destinations(start, end, reverse);
+        if (ids == null) ids = dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting
+            .nativeRange(container, start, end, reverse);
         if (ids != null) cir.setReturnValue(PlayerInventoryTransfers.merge((Container) (Object) this, stack, ids));
     }
 }

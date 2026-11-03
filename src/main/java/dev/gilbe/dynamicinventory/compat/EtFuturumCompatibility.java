@@ -7,6 +7,7 @@ import net.minecraft.item.ItemStack;
 import dev.gilbe.dynamicinventory.api.InventoryTransfers;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
+import dev.gilbe.dynamicinventory.api.NativeUiLayout;
 
 /** Exact replacements for vanilla screens enabled by the pack; no optional API classes are loaded here. */
 public final class EtFuturumCompatibility {
@@ -25,7 +26,9 @@ public final class EtFuturumCompatibility {
                 // Native transfer also handles blaze-powder fuel and single-bottle slots.
                 .nativeTransfers()
                 .build());
-        if (OptionalInventoryAdapters.reviewedVersion("etfuturum")) {
+        if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
+            ? OptionalInventoryAdapters.profileVersion("etfuturum", "EtFuturum")
+            : OptionalInventoryAdapters.reviewedVersion("etfuturum")) {
             // Both hosts own vanilla-style transfers, but use different recipe registries.
             // Delegate their input/fuel checks and retain their native output/XP slots.
             NativeMachineAdapters.furnace(
@@ -63,5 +66,54 @@ public final class EtFuturumCompatibility {
                         .transfer(container, player, id, binding);
                 })
                 .build());
+        if (IntegrationProfile.selected() != IntegrationProfile.RELEASE_2_9_0) return;
+        InventoryUi.register(
+            InventoryUiAdapter
+                .builder(
+                    "dynamicinventory:etfuturum/smithing-table",
+                    "ganymedes01.etfuturum.inventory.ContainerSmithingTable")
+                .gui("ganymedes01.etfuturum.client.gui.inventory.GuiSmithingTable")
+                .compatibilityRevision(2)
+                .layout(
+                    NativeUiLayout.builder()
+                        .fixedPlayerColumns(9)
+                        .backgroundInset(4)
+                        .build())
+                .extraTransfers(InventoryTransfers.toSlots(0, 1))
+                .build());
+        InventoryUi.register(
+            InventoryUiAdapter
+                .builder("dynamicinventory:etfuturum/chest", "ganymedes01.etfuturum.inventory.ContainerChestGeneric")
+                .gui("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel")
+                .compatibilityRevision(2)
+                .layout(
+                    NativeUiLayout.builder()
+                        .fixedPlayerColumns(9)
+                        .backgroundInset(4)
+                        .build())
+                .nativeTransfers()
+                .build());
+        InventoryUi.registerPresentation(
+            "dynamicinventory:etfuturum/chest",
+            "ganymedes01.etfuturum.client.gui.inventory.GuiShulkerBox",
+            NativeUiLayout.builder()
+                .fixedPlayerColumns(9)
+                .backgroundInset(4)
+                .build());
+    }
+
+    static boolean panelHost(InventoryUiAdapter adapter, String container) {
+        if (adapter.getCompatibilityRevision() < 2 || !adapter.getId()
+            .startsWith("dynamicinventory:etfuturum/")) return false;
+        return container.equals("ganymedes01.etfuturum.inventory.ContainerBlastFurnace")
+            || container.equals("ganymedes01.etfuturum.inventory.ContainerSmoker")
+            || container.equals("ganymedes01.etfuturum.inventory.ContainerSmithingTable")
+            || container.equals("ganymedes01.etfuturum.inventory.ContainerChestGeneric");
+    }
+
+    static boolean alternateScreen(InventoryUiAdapter adapter, String screen) {
+        return adapter.getId()
+            .equals("dynamicinventory:etfuturum/chest")
+            && screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiShulkerBox");
     }
 }

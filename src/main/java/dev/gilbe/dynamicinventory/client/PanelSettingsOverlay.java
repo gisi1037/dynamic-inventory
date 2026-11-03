@@ -31,8 +31,14 @@ public final class PanelSettingsOverlay {
 
     private static View active;
 
+    private static View currentFor(GuiScreen host) {
+        if (active != null && !active.hostCurrent()) active = null;
+        return active != null && active.host == host ? active : null;
+    }
+
     public static boolean open(GuiContainer host, DetachedChestPanel panel) {
         Minecraft mc = Minecraft.getMinecraft();
+        currentFor(host);
         if (active != null || mc.currentScreen != host
             || mc.thePlayer == null
             || mc.thePlayer.openContainer != host.inventorySlots
@@ -46,12 +52,12 @@ public final class PanelSettingsOverlay {
     }
 
     public static boolean isOpen(GuiScreen host) {
-        return active != null && active.host == host;
+        return currentFor(host) != null;
     }
 
     public static boolean handleInput(GuiScreen host) {
-        View view = active;
-        if (view == null || view.host != host) return false;
+        View view = currentFor(host);
+        if (view == null) return false;
         if (!view.current()) view.closing = true;
         // Drain this entire input batch, including events after Save/Cancel and their release.
         view.handleInput();
@@ -61,16 +67,16 @@ public final class PanelSettingsOverlay {
 
     /** A modal may open after the host's input batch has already started. Own its remaining events too. */
     public static boolean handleMouse(GuiScreen host) {
-        View view = active;
-        if (view == null || view.host != host) return false;
+        View view = currentFor(host);
+        if (view == null) return false;
         if (!view.current()) view.closing = true;
         if (!view.closing) view.handleMouseInput();
         return true;
     }
 
     public static boolean handleKeyboard(GuiScreen host) {
-        View view = active;
-        if (view == null || view.host != host) return false;
+        View view = currentFor(host);
+        if (view == null) return false;
         if (!view.current()) view.closing = true;
         if (!view.closing) view.handleKeyboardInput();
         return true;
@@ -78,7 +84,12 @@ public final class PanelSettingsOverlay {
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void draw(GuiScreenEvent.DrawScreenEvent.Post event) {
-        View view = active;
+        draw(event.gui, event.mouseX, event.mouseY, event.renderPartialTicks);
+    }
+
+    /** MUI2 owns rendering and consumes Forge's draw event before the usual Post callback. */
+    public static void draw(GuiScreen host, int mouseX, int mouseY, float ticks) {
+        View view = currentFor(host);
         if (view == null) return;
         if (!view.current()) {
             active = null;
@@ -87,7 +98,7 @@ public final class PanelSettingsOverlay {
         if (view.closing) return;
         if (view.width != view.host.width || view.height != view.host.height)
             view.setWorldAndResolution(Minecraft.getMinecraft(), view.host.width, view.host.height);
-        view.drawScreen(event.mouseX, event.mouseY, event.renderPartialTicks);
+        view.drawScreen(mouseX, mouseY, ticks);
     }
 
     private static final class View extends GuiScreen {
@@ -159,6 +170,13 @@ public final class PanelSettingsOverlay {
             panelPage = panelDraft.entries.indexOf(panelDraft.get(selected)) / panelRows;
             initialPanels = panelDraft;
             initialMain = mainDraft;
+        }
+
+        private boolean hostCurrent() {
+            Minecraft mc = Minecraft.getMinecraft();
+            return mc.currentScreen == host && mc.thePlayer != null
+                && mc.thePlayer.openContainer == container
+                && host.inventorySlots == container;
         }
 
         private boolean current() {
@@ -580,7 +598,16 @@ public final class PanelSettingsOverlay {
                         closing = true;
                         return;
                     }
-                    if (panel == null) PlayerPanelProfiles.applyPanels(allocated, null, mainDraft);
+                    if (panel != null && panel.isInherited()
+                        && allocated.toJson()
+                            .equals(initialPanels.toJson())
+                        && mainDraft.detached(initialMain.detached)
+                            .toJson()
+                            .equals(initialMain.toJson()))
+                        PlayerPanelProfiles.setGlobal(
+                            PlayerPanelProfiles.global()
+                                .detached(mainDraft.detached));
+                    else if (panel == null) PlayerPanelProfiles.applyPanels(allocated, null, mainDraft);
                     else panel.apply(allocated, mainDraft, global);
                     if (panel != null) panel.reload();
                     closing = true;

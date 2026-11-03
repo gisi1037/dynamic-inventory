@@ -131,9 +131,24 @@ public final class HotbarBanks {
     /** Direct keys exchange the selected stored row; cycling visits the stored rows in sequence. */
     public static void swap(EntityPlayerMP player, int row) {
         requireReady(player);
+        exchange(player, row);
+        player.inventoryContainer.detectAndSendChanges();
+    }
+
+    public static int next(EntityPlayer player) {
+        int count = count(player);
+        return count == 0 ? 0 : Math.floorMod(data(player).getInteger("next"), count);
+    }
+
+    public static void next(EntityPlayer player, int next) {
+        data(player).setInteger("next", next);
+    }
+
+    /** Same permutation for server execution and local prediction; no packets or container callbacks. */
+    public static void exchange(EntityPlayer player, int row) {
         int count = count(player);
         if (count == 0) return;
-        int selected = row < 0 ? Math.floorMod(data(player).getInteger("next"), count) : row;
+        int selected = row < 0 ? next(player) : row;
         if (selected < 0 || selected >= count) throw new IllegalArgumentException("Hotbar is not reserved");
         InventoryShape shape = InventoryLayout.of(player.inventory);
         int[] reserved = slots(player);
@@ -146,10 +161,9 @@ public final class HotbarBanks {
         }
         data(player).setInteger("next", (selected + 1) % count);
         player.inventory.markDirty();
-        player.inventoryContainer.detectAndSendChanges();
     }
 
-    private static void requireReady(EntityPlayerMP player) {
+    public static void requireReady(EntityPlayer player) {
         if (player.isDead || player.getHealth() <= 0
             || player.openContainer != player.inventoryContainer
             || player.inventory.getItemStack() != null

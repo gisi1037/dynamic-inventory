@@ -17,6 +17,7 @@ public final class AvaritiaddonsCompatibility {
                     "dynamicinventory:discovered/guicompressedchest",
                     "wanion.avaritiaddons.block.chest.compressed.ContainerCompressedChest")
                 .gui("wanion.avaritiaddons.block.chest.compressed.GuiCompressedChest")
+                .compatibilityRevision(2)
                 .layout(
                     NativeUiLayout.builder()
                         .topPadding(0)

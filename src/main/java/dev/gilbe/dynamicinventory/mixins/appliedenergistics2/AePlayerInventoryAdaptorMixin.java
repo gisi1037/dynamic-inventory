@@ -2,6 +2,7 @@ package dev.gilbe.dynamicinventory.mixins.appliedenergistics2;
 
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.IInventory;
+import net.minecraft.item.ItemStack;
 
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -60,5 +61,13 @@ public abstract class AePlayerInventoryAdaptorMixin {
             logical = logical < shape.storageSlots() ? logical + 9 : logical - shape.storageSlots();
         // Equipment (including Backhand's raw slot 36) is never an ordinary transfer destination.
         return shape.rawIndex(logical);
+    }
+
+    @Inject(method = "isItemValidForSlot", remap = true, at = @At("RETURN"), cancellable = true)
+    private void dynamicinventory$mainOnly(int raw, ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
+        // The HEAD argument remapper above has already translated this parameter to its canonical raw index.
+        if (dynamicinventory$player != null
+            && !dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.transfer(dynamicinventory$player, raw))
+            cir.setReturnValue(false);
     }
 }

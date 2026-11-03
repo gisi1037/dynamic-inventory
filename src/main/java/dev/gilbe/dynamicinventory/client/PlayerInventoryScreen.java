@@ -46,6 +46,11 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     private boolean terminalSettings;
     private boolean scrolling;
     private boolean controlClick;
+    private int defaultSectionTop;
+    private boolean sectionDragging, sectionReleaseOwned;
+    private int sectionMouseX, sectionMouseY, sectionStartLeft, sectionStartTop;
+    private InventoryPanelLayout.Rect sectionStartGroup;
+    private final java.util.Map<GuiButton, int[]> sectionButtons = new java.util.IdentityHashMap<>();
 
     private final java.util.List<GuiButton> integrationButtons = new java.util.ArrayList<>();
     private final java.util.Set<GuiButton> ownedButtons = java.util.Collections
@@ -76,7 +81,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     public void initGui() {
+        cancelPlayerSectionDrag();
         int previousLeft = guiLeft, previousTop = guiTop;
+        boolean preserve = preserveHeaderPosition;
         if (floating != null) floating.cancel();
         floating = null;
         // Layout changes call initGui directly, without Forge's outer Post event.
@@ -95,6 +102,14 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             height - tabSpace,
             InventoryViewSettings.columns,
             InventoryViewSettings.rows,
+            Math.max(
+                1,
+                InventoryLayout.of(ownerInventory)
+                    .storageSlots() - dev.gilbe.dynamicinventory.inventory.HotbarBanks.reserved(ownerInventory)));
+        defaultSectionTop = PlayerSectionLayout.defaultTop(
+            width,
+            height,
+            tabSpace,
             Math.max(
                 1,
                 InventoryLayout.of(ownerInventory)
@@ -119,6 +134,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         ySize = tabSpace + Math.max(view.height, baublesPanel == null ? 0 : baublesPanel.height);
         header = new PlayerHeaderLayout(view.width, equipmentSlots);
         super.initGui();
+        guiTop = defaultSectionTop;
         if (baublesPanel != null) guiLeft = baseLeft;
         if (preserveHeaderPosition) {
             guiLeft = previousLeft;
@@ -126,7 +142,14 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             preserveHeaderPosition = false;
         }
         guiLeft = Math.max(0, Math.min(guiLeft, width - xSize));
-        guiTop = Math.max(0, Math.min(guiTop, height - ySize));
+        guiTop = Math.max(
+            0,
+            Math.min(guiTop, height - (detachedLayout ? tabSpace + PlayerHeaderLayout.DETACHED_HEIGHT : ySize)));
+        if (detachedLayout && !settingsOpen && !preserve) {
+            InventoryPanelLayout.Rect placed = preferredPlayerSection();
+            guiLeft = placed.x;
+            guiTop = placed.y;
+        }
         scrollRow = Math.max(0, Math.min(scrollRow, view.maxScroll()));
         baublesScrollRow = baublesPanel == null ? 0 : Math.min(baublesScrollRow, baublesPanel.maxScroll());
         positionSlots();
@@ -424,6 +447,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
+        if (playerSectionPointer(mouseX, mouseY, button, true)) return;
         if (settingsOpen) {
             if (button == 0) pressControl(mouseX, mouseY);
             return;
@@ -455,6 +479,10 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     protected void mouseClickMove(int mouseX, int mouseY, int button, long elapsed) {
+        if (sectionReleaseOwned) {
+            if (sectionDragging) movePlayerSection(mouseX, mouseY);
+            return;
+        }
         if (settingsOpen || controlClick) return;
         if (scrolling) {
             dragScroll(mouseY);
@@ -465,6 +493,13 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     protected void mouseMovedOrUp(int mouseX, int mouseY, int button) {
+        if (sectionReleaseOwned) {
+            if (button == 0) {
+                finishPlayerSectionDrag();
+                sectionReleaseOwned = false;
+            }
+            return;
+        }
         if (controlClick || scrolling || settingsOpen) {
             if (button != -1) {
                 controlClick = false;
@@ -499,6 +534,10 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     protected void keyTyped(char character, int key) {
+        if (sectionDragging && key == Keyboard.KEY_ESCAPE) {
+            cancelPlayerSectionDrag();
+            return;
+        }
         if (bindingHotbarKey != null) {
             HotbarControls.bind(bindingHotbarKey, key);
             bindingHotbarKey = null;
@@ -658,6 +697,10 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float ticks) {
+        if (sectionDragging) {
+            if (!org.lwjgl.opengl.Display.isActive() || !controlsAvailable()) cancelPlayerSectionDrag();
+            else if (Mouse.isButtonDown(0)) movePlayerSection(mouseX, mouseY);
+        }
         positionButtons();
         if (!settingsOpen) {
             if (layoutButton != null) layoutButton.enabled = controlsAvailable();
@@ -666,6 +709,15 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         super.drawScreen(settingsOpen ? -1000 : mouseX, settingsOpen ? -1000 : mouseY, ticks);
         if (!settingsOpen) {
             if (floating != null) floating.drawControl();
+            if (floating != null && floating.detached()) {
+                InventoryPanelLayout.Rect handle = playerSectionHandle();
+                PanelChrome.move(handle, handle.contains(mouseX, mouseY), controlsAvailable());
+                if (!sectionDragging && handle.contains(mouseX, mouseY)) drawHoveringText(
+                    java.util.Arrays.asList("Drag player section", "Right-click: reset position"),
+                    mouseX,
+                    mouseY,
+                    fontRendererObj);
+            }
             if (mc.thePlayer.inventory.getItemStack() == null && mouseX >= guiLeft + header.layoutButtonX
                 && mouseX < guiLeft + header.layoutButtonX + 16
                 && mouseY >= guiTop + tabSpace + 6
@@ -792,6 +844,164 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         return result;
     }
 
+    InventoryPanelLayout.Rect panelLayoutReferenceBounds() {
+        // Moving the character section must not translate the separately saved inventory panels.
+        return new InventoryPanelLayout.Rect(
+            (width - view.width) / 2,
+            defaultSectionTop + tabSpace,
+            view.width,
+            PlayerHeaderLayout.DETACHED_HEIGHT);
+    }
+
+    InventoryPanelLayout.Rect attachedPanelBounds() {
+        return new InventoryPanelLayout.Rect(guiLeft, guiTop + tabSpace + 64, view.width, view.height - 64);
+    }
+
+    boolean draggingPlayerSection() {
+        return sectionDragging;
+    }
+
+    private InventoryPanelLayout.Rect sectionViewport() {
+        return new InventoryPanelLayout.Rect(0, 8, width, Math.max(0, height - 36));
+    }
+
+    private InventoryPanelLayout.Rect preferredPlayerSection() {
+        return PlayerSectionLayout.place(
+            sectionViewport(),
+            xSize,
+            tabSpace + PlayerHeaderLayout.DETACHED_HEIGHT,
+            (width - view.width) / 2,
+            defaultSectionTop,
+            InventoryViewSettings.playerSectionAnchorX,
+            InventoryViewSettings.playerSectionAnchorY);
+    }
+
+    private InventoryPanelLayout.Rect playerSectionHandle() {
+        return new InventoryPanelLayout.Rect(guiLeft + view.width - 40, guiTop + tabSpace + 8, 12, 12);
+    }
+
+    private InventoryPanelLayout.Rect playerSectionGroup() {
+        int left = guiLeft, top = guiTop, right = guiLeft + xSize,
+            bottom = guiTop + tabSpace + PlayerHeaderLayout.DETACHED_HEIGHT;
+        for (InventoryPanelLayout.Rect bounds : fixedPanelBounds()) {
+            left = Math.min(left, bounds.x);
+            top = Math.min(top, bounds.y);
+            right = Math.max(right, bounds.right());
+            bottom = Math.max(bottom, bounds.bottom());
+        }
+        return new InventoryPanelLayout.Rect(left, top, right - left, bottom - top);
+    }
+
+    private void rememberSectionButtons() {
+        sectionButtons.clear();
+        for (Object entry : buttonList) {
+            GuiButton button = (GuiButton) entry;
+            String name = button.getClass()
+                .getName();
+            if (!name.contains("bogosorter.") && !name.equals("dev.gilbe.dynamicinventory.client.NativeSortButton"))
+                sectionButtons.put(button, new int[] { button.xPosition - guiLeft, button.yPosition - guiTop });
+        }
+    }
+
+    private void placePlayerSection(int left, int top) {
+        guiLeft = left;
+        guiTop = top;
+        for (java.util.Map.Entry<GuiButton, int[]> entry : sectionButtons.entrySet()) {
+            entry.getKey().xPosition = left + entry.getValue()[0];
+            entry.getKey().yPosition = top + entry.getValue()[1];
+        }
+        positionButtons();
+        positionSlots();
+    }
+
+    void playerPanelModeChanged() {
+        rememberSectionButtons();
+        InventoryPanelLayout.Rect placed = floating.detached() ? preferredPlayerSection()
+            : new InventoryPanelLayout.Rect(
+                Math.max(0, (width - xSize) / 2),
+                Math.max(0, Math.min(defaultSectionTop, height - ySize)),
+                xSize,
+                ySize);
+        placePlayerSection(placed.x, placed.y);
+        sectionButtons.clear();
+    }
+
+    /** Own the entire header gesture before NEI dispatches mouse input to slots or side panels. */
+    boolean playerSectionPointer(int x, int y, int button, boolean down) {
+        if (sectionReleaseOwned) {
+            if (button == 0 && !down) {
+                if (sectionDragging) {
+                    movePlayerSection(x, y);
+                    finishPlayerSectionDrag();
+                }
+                sectionReleaseOwned = false;
+            } else if (button == -1 && sectionDragging) movePlayerSection(x, y);
+            return true;
+        }
+        if (!down) return false;
+        if (settingsOpen || floating == null || !floating.detached() || !playerSectionHandle().contains(x, y))
+            return false;
+        if (!controlsAvailable() || ClientInputGuard.isPending(this)
+            || PanelSettingsOverlay.isOpen(this)
+            || PackCompatibility.enabled() && PackClientCompatibility.neiDragging()) return true;
+        if (button == 1) {
+            InventoryViewSettings.setPlayerSectionPosition(-1, -1);
+            playerPanelModeChanged();
+            return true;
+        }
+        if (button != 0) return true;
+        floating.cancel();
+        sectionStartGroup = playerSectionGroup();
+        sectionStartLeft = guiLeft;
+        sectionStartTop = guiTop;
+        sectionMouseX = x;
+        sectionMouseY = y;
+        rememberSectionButtons();
+        sectionDragging = sectionReleaseOwned = true;
+        return true;
+    }
+
+    private void movePlayerSection(int x, int y) {
+        InventoryPanelLayout.Rect requested = new InventoryPanelLayout.Rect(
+            sectionStartGroup.x + x - sectionMouseX,
+            sectionStartGroup.y + y - sectionMouseY,
+            sectionStartGroup.width,
+            sectionStartGroup.height);
+        InventoryPanelLayout.Rect aligned = InventoryPanelLayout
+            .alignDrag(requested, sectionViewport(), floating.bounds(), 3).bounds;
+        placePlayerSection(
+            sectionStartLeft + aligned.x - sectionStartGroup.x,
+            sectionStartTop + aligned.y - sectionStartGroup.y);
+    }
+
+    private void finishPlayerSectionDrag() {
+        if (!sectionDragging) return;
+        InventoryPanelLayout.Rect safe = InventoryPanelLayout
+            .snapDrag(playerSectionGroup(), sectionViewport(), floating.bounds());
+        if (safe == null) {
+            cancelPlayerSectionDrag();
+            return;
+        }
+        InventoryPanelLayout.Rect current = playerSectionGroup();
+        placePlayerSection(guiLeft + safe.x - current.x, guiTop + safe.y - current.y);
+        sectionDragging = false;
+        InventoryPanelLayout.Rect viewport = sectionViewport();
+        InventoryViewSettings.setPlayerSectionPosition(
+            PlayerSectionLayout.anchor(guiLeft, viewport.x, viewport.width - xSize),
+            PlayerSectionLayout
+                .anchor(guiTop, viewport.y, viewport.height - tabSpace - PlayerHeaderLayout.DETACHED_HEIGHT));
+        sectionButtons.clear();
+        positionSlots();
+    }
+
+    private void cancelPlayerSectionDrag() {
+        if (!sectionDragging) return;
+        placePlayerSection(sectionStartLeft, sectionStartTop);
+        sectionDragging = false;
+        sectionButtons.clear();
+        positionSlots();
+    }
+
     public boolean controlsAvailable() {
         return !settingsOpen && mc.thePlayer.inventory.getItemStack() == null && !field_147007_t;
     }
@@ -816,6 +1026,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
 
     @Override
     public void onGuiClosed() {
+        cancelPlayerSectionDrag();
         if (floating != null) floating.cancel();
         super.onGuiClosed();
         // Geometry is local to this screen; restore the persistent container's default positions afterward.

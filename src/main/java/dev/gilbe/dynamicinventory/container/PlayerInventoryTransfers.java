@@ -52,11 +52,12 @@ public final class PlayerInventoryTransfers {
                     else {
                         moved = merge(container, source, hotbar);
                         if (source.stackSize > 0) {
-                            int sourceId = id;
-                            int[] remainingStorage = java.util.Arrays.stream(storage)
-                                .filter(target -> target != sourceId)
-                                .toArray();
-                            moved = merge(container, source, remainingStorage) || moved;
+                            int[] destinations = PanelTransferTargets.quickMove(id, hotbar, storage, 9);
+                            moved = merge(
+                                container,
+                                source,
+                                java.util.Arrays.copyOfRange(destinations, hotbar.length, destinations.length))
+                                || moved;
                         }
                     }
                 }
@@ -77,11 +78,20 @@ public final class PlayerInventoryTransfers {
     }
 
     public static ItemStack transferTo(Container container, EntityPlayer player, int id, int[] destinations) {
+        return transferTo(container, player, id, destinations, destinations.length);
+    }
+
+    public static ItemStack transferTo(Container container, EntityPlayer player, int id, int[] destinations,
+        int preferred) {
         Slot slot = container.getSlot(id);
         if (!slot.getHasStack() || !slot.canTakeStack(player)) return null;
         ItemStack source = slot.getStack();
         ItemStack original = source.copy();
-        if (!merge(container, source, destinations)) return null;
+        boolean moved = merge(container, source, java.util.Arrays.copyOf(destinations, preferred));
+        if (source.stackSize > 0 && preferred < destinations.length)
+            moved = merge(container, source, java.util.Arrays.copyOfRange(destinations, preferred, destinations.length))
+                || moved;
+        if (!moved) return null;
         if (source.stackSize == 0) slot.putStack(null);
         else slot.onSlotChanged();
         slot.onPickupFromSlot(player, source);
@@ -123,6 +133,34 @@ public final class PlayerInventoryTransfers {
             source.stackSize -= count;
         }
         return source.stackSize != originalCount;
+    }
+
+    public static boolean mergeAutomatic(Container container, ItemStack source, int[] destinations) {
+        return merge(
+            container,
+            source,
+            dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, destinations));
+    }
+
+    /** Native pattern extraction clears its source only on full success, so partial insertion is unsafe. */
+    public static boolean mergeAutomaticAll(Container container, ItemStack source, int[] destinations) {
+        int[] allowed = java.util.Arrays
+            .stream(dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, destinations))
+            .distinct()
+            .toArray();
+        long room = 0;
+        for (int id : allowed) {
+            Slot slot = container.getSlot(id);
+            if (reserved(slot) || !slot.isItemValid(source)) continue;
+            ItemStack existing = slot.getStack();
+            int limit = Math.min(slot.getSlotStackLimit(), source.getMaxStackSize());
+            if (existing == null) room += Math.max(0, limit);
+            else if (source.isStackable() && existing.getItem() == source.getItem()
+                && (!source.getHasSubtypes() || existing.getItemDamage() == source.getItemDamage())
+                && ItemStack.areItemStackTagsEqual(existing, source)) room += Math.max(0, limit - existing.stackSize);
+            if (room >= source.stackSize) return merge(container, source, allowed);
+        }
+        return false;
     }
 
     private static int[] mainSlots(InventoryPlayer inventory, int start, int end, boolean includeHotbar) {

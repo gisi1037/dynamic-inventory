@@ -13,21 +13,22 @@ shipped code small and the difference between planned and working support clear.
 | Mod / loaded ID | Patch file | Current implementation |
 | --- | --- | --- |
 | Minecraft / `minecraft` | [Vanilla](vanilla.md) | Shared inventory adapters; targeted native GUI hooks; batch review pending |
-| Et Futurum / `etfuturum` | [Et Futurum](etfuturum.md) | Brewing, enchanting, anvil; reviewed Blast Furnace and Smoker adapters |
+| Et Futurum / `etfuturum` | [Et Futurum](etfuturum.md) | Eight inventory GUI pairs, including workstations, barrels and shulker boxes |
 | OpenBlocks / `OpenBlocks` | [OpenBlocks](openblocks.md) | Backup guard; expanded-grave bridge and focused nightly lifecycle checks |
-| Applied Energistics 2 / `appliedenergistics2` | [AE2](applied-energistics-2.md) | Twenty-five exact machine/terminal adapters; broader gameplay and visual review pending |
+| Applied Energistics 2 / `appliedenergistics2` | [AE2](applied-energistics-2.md) | 27 exact machine/terminal/tool pairs; existing screens visually reviewed, new tools pending |
 | GregTech / `gregtech` | [GregTech](gregtech.md) | Shared MUI1/MUI2 player hooks; custom paths need review |
 | Tinkers' Construct / `TConstruct` | [Tinkers](tinkers-construct.md) | Crafting-station and reviewed Furnace Slab adapters; targeted native hooks |
 | Galacticraft / `GalacticraftCore` | [Galacticraft](galacticraft.md) | Equipment adapter and targeted native hook |
-| Avaritiaddons / `avaritiaddons` | [Avaritiaddons](avaritiaddons.md) | Compressed-chest adapter |
-| GTNH Core / `dreamcraft` | [Dreamcraft](dreamcraft.md) | Baby-chest adapter |
-| Ender IO / `EnderIO` | [Ender IO](ender-io.md) | Inspection required |
-| Forestry / `Forestry` | [Forestry](forestry.md) | 21 stationary machine screens; visual review pending |
+| Avaritiaddons / `avaritiaddons` | [Avaritiaddons](avaritiaddons.md) | Compressed-chest adapter and modular panels |
+| GTNH Core / `dreamcraft` | [Dreamcraft](dreamcraft.md) | Baby-chest adapter and modular panels |
+| Ender IO / `EnderIO` | [Ender IO](ender-io.md) | 29 exact inventory families plus alternate TelePad travel screen; review pending |
+| Forestry / `Forestry` | [Forestry](forestry.md) | 21 stationary machine screens; player visual review complete |
 | Binnie's Mods / `BinnieCore` | [Binnie](binnie.md) | Inspection required; separate from Forestry |
 | Thaumcraft / `Thaumcraft` | [Thaumcraft](thaumcraft.md) | Reviewed Alchemical Furnace; other hosts need inspection |
-| Iron Chests / `IronChest` | [Iron Chests](iron-chests.md) | Exact native adapter for all 11 chest tiers |
+| Iron Chests / `IronChest` | [Iron Chests](iron-chests.md) | Exact native adapter and modular panels for all 11 chest tiers |
+| HarvestCraft / `harvestcraft` | [HarvestCraft](harvestcraft.md) | Eight reviewed processing adapters with modular panels; seven enabled lab blocks |
 | Storage Drawers / `StorageDrawers` | [Storage Drawers](storage-drawers.md) | Inspection required |
-| Extra Utilities / `ExtraUtilities` | [Extra Utilities](extra-utilities.md) | Inspection required |
+| Extra Utilities / `ExtraUtilities` | [Extra Utilities](extra-utilities.md) | Nine exact inventory families including dynamic generators, bags and filters; review pending |
 
 Backhand, Baubles, BogoSorter and NEI already have dedicated bridges/helpers in
 `src/main/java/dev/gilbe/dynamicinventory/compat/`; retain their ownership rather

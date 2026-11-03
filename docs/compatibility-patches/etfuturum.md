@@ -1,18 +1,24 @@
 # Et Futurum vanilla replacements
 
-**Loaded ID:** `etfuturum`. **Inspected artifact:** `etfuturum-2.6.64-GTNH.jar`
-from the October 19 daily. **Status:** five exact adapters implemented;
-focused nightly brewing/enchanting checks passed; full gameplay qualification,
-optional anvil testing and visual review are pending.
+**Loaded ID:** `etfuturum`. **Current inspected artifact:** `2.6.65-GTNH`
+from GTNH 2.9.0. Seven exact container families cover eight inventory GUI pairs:
+brewing, enchantment, anvil, Blast Furnace, Smoker, Smithing Table, Barrel and
+Shulker Box. Vanilla-reused interfaces such as Beacon retain vanilla support.
+Visual and gameplay review of the new batch is pending.
 Owner: [EtFuturumCompatibility](../../src/main/java/dev/gilbe/dynamicinventory/compat/EtFuturumCompatibility.java).
 
-This optional pack integration covers only the replacements below. Registration
-requires the pack profile and its exact Et Futurum pin (`2.6.60-GTNH` for RC-2,
-`2.6.64-GTNH` for the October 19 nightly). The GUI mixin checks that pin before
-application too. Only the reviewed `2.6.64-GTNH` build receives the two new furnace
-adapters. It does not redesign every Et Futurum
-screen or enable the mod's configurable features. These replacements are distinct
-from the [vanilla registrations](vanilla.md).
+The shared chest container has exact Barrel and Shulker Box presentations,
+including their capacity variants. Native result, storage and item restrictions
+remain intact. Smithing appended sources target its two inputs; native result
+pickup retains recipe consumption. The stable profile now enables its inspected
+Blast Furnace/Smoker pair instead of comparing against the older nightly pin.
+The newly added Smithing/Barrel/Shulker declarations are scoped to the stable
+profile; older fixtures retain their previously reviewed registrations.
+
+The separate storage lab has 25 labeled Et Futurum stations: the replacement
+workstations, Beacon, ten barrel capacities and eight shulker capacities. The
+latter retain their native Type NBT. Config-only, sign-editing and game-mode
+screens remain native; they have no player inventory to detach.
 
 | Adapter ID suffix (`dynamicinventory:etfuturum/`) | Container | GUI | Appended-slot shift-click policy |
 | --- | --- | --- | --- |
@@ -21,6 +27,8 @@ from the [vanilla registrations](vanilla.md).
 | `anvil` | `ContainerAnvil` | `GuiAnvil` | To input slots 0 and 1 |
 | `blast-furnace` | `ContainerBlastFurnace` | `GuiBlastFurnace` | Native recipe/fuel routing, then hotbar |
 | `smoker` | `ContainerSmoker` | `GuiSmoker` | Native recipe/fuel routing, then hotbar |
+| `smithing-table` | `ContainerSmithingTable` | `GuiSmithingTable` | Inputs 0 and 1 |
+| `chest` | `ContainerChestGeneric` | `GuiBarrel`, `GuiShulkerBox` | Native storage restrictions |
 
 Container names are relative to `ganymedes01.etfuturum.inventory`; GUI names are
 relative to `ganymedes01.etfuturum.client.gui.inventory`. Brewing and enchanting

@@ -1,7 +1,8 @@
 # Forestry
 
 **Loaded ID:** `Forestry`. **Reviewed version:** `4.11.39`.
-**Status:** initial stationary-machine integration; visual review pending.
+**Status:** stationary-machine integration; player visual review completed by Gilbert
+on 2026-11-02. Broader gameplay/server qualification remains separate.
 Java owner: `ForestryCompatibility`. Mixins: `mixins/forestry/`.
 
 The integration registers 21 exact native container/GUI pairs. It does not enable

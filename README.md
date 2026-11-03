@@ -1,8 +1,8 @@
 # Dynamic Inventory
 
 An experimental Forge 1.7.10 mod for larger player inventories in GT New Horizons.
-The pinned compatibility targets are **GTNH 2.9.0-RC-2** and
-**daily-2026-10-19 build 795**; other nightlies require requalification. This is a development
+This release targets **GTNH 2.9.0**. Pinned source-build profiles also cover
+RC-2 and nightly builds 795 and 803; other pack versions require review. This is a development
 snapshot, not a stable release or a claim of support for every interface in the pack.
 
 The default is **72 storage slots plus the nine-slot hotbar**. The server selects
@@ -31,8 +31,8 @@ The in-game editor adjusts presentation, not item ownership or compatibility rul
 
 ## Download and install
 
-The current testing release is [0.8.0-alpha.2](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.2).
-Install **`dynamicinventory-0.8.0-alpha.2.jar`** in the `mods` folder on both client
+The current testing release is [0.8.0-alpha.3](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.3).
+Install **`dynamicinventory-0.8.0-alpha.3.jar`** in the `mods` folder on both client
 and server, replacing any older Dynamic Inventory JAR. The `-dev` and `-sources`
 JARs are developer downloads; do not install those in Minecraft. Back up your save
 and try this experimental release in a disposable world first.
@@ -42,6 +42,8 @@ sides, before starting Minecraft:
 
 | Pack | Required JVM argument |
 | --- | --- |
+| GTNH 2.9.0 | `-Ddynamicinventory.profile=gtnh-2.9.0` |
+| nightly-2026-10-27 build 803 | `-Ddynamicinventory.profile=daily-2026-10-27-803` |
 | GTNH 2.9.0-RC-2 | `-Ddynamicinventory.profile=rc2-integration` |
 | daily-2026-10-19 build 795 | `-Ddynamicinventory.profile=daily-2026-10-19` |
 

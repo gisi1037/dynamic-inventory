@@ -2,6 +2,7 @@ package dev.gilbe.dynamicinventory.compat.mui2;
 
 import com.cleanroommc.modularui.api.layout.IViewport;
 import com.cleanroommc.modularui.api.layout.IViewportStack;
+import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
 import com.cleanroommc.modularui.utils.HoveredWidgetList;
 import com.cleanroommc.modularui.widget.ScrollWidget;
 import com.cleanroommc.modularui.widget.scroll.VerticalScrollData;
@@ -13,6 +14,26 @@ public final class InventoryScrollWidget extends ScrollWidget<InventoryScrollWid
 
     private final boolean adaptive;
     private final int storageSlots;
+    private boolean detachedPresentation;
+
+    public void setDetachedPresentation(boolean detached) {
+        detachedPresentation = detached;
+    }
+
+    @Override
+    public void transformChildren(IViewportStack stack) {
+        if (!detachedPresentation) super.transformChildren(stack);
+    }
+
+    @Override
+    public void preDraw(ModularGuiContext context, boolean transformed) {
+        if (!detachedPresentation) super.preDraw(context, transformed);
+    }
+
+    @Override
+    public void postDraw(ModularGuiContext context, boolean transformed) {
+        if (!detachedPresentation) super.postDraw(context, transformed);
+    }
 
     public InventoryScrollWidget() {
         this(9, true, InventoryLayout.storageSlots());
@@ -45,6 +66,10 @@ public final class InventoryScrollWidget extends ScrollWidget<InventoryScrollWid
 
     @Override
     public void getWidgetsAt(IViewportStack stack, HoveredWidgetList widgets, int x, int y) {
+        if (detachedPresentation) {
+            IViewport.getChildrenAt(this, stack, widgets, x, y);
+            return;
+        }
         if (widgets.peek() != this) return;
         // MUI2 2.3.92 passes absolute mouse coordinates here, but its scrollbar test expects local coordinates.
         // The stack already includes our child scroll translation; remove it for the stationary scrollbar.
@@ -55,6 +80,6 @@ public final class InventoryScrollWidget extends ScrollWidget<InventoryScrollWid
 
     @Override
     public boolean canHover() {
-        return true;
+        return !detachedPresentation;
     }
 }

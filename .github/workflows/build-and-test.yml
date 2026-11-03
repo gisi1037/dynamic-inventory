@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ isolated, rc2-backhand, rc2-integration, daily-2026-10-19 ]
+        profile: [ isolated, rc2-backhand, rc2-integration, daily-2026-10-19, daily-2026-10-27-803, gtnh-2.9.0 ]
     steps:
       - uses: actions/checkout@v5
       - name: Check tracked files for local-only data
@@ -44,7 +44,7 @@ jobs:
           if [[ "${{ matrix.profile }}" != "isolated" ]]; then
             tasks+=(rc2CompatClasses backhandTestClasses)
           fi
-          if [[ "${{ matrix.profile }}" == "rc2-integration" || "${{ matrix.profile }}" == "daily-2026-10-19" ]]; then
+          if [[ "${{ matrix.profile }}" == "rc2-integration" || "${{ matrix.profile }}" == "daily-2026-10-19" || "${{ matrix.profile }}" == "daily-2026-10-27-803" || "${{ matrix.profile }}" == "gtnh-2.9.0" ]]; then
             tasks+=(packTestClasses)
           fi
           ./gradlew --no-daemon "${tasks[@]}" -PinventoryProfile=${{ matrix.profile }} -PinventoryStorageTests

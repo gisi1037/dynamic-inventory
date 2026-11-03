@@ -22,7 +22,13 @@ public final class PlayerInventorySlot extends BaseSlot {
 
     /** Hidden storage still accepts shift transfers; explicitly disabled storage does not. */
     public boolean isTransferEnabled() {
-        return super.isEnabled() && (!(getParentWidget() instanceof PlayerInventorySlotWidget)
-            || ((PlayerInventorySlotWidget) getParentWidget()).isInteractionEnabled());
+        Mui1PlayerInventory player = (Mui1PlayerInventory) getItemHandler();
+        return dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.transfer(
+            player.getInventoryPlayer(),
+            dev.gilbe.dynamicinventory.inventory.InventoryLayout.of(player.getInventoryPlayer())
+                .rawIndex(getSlotIndex()))
+            && super.isEnabled()
+            && (!(getParentWidget() instanceof PlayerInventorySlotWidget)
+                || ((PlayerInventorySlotWidget) getParentWidget()).isInteractionEnabled());
     }
 }

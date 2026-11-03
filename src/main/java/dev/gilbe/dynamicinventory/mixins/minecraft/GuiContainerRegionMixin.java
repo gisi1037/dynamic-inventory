@@ -46,6 +46,19 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     @Unique
     private NativeInventoryPanel dynamicinventory$panel;
 
+    @Unique
+    private DetachedChestPanel dynamicinventory$floating;
+
+    @Override
+    public DetachedChestPanel dynamicinventory$floating() {
+        return dynamicinventory$floating;
+    }
+
+    @Override
+    public void dynamicinventory$floating(DetachedChestPanel panel) {
+        dynamicinventory$floating = panel;
+    }
+
     @Override
     public java.util.List<net.minecraft.client.gui.GuiButton> dynamicinventory$buttons() {
         return buttonList;

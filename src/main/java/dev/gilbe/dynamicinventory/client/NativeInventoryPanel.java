@@ -70,6 +70,11 @@ public final class NativeInventoryPanel extends Gui {
         Minecraft client = Minecraft.getMinecraft();
         int x = org.lwjgl.input.Mouse.getEventX() * screen.width / client.displayWidth;
         int y = screen.height - org.lwjgl.input.Mouse.getEventY() * screen.height / client.displayHeight - 1;
+        if (screen instanceof PlayerInventoryScreen player && player.playerSectionPointer(
+            x,
+            y,
+            org.lwjgl.input.Mouse.getEventButton(),
+            org.lwjgl.input.Mouse.getEventButtonState())) return true;
         if (screen instanceof GuiContainer gui && HotbarBankPanel
             .pointer(gui, x, y, org.lwjgl.input.Mouse.getEventButton(), org.lwjgl.input.Mouse.getEventButtonState()))
             return true;
@@ -121,6 +126,7 @@ public final class NativeInventoryPanel extends Gui {
     private final int playerX, playerY, shiftX, shiftY;
     private final int nativeClipLeft, nativeClipRight, nativeClipTop, nativeClipBottom;
     private final int nativeContentBottom;
+    private final StoragePanelGeometry storageGeometry;
     private final int measuredHeaderBoundary;
     private final int sectionGap;
     private final boolean nativeSectionMoved;
@@ -224,6 +230,11 @@ public final class NativeInventoryPanel extends Gui {
                 chestSlots.add(slot);
             if (logical >= 9) storageY = Math.min(storageY, slot.yDisplayPosition);
             else if (logical < 0 && slot.func_111238_b()) {
+                if (gui.getClass()
+                    .getName()
+                    .equals("com.rwtema.extrautils.gui.GuiFilingCabinet")
+                    && (slot.xDisplayPosition < 0 || slot.xDisplayPosition >= 170 || slot.yDisplayPosition < 0))
+                    continue;
                 // Side inventories have their own frames and must not stretch the main header/player section.
                 if (aeSidePanels != null && aeSidePanels.contains(slot)) continue;
                 machineBottom = Math.max(machineBottom, slot.yDisplayPosition + 16);
@@ -240,6 +251,17 @@ public final class NativeInventoryPanel extends Gui {
                 gui.getClass()
                     .getName()));
         nativeStorageTop = storageY - 4;
+        storageGeometry = StoragePanelGeometry.of(
+            gui.getClass()
+                .getName(),
+            nativeWidth,
+            nativeStorageTop,
+            machineBottom,
+            machineSlots.size());
+        if (storageGeometry != null) {
+            nativeLeft = storageGeometry.left;
+            nativeRight = storageGeometry.right;
+        }
         int terminalBoundary = gui.getClass()
             .getName()
             .equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")
@@ -326,7 +348,8 @@ public final class NativeInventoryPanel extends Gui {
             chestLayout == null ? nativeLeft : -headerX,
             chestLayout == null ? nativeRight : totalWidth - headerX,
             chestLayout == null ? nativeTop : -headerY,
-            chestLayout == null ? nativeStorageTop : totalHeight - headerY,
+            chestLayout == null ? (storageGeometry == null ? nativeStorageTop : storageGeometry.bottom)
+                : totalHeight - headerY,
             chestLayout == null ? (totalWidth - panelWidth) / 2 : chestLayout.playerX,
             headerY + panelTop,
             panelWidth,
@@ -351,7 +374,7 @@ public final class NativeInventoryPanel extends Gui {
         totalHeight = sections.height;
         mainFrameWidth = totalWidth;
         if (aeSidePanels != null) {
-            totalHeight = Math.max(totalHeight, aeSidePanels.position(mainFrameWidth, headerY + nativeTop, playerY));
+            totalHeight = Math.max(totalHeight, aeSidePanels.position(mainFrameWidth, headerY + nativeTop));
             totalWidth = aeSidePanels.width(mainFrameWidth);
         }
         nativeClipLeft = nativeLeft;
@@ -359,7 +382,9 @@ public final class NativeInventoryPanel extends Gui {
         nativeClipTop = nativeTop;
         // Never crop a live native slot. Blank artwork below it may be removed when the player band moves up.
         nativeContentBottom = machineBottom + 2;
-        nativeClipBottom = Math.max(nativeContentBottom, Math.min(nativeStorageTop, playerY - headerY));
+        nativeClipBottom = storageGeometry == null
+            ? Math.max(nativeContentBottom, Math.min(nativeStorageTop, playerY - headerY))
+            : storageGeometry.cropBottom;
         // Offsets are preferences relative to the centered layout. Keep the fitted panel on screen.
         int left = Math
             .max(0, Math.min(Math.max(0, gui.width - totalWidth), (gui.width - totalWidth) / 2 + patch.value(2)));
@@ -371,15 +396,23 @@ public final class NativeInventoryPanel extends Gui {
         }
         access.dynamicinventory$bounds(totalWidth, totalHeight, left, top);
         position();
-        if (dev.gilbe.dynamicinventory.compat.VanillaPanelHosts.supports(gui.inventorySlots, gui.getClass())) {
+        if (dev.gilbe.dynamicinventory.compat.NativePanelHosts.supports(gui.inventorySlots, gui.getClass())) {
             floating = new DetachedChestPanel(
                 gui,
-                new InventoryPanelLayout.Rect(left + headerX, top + headerY, nativeWidth, nativeStorageTop + 2),
+                new InventoryPanelLayout.Rect(
+                    left + headerX + nativeClipLeft,
+                    top + headerY,
+                    nativeClipRight - nativeClipLeft,
+                    storageGeometry == null ? AppliedEnergisticsBackground.headerBottom(
+                        gui.getClass()
+                            .getName(),
+                        nativeStorageTop) + 2 : storageGeometry.bottom),
                 new InventoryPanelLayout.Rect(left + playerX, top + playerY, panelWidth, panelHeight),
                 frameStyle,
                 borderWidth,
                 frameCrop,
-                cornerCrop);
+                cornerCrop,
+                aeSidePanels == null ? java.util.Collections.emptyList() : aeSidePanels.bounds(left, top));
             position();
         }
     }
@@ -623,7 +656,9 @@ public final class NativeInventoryPanel extends Gui {
         int inset = panel.frameStyle != 0 ? Math.max(4, panel.layout.getBackgroundInset())
             : panel.layout.getBackgroundInset();
         int topInset = y == originTop ? inset : 0;
-        int clippedHeight = Math.min(height, Math.max(0, originTop + panel.nativeStorageTop - y));
+        int backgroundBottom = panel.storageGeometry == null ? panel.nativeStorageTop
+            : panel.storageGeometry.cropBottom;
+        int clippedHeight = Math.min(height, Math.max(0, originTop + backgroundBottom - y));
         if (inset == 0 && clippedHeight == height) return null;
         return new int[] { x + inset, y + topInset, u + inset, v + topInset, width - inset * 2,
             clippedHeight - topInset };
@@ -677,10 +712,6 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     public void position() {
-        if (floating != null && floating.detached()) {
-            floating.position();
-            return;
-        }
         if (headerOrigins != null) {
             int[] translated = headerOrigins.clone();
             for (int i = 0; i < translated.length; i++)
@@ -700,32 +731,31 @@ public final class NativeInventoryPanel extends Gui {
             if (attachedChest != null)
                 attachedChest.dynamicinventory$positionText(access.dynamicinventory$left() + headerX);
         }
-        for (Slot slot : machineSlots) {
-            int[] origin = nativePositions.get(slot);
-            boolean chest = chestLayout != null && attachedChest.dynamicinventory$isChestSlot(slot);
-            slot.xDisplayPosition = origin[0] + (chest ? chestOffsetX : headerX);
-            slot.yDisplayPosition = origin[1] + (chest ? chestOffsetY : headerY);
-        }
-        if (aeSidePanels != null) aeSidePanels.position(mainFrameWidth, headerY + nativeClipTop, playerY);
-        int storageCell = 0;
-        for (int logical = 0; logical < region.getOrdinarySlotCount(); logical++) {
-            Slot slot = gui.inventorySlots.getSlot(region.id(logical));
-            if (logical < 9) {
-                slot.xDisplayPosition = playerX + (panelWidth - 162) / 2 + logical * 18;
-                slot.yDisplayPosition = headerY + panelTop + 18 + rows * 18;
-            } else {
-                if (dev.gilbe.dynamicinventory.inventory.HotbarBanks
-                    .isReserved(region.inventory, slot.getSlotIndex())) {
-                    slot.xDisplayPosition = slot.yDisplayPosition = -10000;
-                    continue;
+        positionMachineSlots();
+        if (floating != null && aeSidePanels != null) floating
+            .auxiliaryBounds(aeSidePanels.bounds(access.dynamicinventory$left(), access.dynamicinventory$top()));
+        if (floating != null && floating.detached()) floating.position();
+        else {
+            int storageCell = 0;
+            for (int logical = 0; logical < region.getOrdinarySlotCount(); logical++) {
+                Slot slot = gui.inventorySlots.getSlot(region.id(logical));
+                if (logical < 9) {
+                    slot.xDisplayPosition = playerX + (panelWidth - 162) / 2 + logical * 18;
+                    slot.yDisplayPosition = headerY + panelTop + 18 + rows * 18;
+                } else {
+                    if (dev.gilbe.dynamicinventory.inventory.HotbarBanks
+                        .isReserved(region.inventory, slot.getSlotIndex())) {
+                        slot.xDisplayPosition = slot.yDisplayPosition = -10000;
+                        continue;
+                    }
+                    int cell = storageCell++;
+                    int row = cell / columns - scroll;
+                    int inset = InventoryViewSettings.centerLastRow
+                        ? InventoryPanelLayout.rowOffset(cell, storageCount(), columns)
+                        : 0;
+                    slot.xDisplayPosition = row >= 0 && row < rows ? gridX + inset + cell % columns * 18 : -10000;
+                    slot.yDisplayPosition = row >= 0 && row < rows ? headerY + panelTop + 14 + row * 18 : -10000;
                 }
-                int cell = storageCell++;
-                int row = cell / columns - scroll;
-                int inset = InventoryViewSettings.centerLastRow
-                    ? InventoryPanelLayout.rowOffset(cell, storageCount(), columns)
-                    : 0;
-                slot.xDisplayPosition = row >= 0 && row < rows ? gridX + inset + cell % columns * 18 : -10000;
-                slot.yDisplayPosition = row >= 0 && row < rows ? headerY + panelTop + 14 + row * 18 : -10000;
             }
         }
         for (Map.Entry<GuiButton, int[]> entry : buttons.entrySet()) {
@@ -741,6 +771,15 @@ public final class NativeInventoryPanel extends Gui {
             }
         }
         // Tabs belong to the visible frame, not the old 176px header centered inside a wider frame.
+        dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsWirelessWidgets.position(
+            gui,
+            access.dynamicinventory$left() + headerX,
+            access.dynamicinventory$top() + headerY,
+            access.dynamicinventory$top() + headerY
+                + AppliedEnergisticsBackground.headerBottom(
+                    gui.getClass()
+                        .getName(),
+                    nativeStorageTop));
         InventoryTabsCompatibility.positionTabs(
             access.dynamicinventory$buttons(),
             access.dynamicinventory$left(),
@@ -780,7 +819,27 @@ public final class NativeInventoryPanel extends Gui {
 
     public void background(Runnable nativeDraw) {
         if (floating != null && floating.detached()) {
-            floating.background(nativeDraw, nativeWidth, nativeHeight);
+            boolean aeGui = gui.getClass()
+                .getName()
+                .startsWith("appeng.client.gui.implementations.Gui");
+            floating.background(
+                aeGui || nativeSlotArtwork() ? () -> drawDetachedAeBackground(nativeDraw) : nativeDraw,
+                nativeWidth,
+                nativeHeight,
+                nativeClipLeft,
+                storageGeometry == null ? AppliedEnergisticsBackground.headerBottom(
+                    gui.getClass()
+                        .getName(),
+                    nativeStorageTop) : storageGeometry.cropBottom,
+                !aeGui);
+            position();
+            if (aeSidePanels != null) aeSidePanels.draw(
+                access.dynamicinventory$left(),
+                access.dynamicinventory$top(),
+                frameStyle,
+                borderWidth,
+                frameCrop,
+                cornerCrop);
             return;
         }
         Minecraft mc = Minecraft.getMinecraft();
@@ -809,7 +868,9 @@ public final class NativeInventoryPanel extends Gui {
                         .getName(),
                     inset))
             : left + fullWidth;
-        int clipBottom = chestLayout == null ? top + headerY + Math.max(nativeContentBottom, nativeClipBottom - inset)
+        int clipBottom = chestLayout == null
+            ? top + headerY
+                + (storageGeometry == null ? Math.max(nativeContentBottom, nativeClipBottom - inset) : nativeClipBottom)
             : top + fullHeight;
         // The native sheet stops at the old player-grid boundary. Do not leave an unfilled
         // extra pixel beneath it when slot-margin measurements extend beyond that texture.
@@ -845,7 +906,11 @@ public final class NativeInventoryPanel extends Gui {
                     borderWidth,
                     frameCrop,
                     cornerCrop,
-                    new int[] { clipLeft, clipTop, clipRight, nativeBottom });
+                    storageGeometry != null && storageGeometry.fillBackground ? null
+                        : new int[] { clipLeft,
+                            storageGeometry == null ? clipTop
+                                : Math.max(clipTop, top + headerY + storageGeometry.backgroundTop),
+                            clipRight, nativeBottom });
             } else drawMergedFrame(left, top + tabPadding, fullWidth, fullHeight - tabPadding);
             int browserBottom = gui instanceof dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBrowserAccess browser
                 ? browser.dynamicinventory$browserBottom()
@@ -883,7 +948,7 @@ public final class NativeInventoryPanel extends Gui {
                 slot.yDisplayPosition = origin[1] + extraChestY;
             }
             drawingBackground = this;
-            if (aeGui) {
+            if (aeGui || nativeSlotArtwork()) {
                 // AE2 draws optional/ghost-slot artwork from the actual Slot coordinates. During
                 // its native draw the origin already includes headerX/Y; avoid applying them twice.
                 // position() restores all real slots before items and click handling are processed.
@@ -945,6 +1010,55 @@ public final class NativeInventoryPanel extends Gui {
         }
     }
 
+    private void positionMachineSlots() {
+        for (Slot slot : machineSlots) {
+            int[] origin = nativePositions.get(slot);
+            boolean chest = chestLayout != null && attachedChest.dynamicinventory$isChestSlot(slot);
+            slot.xDisplayPosition = origin[0] + (chest ? chestOffsetX : headerX);
+            slot.yDisplayPosition = origin[1] + (chest ? chestOffsetY : headerY);
+        }
+        if (aeSidePanels != null) aeSidePanels.position(mainFrameWidth, headerY + nativeClipTop);
+    }
+
+    private boolean nativeSlotArtwork() {
+        String name = gui.getClass()
+            .getName();
+        return name.equals("com.rwtema.extrautils.dynamicgui.DynamicGui")
+            || name.equals("com.rwtema.extrautils.tileentity.enderconstructor.DynamicGuiEnderConstructor")
+            || name.startsWith("crazypants.enderio.");
+    }
+
+    /** Accept fresh native viewport coordinates after the owning UI scrolls its machine slots. */
+    public void refreshNativeMachinePositions() {
+        refreshNativeMachinePositions(0, region.nativeSlotCount);
+    }
+
+    public void refreshNativeMachinePositions(int start, int end) {
+        for (Slot slot : machineSlots) if (slot.slotNumber >= start && slot.slotNumber < end)
+            nativePositions.put(slot, new int[] { slot.xDisplayPosition, slot.yDisplayPosition });
+        positionMachineSlots();
+    }
+
+    /**
+     * AE2's optional-slot artwork reads slot coordinates during native drawing. Keep the native
+     * origin and clipping hooks active, then restore real displayed coordinates before item rendering.
+     */
+    private void drawDetachedAeBackground(Runnable nativeDraw) {
+        NativeInventoryPanel previous = drawingBackground;
+        for (Slot slot : machineSlots) {
+            int[] origin = nativePositions.get(slot);
+            slot.xDisplayPosition = origin[0];
+            slot.yDisplayPosition = origin[1];
+        }
+        drawingBackground = this;
+        try {
+            nativeDraw.run();
+        } finally {
+            drawingBackground = previous;
+            positionMachineSlots();
+        }
+    }
+
     public void foreground(Runnable nativeDraw) {
         int w = access.dynamicinventory$width(), h = access.dynamicinventory$height();
         int x = access.dynamicinventory$left(), y = access.dynamicinventory$top();
@@ -952,7 +1066,9 @@ public final class NativeInventoryPanel extends Gui {
         NativeInventoryPanel previousForeground = drawingForeground;
         try {
             drawingForeground = this;
-            int hx = floating != null && floating.detached() ? floating.machineBounds().x - x : headerX;
+            int hx = floating != null && floating.detached()
+                ? floating.machineBounds().x - x - (storageGeometry == null ? 0 : storageGeometry.left)
+                : headerX;
             int hy = floating != null && floating.detached() ? floating.machineBounds().y - y : headerY;
             GL11.glTranslatef(hx, hy, 0);
             access.dynamicinventory$bounds(nativeWidth, nativeHeight, x + hx, y + hy);
