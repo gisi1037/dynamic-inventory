@@ -45,6 +45,11 @@ dependencies {
         "Applied-Energistics-2-Unofficial"].each { name ->
         compileOnly("com.github.GTNewHorizons:${name}:${pin(name)}:dev") { transitive = false }
     }
+    // ModularUI2 exposes these types on its public screen interface.
+    if (inventoryProfile == "isolated") {
+        compileOnly("com.github.GTNewHorizons:lwjgl3ify:${pin('lwjgl3ify')}:api") { transitive = false }
+        compileOnly("curse.maven:neverenoughanimation-1062347:7664003-sources-7663978") { transitive = false }
+    }
     // GTNHExtLib bundles this at runtime; Bogo's refill field exposes its API directly.
     compileOnly("it.unimi.dsi:fastutil:8.5.18") { transitive = false }
     compileOnly("com.github.GTNewHorizons:Minecraft-Backpack-Mod:2.6.18-GTNH:dev") { transitive = false }

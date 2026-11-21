@@ -1,5 +1,19 @@
 // Add any additional repositories for your dependencies here.
 
 repositories {
-
+    // Forge's legacy Scala modules are published as jars without POMs.
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "ForgeLegacyScala"
+                url = uri("https://maven.minecraftforge.net")
+                metadataSources { artifact() }
+            }
+        }
+        filter {
+            includeModule("org.scala-lang", "scala-parser-combinators_2.11")
+            includeModule("org.scala-lang", "scala-swing_2.11")
+            includeModule("org.scala-lang", "scala-xml_2.11")
+        }
+    }
 }
