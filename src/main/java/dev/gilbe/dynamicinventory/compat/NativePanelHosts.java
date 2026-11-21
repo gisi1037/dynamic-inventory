@@ -50,16 +50,21 @@ public final class NativePanelHosts {
             container.getClass()
                 .getName())
             && (adapter.matchesGuiClass(screen) || EtFuturumCompatibility.alternateScreen(adapter, screen.getName())
-                || EnderIoCompatibility.alternateScreen(adapter, screen.getName()));
+                || EnderIoCompatibility.alternateScreen(adapter, screen.getName())
+                || Ae2FluidCraftingCompatibility.alternateScreen(adapter, screen.getName()));
     }
 
     // Existing registrations retain the owning mod's exact profile/version gate. This grants no unregistered host,
     // alternative screen, subclass or machine slot access, and never loads optional classes on a dedicated server.
     private static boolean reviewedAdapter(InventoryUiAdapter adapter, String container) {
         if (adapter == null || adapter.isIncludingSubclasses() || adapter.getCompatibilityRevision() < 2) return false;
-        if (AppliedEnergisticsCompatibility.panelHost(adapter, container)) return true;
+        if (AppliedEnergisticsCompatibility.panelHost(adapter, container)
+            || Ae2FluidCraftingCompatibility.panelHost(adapter, container)) return true;
         if (EtFuturumCompatibility.panelHost(adapter, container) || EnderIoCompatibility.panelHost(adapter, container)
-            || ExtraUtilitiesCompatibility.panelHost(adapter, container)) return true;
+            || ExtraUtilitiesCompatibility.panelHost(adapter, container)
+            || DraconicEvolutionCompatibility.panelHost(adapter, container)
+            || ThaumcraftCompatibility.panelHost(adapter, container)
+            || BackpackCompatibility.panelHost(adapter, container)) return true;
         for (String[] host : HOSTS) if (host[0].equals(adapter.getId()) && host[1].equals(container)
             && host[1].equals(adapter.getContainerClassName())
             && host[2].equals(adapter.getGuiClassName())) return true;

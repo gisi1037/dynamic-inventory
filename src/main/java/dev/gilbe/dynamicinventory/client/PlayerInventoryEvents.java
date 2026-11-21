@@ -29,9 +29,17 @@ public final class PlayerInventoryEvents {
         if (!(event.gui instanceof GuiContainer)) return;
         GuiContainer gui = (GuiContainer) event.gui;
         AutomaticScrollPresentation.prepare(gui);
+        decorate(gui);
+    }
+
+    public static void decorate(GuiContainer gui) {
+        if (gui instanceof dev.gilbe.dynamicinventory.compat.draconic.DetectorInventoryView detector
+            && detector.dynamicinventory$editingNames()) return;
+        ContainerPanelAccess access = (ContainerPanelAccess) gui;
+        if (access.dynamicinventory$panel() != null) return;
         if (ContainerInventoryRegion.of(gui.inventorySlots) != null
             && InventoryUi.findLayout(gui.inventorySlots, gui.getClass()) != null)
-            ((ContainerPanelAccess) gui).dynamicinventory$panel(new NativeInventoryPanel(gui));
+            access.dynamicinventory$panel(new NativeInventoryPanel(gui));
     }
 
     @SubscribeEvent

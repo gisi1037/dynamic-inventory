@@ -77,6 +77,21 @@ public final class PlayerInventoryTransfers {
         return false;
     }
 
+    /** Detached player panels equip armor before applying their storage/hotbar routing. */
+    public static ItemStack transferToArmor(Container container, EntityPlayer player, int id) {
+        if (container != player.inventoryContainer || PlayerContainerLayout.mainIndex(player.inventory, id) < 0)
+            return null;
+        Slot source = container.getSlot(id);
+        if (!source.getHasStack() || !source.canTakeStack(player)) return null;
+        for (int armor = PlayerContainerLayout.ARMOR_START; armor
+            < PlayerContainerLayout.LEGACY_STORAGE_START; armor++) {
+            Slot destination = container.getSlot(armor);
+            if (!destination.getHasStack() && destination.isItemValid(source.getStack()))
+                return transferTo(container, player, id, new int[] { armor });
+        }
+        return null;
+    }
+
     public static ItemStack transferTo(Container container, EntityPlayer player, int id, int[] destinations) {
         return transferTo(container, player, id, destinations, destinations.length);
     }
@@ -106,7 +121,8 @@ public final class PlayerInventoryTransfers {
                 Slot slot = container.getSlot(id);
                 if (reserved(slot)) continue;
                 ItemStack existing = slot.getStack();
-                if (existing == null || !slot.isItemValid(source)
+                if (existing == null || existing == source
+                    || !slot.isItemValid(source)
                     || existing.getItem() != source.getItem()
                     || (source.getHasSubtypes() && existing.getItemDamage() != source.getItemDamage())
                     || !ItemStack.areItemStackTagsEqual(existing, source)) continue;

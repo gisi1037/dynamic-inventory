@@ -28,14 +28,13 @@ final class NativeMachineAdapters {
     }
 
     static void machine(String id, String container, String gui, int nativeSlots) {
-        InventoryUi.register(
-            InventoryUiAdapter.builder(id, container)
-                .gui(gui)
-                .expectedNativeSlots(nativeSlots)
-                .layout(LAYOUT)
-                .compatibilityRevision(TRANSFER_REVISION)
-                .extraTransfers(nativeThenHotbar())
-                .build());
+        InventoryUiAdapter.Builder adapter = InventoryUiAdapter.builder(id, container)
+            .gui(gui)
+            .layout(LAYOUT)
+            .compatibilityRevision(TRANSFER_REVISION)
+            .extraTransfers(nativeThenHotbar());
+        if (nativeSlots > 0) adapter.expectedNativeSlots(nativeSlots);
+        InventoryUi.register(adapter.build());
     }
 
     /**

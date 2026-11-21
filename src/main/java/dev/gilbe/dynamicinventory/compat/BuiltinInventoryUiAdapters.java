@@ -16,13 +16,18 @@ public final class BuiltinInventoryUiAdapters {
         if (Loader.isModLoaded("GalacticraftCore")) GalacticraftCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("IronChest")) IronChestCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("Forestry")) ForestryCompatibility.registerInventoryAdapters();
-        if (OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial"))
+        if (OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial")) {
             AppliedEnergisticsCompatibility.registerInventoryAdapters();
+            if (OptionalInventoryAdapters.reviewedVersion("ae2fc"))
+                Ae2FluidCraftingCompatibility.registerInventoryAdapters();
+        }
         if (Loader.isModLoaded("etfuturum")) EtFuturumCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("EnderIO")
             && OptionalInventoryAdapters.reviewedVersion("endercore")) EnderIoCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("ExtraUtilities"))
             ExtraUtilitiesCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("DraconicEvolution"))
+            DraconicEvolutionCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("avaritiaddons")) AvaritiaddonsCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("dreamcraft")) DreamcraftCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("alchgrate"))
@@ -36,6 +41,7 @@ public final class BuiltinInventoryUiAdapters {
             HarvestCraftCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("Thaumcraft"))
             ThaumcraftCompatibility.registerInventoryAdapters();
+        BackpackCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("witchery")) WitcheryCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.profileVersion("SpiceOfLife", "SpiceOfLife"))
             SpiceOfLifeCompatibility.registerInventoryAdapters();

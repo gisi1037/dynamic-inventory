@@ -16,6 +16,7 @@ import com.cleanroommc.modularui.value.sync.ModularSyncManager;
 import com.cleanroommc.modularui.value.sync.PanelSyncManager;
 import com.cleanroommc.modularui.widgets.slot.ModularSlot;
 import com.cleanroommc.modularui.widgets.slot.PlayerSlotGroup;
+import com.cleanroommc.modularui.widgets.slot.PlayerSlotType;
 
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 
@@ -49,7 +50,12 @@ public final class Mui2TransferFixtures {
                 InventoryLayout.mainSlots() - 1 }) {
                 Arrays.fill(player.inventory.mainInventory, null);
                 for (int i = 0; i < chest.getSlots(); i++) chest.setStackInSlot(i, null);
-                ModularSlot source = ((ItemSlotSH) sync.findSyncHandlerNullable("player", logical)).getSlot();
+                ItemSlotSH playerSlot = (ItemSlotSH) sync.findSyncHandlerNullable("player", logical);
+                ModularSlot source = playerSlot.getSlot();
+                check(
+                    playerSlot.getPlayerSlotType()
+                        == (logical < 9 ? PlayerSlotType.HOTBAR : PlayerSlotType.MAIN_INVENTORY),
+                    "stock and expanded slots resolve the player inventory theme");
                 check(source.getSlotGroup() == sync.getSlotGroup(PlayerSlotGroup.NAME), "one player transfer group");
                 player.inventory.mainInventory[InventoryLayout.rawIndex(logical)] = new ItemStack(
                     Blocks.cobblestone,
@@ -57,10 +63,12 @@ public final class Mui2TransferFixtures {
                 container.transferStackInSlot(player, source.slotNumber);
                 check(source.getStack() == null && countPlayer(player) == 0, "player source leaves no internal hop");
                 check(chest.getStackInSlot(0) != null && chest.getStackInSlot(0).stackSize == 12, "player to chest");
-                ModularSlot chestSlot = ((ItemSlotSH) sync.findSyncHandlerNullable("chest", 0)).getSlot();
+                ItemSlotSH machineSlot = (ItemSlotSH) sync.findSyncHandlerNullable("chest", 0);
+                check(machineSlot.getPlayerSlotType() == null, "machine slots retain the generic slot theme");
+                ModularSlot chestSlot = machineSlot.getSlot();
                 container.transferStackInSlot(player, chestSlot.slotNumber);
                 check(chest.getStackInSlot(0) == null && countPlayer(player) == 12, "chest to player");
-                checks += 4;
+                checks += 6;
             }
             Arrays.fill(player.inventory.mainInventory, null);
             for (int i = 0; i < chest.getSlots(); i++) chest.setStackInSlot(i, new ItemStack(Blocks.dirt, 64));

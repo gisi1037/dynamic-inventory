@@ -85,7 +85,8 @@ public final class ResponsiveInventoryPanel {
             if (!viewport.isAdaptive() || parents.get(viewport) != group) continue;
             ModularPanel panel = owners.get(group);
             boolean expand = !Mui2CompactMachineHosts.keepsCompactViewport(screenOwner, panel.getName());
-            int nextRows = InventoryViewportLayout.rows(viewport.getStorageSlots(), baseline(panel), height, expand);
+            int nextRows = InventoryViewportLayout
+                .rows(viewport.getStorageSlots(), baseline(panel) + 2 * topOverhang(panel), height, expand);
             int previousRows = rows.containsKey(group) ? rows.get(group) : group.getInitialRows();
             activeRows.put(group, nextRows);
             if (previousRows != nextRows) {
@@ -143,6 +144,15 @@ public final class ResponsiveInventoryPanel {
             changed = true;
         }
         return changed;
+    }
+
+    /** GregTech titles sit above the panel. Each added row consumes space on both sides of its centered body. */
+    private static int topOverhang(ModularPanel panel) {
+        int top = panel.getArea().y;
+        int overhang = 0;
+        for (IWidget child : panel.getChildren())
+            if (child.isEnabled() && child.getArea().height > 0) overhang = Math.max(overhang, top - child.getArea().y);
+        return overhang;
     }
 
     private int baseline(IWidget widget) {

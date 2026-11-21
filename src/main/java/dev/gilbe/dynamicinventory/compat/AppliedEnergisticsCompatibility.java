@@ -20,8 +20,8 @@ public final class AppliedEnergisticsCompatibility {
         { "advanced_network_tool", "AdvancedNetworkTool" }, { "me_terminal", "MEMonitorable" },
         { "crafting_terminal", "CraftingTerm" }, { "pattern_terminal", "PatternTerm" },
         { "extended_pattern_terminal", "PatternTermEx" }, { "portable_cell", "MEPortableCell" },
-        { "interface_terminal", "InterfaceTerminal" },
-        { "crafting_diagnostic_terminal", "CraftingDiagnosticTerminal" } };
+        { "interface_terminal", "InterfaceTerminal" }, { "crafting_diagnostic_terminal", "CraftingDiagnosticTerminal" },
+        { "storage_bus", "StorageBus" }, { "import_export_bus", "BusIO" }, { "level_emitter", "LevelEmitter" } };
 
     private static final NativeUiLayout LAYOUT = NativeUiLayout.builder()
         .fixedPlayerColumns(9)

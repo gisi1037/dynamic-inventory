@@ -15,7 +15,8 @@ public final class InventoryViewSettings {
     public static boolean centerLastRow = true;
     public static boolean hotbarPanelVisible = false;
     public static int terminalSmallRows = 3;
-    public static int terminalTallMinimumRows = 6;
+    public static int terminalTallRows = 6;
+    public static int terminalFullRows = 6;
     public static int playerSectionAnchorX = -1, playerSectionAnchorY = -1;
     private static Configuration configuration;
 
@@ -82,13 +83,23 @@ public final class InventoryViewSettings {
             3,
             24,
             "Fixed network-browser rows in AE2 Small mode; player rows scroll when necessary.");
-        terminalTallMinimumRows = configuration.getInt(
-            "tallMinimumRows",
+        var terminal = configuration.getCategory("ae2terminal");
+        var legacyTall = terminal.remove("tallMinimumRows");
+        int tallDefault = legacyTall == null ? 6 : Math.max(3, Math.min(24, legacyTall.getInt(6)));
+        terminalTallRows = configuration.getInt(
+            "tallRows",
             "ae2Terminal",
-            6,
+            tallDefault,
             3,
             24,
-            "Reserve at least this many browser rows in Tall mode when space permits, then fit player rows and expand the browser into remaining space.");
+            "Fixed network-browser rows in AE2 Tall mode; player rows scroll when necessary.");
+        terminalFullRows = configuration.getInt(
+            "fullRows",
+            "ae2Terminal",
+            tallDefault,
+            3,
+            24,
+            "Fixed network-browser rows in AE2 Full mode; player rows scroll when necessary.");
         if (legacyDefault && columns == 18 && rows == 3) {
             // Only migrate the original, unversioned default. Saved modern/custom
             // preferences remain the user's choice when the factory default changes.
@@ -147,14 +158,17 @@ public final class InventoryViewSettings {
     }
 
     /** Global client preferences; a native terminal rebuilds its browser on its next opening. */
-    public static void setTerminalRows(int small, int tallMinimum) {
+    public static void setTerminalRows(int small, int tall, int full) {
         terminalSmallRows = Math.max(3, Math.min(24, small));
-        terminalTallMinimumRows = Math.max(3, Math.min(24, tallMinimum));
+        terminalTallRows = Math.max(3, Math.min(24, tall));
+        terminalFullRows = Math.max(3, Math.min(24, full));
         if (configuration != null) {
             configuration.get("ae2Terminal", "smallRows", 3)
                 .set(terminalSmallRows);
-            configuration.get("ae2Terminal", "tallMinimumRows", 6)
-                .set(terminalTallMinimumRows);
+            configuration.get("ae2Terminal", "tallRows", 6)
+                .set(terminalTallRows);
+            configuration.get("ae2Terminal", "fullRows", 6)
+                .set(terminalFullRows);
             configuration.save();
         }
     }

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.0 Alpha 4 — 2026-11-21
+
+Targets **GT New Horizons 2.9.0** on Minecraft 1.7.10. Replace the previous mod with
+`dynamicinventory-0.8.0-alpha.4.jar` on both client and server. Use
+`-Ddynamicinventory.profile=gtnh-2.9.0` on both sides.
+
+- Fixed Ender IO conduit tabs and controls overlapping the player inventory in
+  attached and detached mode.
+- Restored the Ore Dictionary filter button on AE2 storage buses and kept the
+  Cell Workbench and player inventory centered when there is room for the side panels.
+- Added AE2 bus and fluid-machine compatibility and fixed detached layouts for the
+  Level Maintainer. Improved terminal row controls and recipe and pattern transfers.
+- Added inventory integration for reviewed Draconic Evolution, backpack and
+  additional Thaumcraft interfaces.
+- Fixed GregTech machine titles being pushed behind NEI's Item Subsets bar when
+  the player inventory expands, including after reopening in detached mode.
+- Fixed expanded-inventory pick block and restored armor shift-click and the
+  Nutrition button.
+
+This is an alpha build. The release includes the production, development and
+source JARs and a SHA-256 checksum file.
+
 ## 0.8.0 Alpha 3 — 2026-11-02
 
 Targets Minecraft 1.7.10 / GTNH 2.9.0. Install matching versions on client and

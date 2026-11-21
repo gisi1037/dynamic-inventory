@@ -5,12 +5,14 @@ public final class TerminalViewportLayout {
 
     private TerminalViewportLayout() {}
 
-    public static int terminalRows(int availableHeight, int fixedHeight, int desiredPlayerRows, boolean small,
-        int smallRows, int tallMinimumRows) {
-        int budget = Math.max(4, (availableHeight - fixedHeight) / 18);
-        int reserved = small ? smallRows : tallMinimumRows;
-        int terminal = Math.max(3, Math.min(reserved, budget - 1));
-        int player = Math.max(1, Math.min(desiredPlayerRows, budget - terminal));
-        return small ? terminal : budget - player;
+    public static int terminalRows(int availableHeight, int fixedHeight, int requestedRows) {
+        // The fixed height includes the player frame and hotbar. Leave one storage row as well.
+        return Math.max(3, Math.min(requestedRows, (availableHeight - fixedHeight) / 18 - 1));
+    }
+
+    /** Leave room for the detached player's smallest usable frame, including a wrapped hotbar. */
+    public static int detachedRows(int availableHeight, int nativeFixedHeight, int minimumPlayerHeight,
+        int requestedRows) {
+        return Math.max(3, Math.min(requestedRows, (availableHeight - nativeFixedHeight - minimumPlayerHeight) / 18));
     }
 }

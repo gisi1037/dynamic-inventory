@@ -8,7 +8,7 @@ public final class AppliedEnergisticsBackground {
     public static boolean hasSidePanels(String guiClass) {
         if (isMonitorable(guiClass)) return true;
         return switch (guiClass) {
-            case "appeng.client.gui.implementations.GuiInscriber", "appeng.client.gui.implementations.GuiAdvancedInscriber", "appeng.client.gui.implementations.GuiCrystalGrowthChamber", "appeng.client.gui.implementations.GuiMAC", "appeng.client.gui.implementations.GuiIOPort", "appeng.client.gui.implementations.GuiInterface", "appeng.client.gui.implementations.GuiCellWorkbench", "appeng.client.gui.implementations.GuiSecurity" -> true;
+            case "appeng.client.gui.implementations.GuiInscriber", "appeng.client.gui.implementations.GuiAdvancedInscriber", "appeng.client.gui.implementations.GuiCrystalGrowthChamber", "appeng.client.gui.implementations.GuiMAC", "appeng.client.gui.implementations.GuiIOPort", "appeng.client.gui.implementations.GuiInterface", "appeng.client.gui.implementations.GuiCellWorkbench", "appeng.client.gui.implementations.GuiSecurity", "appeng.client.gui.implementations.GuiStorageBus", "appeng.client.gui.implementations.GuiBusIO", "appeng.client.gui.implementations.GuiLevelEmitter", "com.glodblock.github.client.gui.GuiLevelEmitterProxy" -> true;
             default -> false;
         };
     }
@@ -16,17 +16,27 @@ public final class AppliedEnergisticsBackground {
     public static int mainSheetWidth(String guiClass, int nativeWidth) {
         if (isMonitorable(guiClass)) return 195;
         if (guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")) return 195;
+        if (guiClass.equals("com.glodblock.github.client.gui.GuiLevelMaintainer")) return 176;
         return hasSidePanels(guiClass) ? 177 : nativeWidth;
     }
 
     /** End of real header artwork, excluding the obsolete stepped native player frame. */
     public static int headerBottom(String guiClass, int playerTop) {
         return switch (guiClass) {
-            case "appeng.client.gui.implementations.GuiInterfaceTerminal" -> playerTop - 7;
+            case "appeng.client.gui.implementations.GuiInterfaceTerminal", "com.glodblock.github.client.gui.GuiLevelTerminal", "com.glodblock.github.client.gui.GuiLevelWireless" -> playerTop
+                - 7;
             // Five native rows: scrollbar ends at 122, followed by four pixels of lower cap.
             case "appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal" -> 126;
             default -> playerTop;
         };
+    }
+
+    /** Detached frames crop four pixels inside their bounds; keep the last pattern slot's bevel inside that area. */
+    public static int detachedHeaderHeight(String guiClass, int playerTop) {
+        int height = headerBottom(guiClass, playerTop) + 2;
+        return guiClass.equals("appeng.client.gui.implementations.GuiInterface")
+            ? Math.max(height, minimumContentBottom(guiClass) + 1 + 4)
+            : height;
     }
 
     public static boolean isSecurity(String guiClass) {
@@ -42,7 +52,18 @@ public final class AppliedEnergisticsBackground {
 
     public static boolean isTerminal(String guiClass) {
         return isMonitorable(guiClass) || guiClass.equals("appeng.client.gui.implementations.GuiInterfaceTerminal")
-            || guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal");
+            || guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")
+            || isLevelTerminal(guiClass);
+    }
+
+    public static boolean isLevelTerminal(String guiClass) {
+        return guiClass.equals("com.glodblock.github.client.gui.GuiLevelTerminal")
+            || guiClass.equals("com.glodblock.github.client.gui.GuiLevelWireless");
+    }
+
+    public static boolean isAeGui(String guiClass) {
+        return guiClass.startsWith("appeng.client.gui.implementations.Gui")
+            || guiClass.startsWith("com.glodblock.github.client.gui.Gui");
     }
 
     public static int mainContentRight(String guiClass, int inset) {
@@ -59,6 +80,11 @@ public final class AppliedEnergisticsBackground {
         return switch (guiClass) {
             case "appeng.client.gui.implementations.GuiCellWorkbench" -> 154;
             case "appeng.client.gui.implementations.GuiInterface" -> 124;
+            case "com.glodblock.github.client.gui.GuiLevelMaintainer" -> 116;
+            case "com.glodblock.github.client.gui.GuiFluidInterface" -> 123;
+            case "com.glodblock.github.client.gui.GuiIngredientBuffer" -> 104;
+            case "com.glodblock.github.client.gui.GuiLargeIngredientBuffer" -> 84;
+            case "com.glodblock.github.client.gui.GuiSuperStockReplenisher" -> 153;
             default -> 0;
         };
     }

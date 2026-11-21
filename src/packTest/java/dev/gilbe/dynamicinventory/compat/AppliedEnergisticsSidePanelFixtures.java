@@ -8,7 +8,9 @@ import java.util.List;
 import net.minecraft.inventory.InventoryBasic;
 import net.minecraft.inventory.Slot;
 
+import appeng.container.slot.SlotPatternTerm;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
+import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsSidePanels;
 
 /** Exercise real side-slot placement without a client, world, or OpenGL draw. */
@@ -18,8 +20,51 @@ public final class AppliedEnergisticsSidePanelFixtures {
 
     public static void main(String[] args) throws Exception {
         for (int size : new int[] { 3, 5 }) checkToolbox(size);
+        checkPatternResult();
         System.out
             .println("PASS AE2 toolbox columns: 3x3/5x5, live upgrades, repeated placement and native slot identity");
+    }
+
+    private static void checkPatternResult() throws Exception {
+        boolean[] crafting = { false };
+        InventoryBasic output = new InventoryBasic("pattern-result", false, 1);
+        Slot result = new SlotPatternTerm(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            output,
+            110,
+            -58,
+            group -> group == 2 && crafting[0],
+            2,
+            null);
+        Method capture = NativeInventoryPanel.class.getDeclaredMethod("captureNativePosition", Slot.class);
+        capture.setAccessible(true);
+        Method place = NativeInventoryPanel.class
+            .getDeclaredMethod("placeNativeSlot", Slot.class, int[].class, int.class, int.class);
+        place.setAccessible(true);
+
+        result.xDisplayPosition = -9000;
+        result.yDisplayPosition = 237;
+        int[] origin = (int[]) capture.invoke(null, result);
+        place.invoke(null, result, origin, 12, 4);
+        check(result.xDisplayPosition == -9000, "Processing mode keeps the result out of mouse hit testing");
+
+        // The import enables the existing slot after the decorator has captured its origin.
+        crafting[0] = true;
+        place.invoke(null, result, origin, 12, 4);
+        check(
+            result.xDisplayPosition == 122 && result.yDisplayPosition == 241,
+            "First import shows the result at the translated crafting output");
+        place.invoke(null, result, origin, 0, 0);
+        int[] reopened = (int[]) capture.invoke(null, result);
+        check(
+            reopened[0] == 110 && reopened[1] == 237,
+            "Reopening for a second import retains the native result bounds");
+        System.out.println("PASS AE2 pattern result placement across mode switch and recipe reopen");
     }
 
     private static void checkToolbox(int size) throws Exception {

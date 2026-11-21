@@ -21,6 +21,27 @@ public final class StoragePanelGeometry {
     }
 
     public static StoragePanelGeometry of(String screen, int width, int storageTop, int contentBottom, int slots) {
+        int draconicHeight = switch (screen) {
+            case "com.brandon3055.draconicevolution.client.gui.GUIDraconiumChest" -> 256;
+            case "com.brandon3055.draconicevolution.client.gui.GUIUpgradeModifier" -> 190;
+            case "com.brandon3055.draconicevolution.client.gui.componentguis.GUIReactor" -> 222;
+            case "com.brandon3055.draconicevolution.client.gui.componentguis.GUIToolInventory" -> 130;
+            default -> 0;
+        };
+        if (draconicHeight > 0)
+            // Controls extend beside the old player inventory and need the full native sheet.
+            return new StoragePanelGeometry(0, width, draconicHeight, draconicHeight, true);
+        if (screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel") && slots == 27 && width == 184)
+            // The 184px Barrel draws the 176px vanilla chest sheet, including its old right border.
+            return new StoragePanelGeometry(0, 176, contentBottom + 8, contentBottom + 2, true);
+        int thaumcraftCrop = switch (screen) {
+            case "thaumcraft.client.gui.GuiFocalManipulator" -> 143;
+            case "thaumcraft.client.gui.GuiAlchemyFurnace", "thaumcraft.client.gui.GuiThaumatorium" -> 76;
+            default -> 0;
+        };
+        if (thaumcraftCrop > 0)
+            // These sheets draw the workstation and the old inventory frame as separate pieces.
+            return new StoragePanelGeometry(0, width, thaumcraftCrop + 6, thaumcraftCrop, true);
         if (screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel")
             || screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiShulkerBox")) {
             int inset = slots > 27 ? 4 : 0;

@@ -28,6 +28,7 @@ import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsMovingButtons;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsSidePanels;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsWidgets;
+import dev.gilbe.dynamicinventory.compat.enderio.ConduitLayout;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 
 /** Decorates the native GUI in place: its class, container, packets and header rendering survive. */
@@ -217,19 +218,23 @@ public final class NativeInventoryPanel extends Gui {
             : null;
         int storageY = Integer.MAX_VALUE;
         int machineBottom = 0;
+        boolean conduit = gui instanceof ConduitLayout;
         int nativeLeft = 0, nativeRight = AppliedEnergisticsBackground.mainSheetWidth(
             gui.getClass()
                 .getName(),
             nativeWidth), nativeTop = 0;
         for (Slot slot : gui.inventorySlots.inventorySlots) {
             if (slot.slotNumber >= region.nativeSlotCount) continue;
-            nativePositions.put(slot, new int[] { slot.xDisplayPosition, slot.yDisplayPosition });
+            int[] origin = captureNativePosition(slot);
+            nativePositions.put(slot, origin);
             int logical = region.logical(slot.slotNumber);
             if (logical < 0) machineSlots.add(slot);
             if (gui instanceof AttachedChestAccess && ((AttachedChestAccess) gui).dynamicinventory$isChestSlot(slot))
                 chestSlots.add(slot);
             if (logical >= 9) storageY = Math.min(storageY, slot.yDisplayPosition);
-            else if (logical < 0 && slot.func_111238_b()) {
+            else if (logical < 0 && slot.func_111238_b() && !isHiddenAeReturnIcon(slot, origin)) {
+                // Native conduit tabs park their inactive upgrade slots at (-3000, -3000).
+                if (conduit && (origin[0] < 0 || origin[1] < 0)) continue;
                 if (gui.getClass()
                     .getName()
                     .equals("com.rwtema.extrautils.gui.GuiFilingCabinet")
@@ -238,8 +243,8 @@ public final class NativeInventoryPanel extends Gui {
                 // Side inventories have their own frames and must not stretch the main header/player section.
                 if (aeSidePanels != null && aeSidePanels.contains(slot)) continue;
                 machineBottom = Math.max(machineBottom, slot.yDisplayPosition + 16);
-                nativeLeft = Math.min(nativeLeft, slot.xDisplayPosition - 8);
-                nativeRight = Math.max(nativeRight, slot.xDisplayPosition + 24);
+                nativeLeft = Math.min(nativeLeft, origin[0] - 8);
+                nativeRight = Math.max(nativeRight, origin[0] + 24);
                 // A slot at y=8 already fits inside the native frame. Reserving 18px here invented
                 // a negative top edge and left Galacticraft's header/tab ten pixels below our frame.
                 nativeTop = Math.min(nativeTop, slot.yDisplayPosition - 8);
@@ -250,7 +255,9 @@ public final class NativeInventoryPanel extends Gui {
             AppliedEnergisticsBackground.minimumContentBottom(
                 gui.getClass()
                     .getName()));
-        nativeStorageTop = storageY - 4;
+        // Some conduit tabs hide all native player slots, but their texture still has a fixed split.
+        nativeStorageTop = conduit ? ConduitLayout.PLAYER_BOUNDARY : storageY - 4;
+        if (conduit) machineBottom = Math.max(machineBottom, nativeStorageTop - 8);
         storageGeometry = StoragePanelGeometry.of(
             gui.getClass()
                 .getName(),
@@ -385,9 +392,14 @@ public final class NativeInventoryPanel extends Gui {
         nativeClipBottom = storageGeometry == null
             ? Math.max(nativeContentBottom, Math.min(nativeStorageTop, playerY - headerY))
             : storageGeometry.cropBottom;
+        // Center the workbench and player stack independently of its toolbox and optional upgrade columns.
+        // The full width still limits the position so those columns have room when a cell is inserted.
+        int centeredWidth = gui.getClass()
+            .getName()
+            .equals("appeng.client.gui.implementations.GuiCellWorkbench") ? mainFrameWidth : totalWidth;
         // Offsets are preferences relative to the centered layout. Keep the fitted panel on screen.
         int left = Math
-            .max(0, Math.min(Math.max(0, gui.width - totalWidth), (gui.width - totalWidth) / 2 + patch.value(2)));
+            .max(0, Math.min(Math.max(0, gui.width - totalWidth), (gui.width - centeredWidth) / 2 + patch.value(2)));
         int top = NativeScreenMargins.top(gui.height, totalHeight, patch.value(3), topMargin, bottomMargin);
         for (Object entry : access.dynamicinventory$buttons()) {
             GuiButton button = (GuiButton) entry;
@@ -397,22 +409,26 @@ public final class NativeInventoryPanel extends Gui {
         access.dynamicinventory$bounds(totalWidth, totalHeight, left, top);
         position();
         if (dev.gilbe.dynamicinventory.compat.NativePanelHosts.supports(gui.inventorySlots, gui.getClass())) {
+            List<InventoryPanelLayout.Rect> auxiliary = java.util.Collections.emptyList();
+            if (aeSidePanels != null) auxiliary = aeSidePanels.bounds(left, top);
+            if (gui instanceof ConduitLayout conduitLayout) auxiliary = java.util.Collections
+                .singletonList(conduitLayout.dynamicinventory$tabBounds(left + headerX, top + headerY, nativeWidth));
             floating = new DetachedChestPanel(
                 gui,
                 new InventoryPanelLayout.Rect(
                     left + headerX + nativeClipLeft,
                     top + headerY,
                     nativeClipRight - nativeClipLeft,
-                    storageGeometry == null ? AppliedEnergisticsBackground.headerBottom(
+                    storageGeometry == null ? AppliedEnergisticsBackground.detachedHeaderHeight(
                         gui.getClass()
                             .getName(),
-                        nativeStorageTop) + 2 : storageGeometry.bottom),
+                        nativeStorageTop) : storageGeometry.bottom),
                 new InventoryPanelLayout.Rect(left + playerX, top + playerY, panelWidth, panelHeight),
                 frameStyle,
                 borderWidth,
                 frameCrop,
                 cornerCrop,
-                aeSidePanels == null ? java.util.Collections.emptyList() : aeSidePanels.bounds(left, top));
+                auxiliary);
             position();
         }
     }
@@ -433,11 +449,15 @@ public final class NativeInventoryPanel extends Gui {
 
     /** Absolute origin shared by native controls which draw or handle clicks outside the normal layers. */
     public int nativeHeaderLeft() {
-        return access.dynamicinventory$left() + (drawingBackground == this || drawingForeground == this ? 0 : headerX);
+        if (drawingBackground == this || drawingForeground == this) return access.dynamicinventory$left();
+        if (floating != null && floating.detached()) return floating.machineBounds().x - nativeClipLeft;
+        return access.dynamicinventory$left() + headerX;
     }
 
     public int nativeHeaderTop() {
-        return access.dynamicinventory$top() + (drawingBackground == this || drawingForeground == this ? 0 : headerY);
+        if (drawingBackground == this || drawingForeground == this) return access.dynamicinventory$top();
+        if (floating != null && floating.detached()) return floating.machineBounds().y;
+        return access.dynamicinventory$top() + headerY;
     }
 
     public int nativeUiWidth() {
@@ -578,10 +598,8 @@ public final class NativeInventoryPanel extends Gui {
 
     public void restore() {
         if (floating != null) floating.cancel();
-        for (Map.Entry<Slot, int[]> entry : nativePositions.entrySet()) {
-            entry.getKey().xDisplayPosition = entry.getValue()[0];
-            entry.getKey().yDisplayPosition = entry.getValue()[1];
-        }
+        for (Map.Entry<Slot, int[]> entry : nativePositions.entrySet())
+            placeNativeSlot(entry.getKey(), entry.getValue(), 0, 0);
         access.dynamicinventory$bounds(
             nativeWidth,
             nativeHeight,
@@ -819,9 +837,9 @@ public final class NativeInventoryPanel extends Gui {
 
     public void background(Runnable nativeDraw) {
         if (floating != null && floating.detached()) {
-            boolean aeGui = gui.getClass()
-                .getName()
-                .startsWith("appeng.client.gui.implementations.Gui");
+            boolean aeGui = AppliedEnergisticsBackground.isAeGui(
+                gui.getClass()
+                    .getName());
             floating.background(
                 aeGui || nativeSlotArtwork() ? () -> drawDetachedAeBackground(nativeDraw) : nativeDraw,
                 nativeWidth,
@@ -932,9 +950,9 @@ public final class NativeInventoryPanel extends Gui {
         NativeInventoryPanel previousBackground = drawingBackground;
         try {
             access.dynamicinventory$bounds(nativeWidth, nativeHeight, left + headerX, top + headerY);
-            boolean aeGui = gui.getClass()
-                .getName()
-                .startsWith("appeng.client.gui.implementations.Gui");
+            boolean aeGui = AppliedEnergisticsBackground.isAeGui(
+                gui.getClass()
+                    .getName());
             if (!aeGui) {
                 gui.width = 2 * (left + headerX) + nativeWidth;
                 gui.height = 2 * (top + headerY) + nativeHeight;
@@ -952,11 +970,7 @@ public final class NativeInventoryPanel extends Gui {
                 // AE2 draws optional/ghost-slot artwork from the actual Slot coordinates. During
                 // its native draw the origin already includes headerX/Y; avoid applying them twice.
                 // position() restores all real slots before items and click handling are processed.
-                for (Slot slot : machineSlots) {
-                    int[] origin = nativePositions.get(slot);
-                    slot.xDisplayPosition = origin[0];
-                    slot.yDisplayPosition = origin[1];
-                }
+                for (Slot slot : machineSlots) placeNativeSlot(slot, nativePositions.get(slot), 0, 0);
             }
             nativeDraw.run();
             // Tinkers updates its attached-chest viewport during drawing. Preserve those native coordinates.
@@ -1012,12 +1026,45 @@ public final class NativeInventoryPanel extends Gui {
 
     private void positionMachineSlots() {
         for (Slot slot : machineSlots) {
-            int[] origin = nativePositions.get(slot);
             boolean chest = chestLayout != null && attachedChest.dynamicinventory$isChestSlot(slot);
-            slot.xDisplayPosition = origin[0] + (chest ? chestOffsetX : headerX);
-            slot.yDisplayPosition = origin[1] + (chest ? chestOffsetY : headerY);
+            placeNativeSlot(
+                slot,
+                nativePositions.get(slot),
+                chest ? chestOffsetX : headerX,
+                chest ? chestOffsetY : headerY);
         }
         if (aeSidePanels != null) aeSidePanels.position(mainFrameWidth, headerY + nativeClipTop);
+    }
+
+    private static boolean isAePatternResult(Slot slot) {
+        return slot.getClass()
+            .getName()
+            .equals("appeng.container.slot.SlotPatternTerm");
+    }
+
+    private static boolean isHiddenAeReturnIcon(Slot slot, int[] origin) {
+        // AE2 syncs the return-tab icon through a real slot parked at y=-9000.
+        // It still reports itself as enabled, but has no space in the machine layout.
+        return origin[1] <= -9000 && slot.getClass()
+            .getName()
+            .equals("appeng.container.slot.SlotInaccessible");
+    }
+
+    private static int[] captureNativePosition(Slot slot) {
+        // Recipe import can switch modes after initGui. AE2's offscreen X is a visibility flag,
+        // while the slot's fixed X and the GUI's current row-dependent Y describe its geometry.
+        int x = isAePatternResult(slot) ? ((appeng.container.slot.AppEngSlot) slot).getX() : slot.xDisplayPosition;
+        return new int[] { x, slot.yDisplayPosition };
+    }
+
+    private static void placeNativeSlot(Slot slot, int[] origin, int dx, int dy) {
+        if (isHiddenAeReturnIcon(slot, origin)) {
+            slot.xDisplayPosition = origin[0];
+            slot.yDisplayPosition = origin[1];
+            return;
+        }
+        slot.xDisplayPosition = isAePatternResult(slot) && !slot.func_111238_b() ? -9000 : origin[0] + dx;
+        slot.yDisplayPosition = origin[1] + dy;
     }
 
     private boolean nativeSlotArtwork() {
@@ -1035,7 +1082,7 @@ public final class NativeInventoryPanel extends Gui {
 
     public void refreshNativeMachinePositions(int start, int end) {
         for (Slot slot : machineSlots) if (slot.slotNumber >= start && slot.slotNumber < end)
-            nativePositions.put(slot, new int[] { slot.xDisplayPosition, slot.yDisplayPosition });
+            nativePositions.put(slot, captureNativePosition(slot));
         positionMachineSlots();
     }
 
@@ -1045,11 +1092,7 @@ public final class NativeInventoryPanel extends Gui {
      */
     private void drawDetachedAeBackground(Runnable nativeDraw) {
         NativeInventoryPanel previous = drawingBackground;
-        for (Slot slot : machineSlots) {
-            int[] origin = nativePositions.get(slot);
-            slot.xDisplayPosition = origin[0];
-            slot.yDisplayPosition = origin[1];
-        }
+        for (Slot slot : machineSlots) placeNativeSlot(slot, nativePositions.get(slot), 0, 0);
         drawingBackground = this;
         try {
             nativeDraw.run();
@@ -1078,11 +1121,12 @@ public final class NativeInventoryPanel extends Gui {
             access.dynamicinventory$bounds(w, h, x, y);
             GL11.glPopMatrix();
         }
-        if (chestLayout != null) Minecraft.getMinecraft().fontRenderer.drawString(
-            net.minecraft.client.resources.I18n.format("container.inventory"),
-            playerX + 8,
-            playerY + 4,
-            InventoryGuiTheme.get().label);
+        if (chestLayout != null || hasBackpackCaption() && (floating == null || !floating.detached()))
+            Minecraft.getMinecraft().fontRenderer.drawString(
+                net.minecraft.client.resources.I18n.format("container.inventory"),
+                playerX + (chestLayout != null || floating == null ? 8 : 24),
+                playerY + 4,
+                InventoryGuiTheme.get().label);
         if (floating != null) {
             GL11.glPushMatrix();
             try {
@@ -1092,6 +1136,24 @@ public final class NativeInventoryPanel extends Gui {
                 GL11.glPopMatrix();
             }
         }
+    }
+
+    private boolean hasBackpackCaption() {
+        String screen = gui.getClass()
+            .getName();
+        return screen.equals("de.eydamos.backpack.gui.GuiBackpack")
+            || screen.equals("de.eydamos.backpack.gui.GuiWorkbenchBackpack");
+    }
+
+    public static int nativeTitleColor(int x, int y, int color) {
+        NativeInventoryPanel panel = drawingForeground;
+        if (panel != null && x == 8
+            && y == 6
+            && panel.gui.getClass()
+                .getName()
+                .equals("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel"))
+            return InventoryGuiTheme.get().label;
+        return color;
     }
 
     /** Move only the native player-inventory caption, leaving all machine/chest text in its native section. */

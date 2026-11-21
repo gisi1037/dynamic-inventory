@@ -31,8 +31,8 @@ The in-game editor adjusts presentation, not item ownership or compatibility rul
 
 ## Download and install
 
-The current testing release is [0.8.0-alpha.3](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.3).
-Install **`dynamicinventory-0.8.0-alpha.3.jar`** in the `mods` folder on both client
+The current testing release is [0.8.0-alpha.4](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.4).
+Install **`dynamicinventory-0.8.0-alpha.4.jar`** in the `mods` folder on both client
 and server, replacing any older Dynamic Inventory JAR. The `-dev` and `-sources`
 JARs are developer downloads; do not install those in Minecraft. Back up your save
 and try this experimental release in a disposable world first.

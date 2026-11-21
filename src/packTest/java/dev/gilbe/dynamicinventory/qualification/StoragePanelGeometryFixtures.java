@@ -32,6 +32,18 @@ public final class StoragePanelGeometryFixtures {
         check(
             StoragePanelGeometry.of("net.minecraft.client.gui.inventory.GuiChest", 176, 80, 70, 27) == null,
             "unrelated native screens retain their geometry");
+        StoragePanelGeometry barrel = StoragePanelGeometry
+            .of("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel", 184, 80, 69, 27);
+        check(barrel.left == 0 && barrel.right == 176, "Barrel frame matches the actual 176px texture");
+        for (String type : new String[] { "FocalManipulator", "Thaumatorium", "AlchemyFurnace" }) {
+            boolean focal = type.equals("FocalManipulator");
+            int band = focal ? 143 : 76;
+            StoragePanelGeometry geometry = StoragePanelGeometry
+                .of("thaumcraft.client.gui.Gui" + type, 176, focal ? 147 : 80, 64, 1);
+            check(
+                geometry.cropBottom == band && geometry.bottom == band + 6 && geometry.fillBackground,
+                "Thaumcraft artwork retains the workstation and excludes the old inventory frame");
+        }
         for (String type : new String[] { "Churn", "Oven", "Quern", "PamAnimalTrap", "PamFishTrap", "PamApiary",
             "PamGrinder", "PamPresser" }) {
             StoragePanelGeometry machine = StoragePanelGeometry.of("com.pam.harvestcraft.Gui" + type, 176, 80, 69, 3);

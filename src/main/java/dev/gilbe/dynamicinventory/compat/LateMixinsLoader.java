@@ -21,6 +21,29 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         // Subpackages organize integrations; these guards still control whether
         // their mixins load. Moving a class must never change its side/mod guard.
         List<String> mixins = new ArrayList<>();
+        if (PackCompatibility.enabled() && loadedMods.contains("adventurebackpack")
+            && OptionalInventoryAdapters.reviewedVersion("adventurebackpack")) {
+            mixins.add("backpack.AdventureTransferMixin");
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient()) mixins.add("backpack.AdventureGuiMixin");
+        }
+        if (PackCompatibility.enabled() && loadedMods.contains("Backpack")
+            && OptionalInventoryAdapters.reviewedVersion("Backpack")) {
+            mixins.add("backpack.BackpackTransferMixin");
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient()) mixins.addAll(Arrays.asList("backpack.BackpackGuiMixin", "backpack.BackpackLabelMixin"));
+        }
+        if (PackCompatibility.enabled() && loadedMods.contains("Thaumcraft")
+            && OptionalInventoryAdapters.reviewedVersion("Thaumcraft")) {
+            mixins.add("thaumcraft.WorkbenchTransferMixin");
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient())
+                mixins.addAll(
+                    Arrays.asList(
+                        "thaumcraft.NativeControlMixin",
+                        "thaumcraft.ResearchOverlayMixin",
+                        "thaumcraft.FocalOverlayMixin"));
+        }
         if (PackCompatibility.enabled() && loadedMods.contains("EnderIO")
             && loadedMods.contains("endercore")
             && OptionalInventoryAdapters.reviewedVersion("EnderIO")
@@ -38,6 +61,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     Arrays.asList(
                         "enderio.EnderGuiMixin",
                         "enderio.ConduitGuiMixin",
+                        "enderio.ConduitTabOriginMixin",
                         "enderio.ConduitSlotVisibilityMixin"));
         }
         if (PackCompatibility.enabled() && loadedMods.contains("ExtraUtilities")
@@ -83,6 +107,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                         "appliedenergistics2.AeGuiInputMixin",
                         "appliedenergistics2.AeSecurityGuiMixin",
                         "appliedenergistics2.AeCellWorkbenchGuiMixin",
+                        "appliedenergistics2.AeStorageBusGuiMixin",
+                        "appliedenergistics2.AeLevelEmitterGuiMixin",
                         "appliedenergistics2.AeTerminalOriginMixin",
                         "appliedenergistics2.AePatternTerminalGuiMixin",
                         "appliedenergistics2.AeInterfaceTerminalGuiMixin",
@@ -90,6 +116,45 @@ public final class LateMixinsLoader implements ILateMixinLoader {
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient() && loadedMods.contains("NotEnoughItems"))
                 mixins.add("appliedenergistics2.AeTerminalRecipeMixin");
+            if (loadedMods.contains("ae2fc") && OptionalInventoryAdapters.reviewedVersion("ae2fc")) {
+                mixins.addAll(
+                    Arrays.asList(
+                        "appliedenergistics2.FluidContainerSyncMixin",
+                        "appliedenergistics2.FluidOpeningActionsMixin"));
+                if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                    .isClient())
+                    mixins.addAll(
+                        Arrays.asList(
+                            "appliedenergistics2.FluidGuiOriginMixin",
+                            "appliedenergistics2.FluidGuiResizeMixin",
+                            "appliedenergistics2.FluidInputMixin",
+                            "appliedenergistics2.FluidKeyMixin",
+                            "appliedenergistics2.FluidLevelTerminalMixin",
+                            "appliedenergistics2.FluidMagnetFilterMixin",
+                            "appliedenergistics2.FluidLevelMaintainerMixin",
+                            "appliedenergistics2.FluidTextFieldMixin",
+                            "appliedenergistics2.FluidLineFieldMixin"));
+            }
+        }
+        if (PackCompatibility.enabled() && loadedMods.contains("DraconicEvolution")
+            && OptionalInventoryAdapters.reviewedVersion("DraconicEvolution")) {
+            mixins.addAll(
+                Arrays.asList(
+                    "draconic.ToolContainerMixin",
+                    "draconic.ReactorContainerMixin",
+                    "draconic.InhibitorContainerMixin",
+                    "draconic.UpgradeContainerMixin"));
+            if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                .isClient())
+                mixins.addAll(
+                    Arrays.asList(
+                        "draconic.DetectorGuiMixin",
+                        "draconic.RefreshingGuiMixin",
+                        "draconic.GuiOriginMixin",
+                        "draconic.ReactorGuiMixin",
+                        "draconic.EmbeddedInventoryArtworkMixin",
+                        "draconic.ToolConfigGuiMixin",
+                        "draconic.UpgradeGuiMixin"));
         }
         if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.addAll(
             Arrays.asList(
@@ -117,6 +182,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
             Arrays.asList(
                 "modularui2.Mui2PlayerBindingMixin",
                 "modularui2.Mui2PlayerWidgetsMixin",
+                "modularui2.Mui2PlayerSlotTypeMixin",
                 "modularui2.Mui2PlayerLookupMixin"));
         if (loadedMods.contains("modularui"))
             mixins.addAll(Arrays.asList("modularui.Mui1PlayerWidgetsMixin", "modularui.Mui1PlayerTransferMixin"));

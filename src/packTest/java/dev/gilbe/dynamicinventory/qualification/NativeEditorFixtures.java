@@ -18,21 +18,10 @@ public final class NativeEditorFixtures {
     private NativeEditorFixtures() {}
 
     public static void main(String[] args) {
+        TerminalPanelSpaceFixtures.main(args);
         PlayerPanelFixtures.run();
         ResourcePackPanelFixtures.run();
         AutomaticScrollFixtures.main(args);
-        check(
-            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(373, 153, 8, true, 3, 6) == 3,
-            "Small terminal reserves its fixed browser rows");
-        check(
-            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(373, 153, 8, false, 3, 6) == 6,
-            "Tall terminal minimum takes priority over full player inventory");
-        check(
-            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(504, 153, 8, false, 3, 6) == 11,
-            "Tall terminal fills remaining space once all player rows fit");
-        check(
-            dev.gilbe.dynamicinventory.client.TerminalViewportLayout.terminalRows(243, 153, 8, false, 3, 6) == 4,
-            "Short viewport relaxes browser minimum before hiding the last player row");
         check(NativeUiLayout.DEFAULT.getPresentationRevision() == 1, "default presentation revision");
         check(
             NativeUiLayout.builder()
@@ -362,6 +351,31 @@ public final class NativeEditorFixtures {
                 AppliedEnergisticsBackground.hasSidePanels(name)
                     && NativeSectionGeometry.playerBoundary(165, 0, bottom, 0) > bottom,
                 "zero section gap still reserves virtual/optional content for " + gui);
+        }
+        String meInterface = "appeng.client.gui.implementations.GuiInterface";
+        // Native Interface slots start at y=108: icons end at 124 and the lower bevel ends at 125.
+        // Its old player grid starts at 129; the legacy header crop is 125. A 127px frame's
+        // four-pixel inner scissor ended at 123, cutting both artwork and bottom clearance.
+        int interfaceHeight = AppliedEnergisticsBackground.detachedHeaderHeight(meInterface, 125);
+        check(interfaceHeight == 129, "ME Interface reserves the missing two pixels below its pattern row");
+        for (int scale = 1; scale <= 4; scale++) for (int crop = 0; crop <= 8; crop++) {
+            int[] sheet = AppliedEnergisticsBackground
+                .clip(meInterface, 30, 20, 246, 211, 125, crop, 30, 20, 0, 0, 177, 211);
+            int nativeBottom = sheet[1] + sheet[5] - 20;
+            int visibleBottom = Math.min(interfaceHeight - 4, nativeBottom);
+            check(visibleBottom * scale >= 125 * scale, "Pattern icons and lower bevel fit every crop/GUI scale");
+            check(nativeBottom < 128, "Old player-slot artwork remains excluded");
+        }
+        check(
+            AppliedEnergisticsBackground.detachedHeaderHeight(meInterface, 140) == 142,
+            "A taller native Interface header is retained");
+        for (String gui : new String[] { "CellWorkbench", "AdvancedInscriber", "InterfaceTerminal",
+            "CraftingDiagnosticTerminal" }) {
+            String name = "appeng.client.gui.implementations.Gui" + gui;
+            check(
+                AppliedEnergisticsBackground.detachedHeaderHeight(name, 165)
+                    == AppliedEnergisticsBackground.headerBottom(name, 165) + 2,
+                "Other reviewed AE2 frame heights remain unchanged: " + gui);
         }
         for (int field : new int[] { 18, 19 }) {
             check(

@@ -97,7 +97,8 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
                     "minecraft.VanillaMerchantGuiMixin",
                     "minecraft.VanillaEnchantmentGuiMixin",
                     "minecraft.VanillaBeaconGuiMixin",
-                    "minecraft.PickBlockSlotMixin"));
+                    "minecraft.PickBlockSlotMixin",
+                    "minecraft.ExpandedPickBlockMixin"));
             if (nei) mixins.add("nei.NeiContainerWheelMixin");
         }
         return mixins;

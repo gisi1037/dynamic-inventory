@@ -16,11 +16,14 @@ public final class AppliedEnergisticsWirelessWidgets {
     public static void position(GuiContainer gui, int left, int top, int bottom) {
         boolean interfaceTerminal = gui.getClass()
             .getName()
-            .equals("appeng.client.gui.implementations.GuiInterfaceTerminal");
+            .equals("appeng.client.gui.implementations.GuiInterfaceTerminal")
+            || AppliedEnergisticsBackground.isLevelTerminal(
+                gui.getClass()
+                    .getName());
         if (!(gui instanceof AppliedEnergisticsBrowserAccess) && !interfaceTerminal) return;
         ContainerPanelAccess access = (ContainerPanelAccess) gui;
         List<GuiButton> magnet = new ArrayList<>(), filter = new ArrayList<>(), restock = new ArrayList<>(),
-            modes = new ArrayList<>();
+            modes = new ArrayList<>(), overflow = new ArrayList<>();
         int outer = left - 36, next = top + 8, primaryNext = top + 8;
         for (GuiButton button : access.dynamicinventory$buttons()) {
             String setting = setting(button, "getSetting");
@@ -29,14 +32,21 @@ public final class AppliedEnergisticsWirelessWidgets {
             } else if ("RESTOCK".equals(setting)) restock.add(button);
             else if (isMode(setting)) modes.add(button);
             else if (button.visible) {
+                if ((button.xPosition == outer || button.xPosition == left - 18)
+                    && button.yPosition + button.height > bottom) {
+                    overflow.add(button);
+                    continue;
+                }
                 if (button.xPosition == outer)
                     next = Math.max(next, button.yPosition + Math.max(20, button.height + 4));
                 if (button.xPosition == left - 18)
                     primaryNext = Math.max(primaryNext, button.yPosition + Math.max(20, button.height + 4));
             }
         }
-        if (magnet.isEmpty() && filter.isEmpty() && restock.isEmpty() && modes.isEmpty()) return;
         List<List<GuiButton>> outerRows = new ArrayList<>();
+        // Short terminal modes can leave native controls below the browser too.
+        overflow.sort(java.util.Comparator.comparingInt(button -> button.yPosition));
+        for (GuiButton button : overflow) outerRows.add(java.util.Collections.singletonList(button));
         for (List<GuiButton> row : java.util.Arrays.asList(magnet, filter, restock))
             if (!row.isEmpty()) outerRows.add(row);
         long visibleModes = modes.stream()

@@ -78,6 +78,10 @@ public final class Mui2ApiFixtures {
                 FakePlayerFactory.getMinecraft(
                     MinecraftServer.getServer()
                         .worldServerForDimension(0)));
+            completedChecks += PlayerPanelArmorFixtures.run(
+                FakePlayerFactory.getMinecraft(
+                    MinecraftServer.getServer()
+                        .worldServerForDimension(0)));
             AttachedChestLayoutFixtures.run();
             completedChecks += Mui2CompactMachineHostFixtures.run();
             writeReport("transfer-regression", true, null);
@@ -331,10 +335,31 @@ public final class Mui2ApiFixtures {
     }
 
     private static void layout(ModularPanel panel) {
+        layout(panel, 1000);
+    }
+
+    private static void assertTitleClearance() {
+        int screenHeight = 342;
+        ModularPanel panel = ModularPanel.defaultPanel("responsive_title", 176, 184);
+        Widget<?> title = new Widget<>().size(176, 24)
+            .bottomRel(1);
+        panel.child(title)
+            .child(createInventory(0, null));
+        layout(panel, screenHeight);
+        ResponsiveInventoryPanel responsive = new ResponsiveInventoryPanel();
+        responsive.resizePanels(Collections.singletonList(panel), screenHeight);
+        layout(panel, screenHeight);
+        check(title.getArea().y >= 20, "expanded player inventory leaves room for the title above the machine");
+        check(
+            !responsive.resizePanels(Collections.singletonList(panel), screenHeight),
+            "title clearance does not trigger repeated resizes");
+    }
+
+    private static void layout(ModularPanel panel, int screenHeight) {
         // Exercise MUI2's actual size/position calculations without initializing a screen or touching GL.
         StaticResizer root = new StaticResizer() {
 
-            private final Area area = new Area(0, 0, 1000, 1000);
+            private final Area area = new Area(0, 0, 1000, screenHeight);
 
             @Override
             public Area getArea() {
@@ -453,6 +478,7 @@ public final class Mui2ApiFixtures {
                     assertFactory(1);
                     assertFactory(2);
                     assertResponsiveBranches();
+                    assertTitleClearance();
                     completedChecks += Mui2CompactMachineHostFixtures.run();
                     assertBinding(player, player.inventory.currentItem);
                     // Pinned GT toolbox callbacks compare against raw 36 when held in Backhand.

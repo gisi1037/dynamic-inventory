@@ -17,7 +17,10 @@ public abstract class NativeInventoryLabelMixin {
     private void dynamicinventory$playerCaption(String text, int x, int y, int color,
         CallbackInfoReturnable<Integer> ci) {
         int[] position = NativeInventoryPanel.playerLabel(text, x, y);
+        int nativeColor = NativeInventoryPanel.nativeTitleColor(x, y, color);
         if (position != null)
-            ci.setReturnValue(((FontRenderer) (Object) this).drawString(text, position[0], position[1], color));
+            ci.setReturnValue(((FontRenderer) (Object) this).drawString(text, position[0], position[1], nativeColor));
+        else if (nativeColor != color)
+            ci.setReturnValue(((FontRenderer) (Object) this).drawString(text, x, y, nativeColor, false));
     }
 }

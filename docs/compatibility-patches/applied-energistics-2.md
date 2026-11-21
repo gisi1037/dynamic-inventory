@@ -7,6 +7,32 @@ remain pending.
 Java owner: `AppliedEnergisticsCompatibility`, with shared seams in `compat/ae2`
 and `mixins/appliedenergistics2`.
 
+## Bus and Fluid Crafting expansion (GTNH 2.9.0)
+
+The reviewed AE2 `rv3-beta-1095-GTNH` integration now includes Storage Bus,
+Import/Export Bus and Level Emitter hosts, bringing the core set to 30 exact
+container/GUI pairs. Item and fluid buses share the native bus screens. Upgrade
+and borrowed Network Tool frames retain native slots and owner locks.
+
+Optional AE2 Fluid Crafting `1.5.116-gtnh` adds 12 exact container/GUI pairs through
+`Ae2FluidCraftingCompatibility`: Fluid Auto Filler, Fluid Interface, Fluid Packet
+Decoder, Fluid Pattern Encoder, Ingredient Buffer, Large Ingredient Buffer,
+Level Maintainer, Level Terminal, wireless Level Terminal, Magnet Filter,
+OpenComputers Pattern Editor and Super Stock Replenisher. The fluid Level Emitter
+proxy uses the core Level Emitter binding. Universal terminal modes that reuse
+core AE2 screens retain their existing support.
+
+These hosts use modular attached/detached panels and native AE2 transfer rules.
+Cached text fields follow the moved native header; Level Terminal sizing budgets
+for the actual player panel. Native Small/Tall changes rebuild the decorator.
+Addon synchronization and control packets respect the inventory-opening handshake.
+
+Validation on 2026-11-08: build passed; an isolated client loaded all 42 registered
+class pairs and verified 24 cached text-field moves. A disposable server verified
+81 ordinary slots in nine addon machine containers and all three bus types,
+including Network Tools locked in expanded player slots. Installed visual and
+gameplay review of this new batch remains pending.
+
 ## Modular panels (nightly 803)
 
 The pinned `rv3-beta-1093-GTNH` integration enables shared modular inventory panels
@@ -123,7 +149,10 @@ Split-frame screens use presentation revision 2, so older editor geometry is not
 reapplied to the newly separated sections. Other AE2 layouts retain revision 1.
 Security's encoder now has its own frame, retaining native input/output slots and
 arrow artwork. The ME Interface's frame fill also covers the one-pixel boundary
-below its native texture, avoiding a transparent horizontal seam.
+below its native texture, avoiding a transparent horizontal seam. Its detached
+frame also reserves the final pattern row's lower bevel inside the four-pixel
+frame crop, so the bottom slot artwork is fully visible without exposing the
+old player grid.
 
 Native transfer callbacks retain ownership of their sources; there is no retry
 after a native action. On the reviewed 2.9.0 Interface Terminal, pattern extraction's
@@ -190,7 +219,11 @@ No package-wide or AEBaseContainer subclass registration is used.
 
 Monitorable terminals retain nine columns and AE2's own scrollbar. Small mode keeps
 a fixed browser count; Tall reserves its minimum, fits player rows, then uses spare
-height for the browser. Interface Terminal follows the same fitting policy, while
+height for the browser. Detached mode reserves Main's saved outer height and
+wrapped-hotbar minimum instead of treating all storage as a nine-column player
+grid. Reopening a resized or wider Main therefore releases complete browser rows;
+the attached layout and explicit Small row cap retain their existing policy.
+Interface Terminal follows the same fitting policy, while
 the diagnostic list retains five rows. View cells remain separate side panels.
 Native search, sorting, pins, network actions, virtual slot
 indices, crafting/encoding packets and item-backed locks remain AE2's responsibility.
@@ -220,13 +253,12 @@ not exercise terminal gameplay or confirm visual placement.
 ## Terminal height and transfers
 
 Client config `dynamicinventory-client.cfg`, category `ae2Terminal`, provides
-`smallRows` (default 3) and `tallMinimumRows` (default 6). Restart the client
-after editing the file externally, or use the player configuration menu's
-Inventory layout → AE2 terminals → Small rows / Tall minimum controls
-and reopen the terminal without restarting. Both modes preserve nine columns. Player storage
-uses a scrollbar if the selected terminal rows and full storage cannot fit.
-On exceptionally short windows the terminal minimum is reduced to preserve at
-least one player row, subject to AE2's three-row browser minimum. Top/bottom
+`smallRows` (default 3), `tallRows` (default 6), and `fullRows` (default 6).
+The old `tallMinimumRows` setting seeds Tall and Full on upgrade. Set each
+mode's row count in Inventory layout → AE2 terminals, then reopen the terminal.
+All three modes preserve nine columns. Player storage scrolls when necessary.
+Short windows reduce the terminal row count to leave room for at least one
+player row, subject to AE2's three-row browser minimum. Top/bottom
 reserves are at least 8/28 scaled pixels to leave NEI's search bar accessible.
 The default section gap trims six pixels of spare native label padding.
 

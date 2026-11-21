@@ -18,14 +18,13 @@ import appeng.core.AEConfig;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.client.NativeUiAnchors;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
-import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.NativeScreenMargins;
-import dev.gilbe.dynamicinventory.client.TerminalViewportLayout;
+import dev.gilbe.dynamicinventory.client.TerminalPanelSpace;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBrowserAccess;
 
-/** Fit the native browser around the expanded player band, preserving AE2's Small/Tall row cap. */
+/** Fit the configured terminal row count around the expanded player band. */
 @Mixin(targets = "appeng.client.gui.implementations.GuiMEMonitorable", remap = false)
 public abstract class AeSecurityGuiMixin implements NativeUiAnchors, AppliedEnergisticsBrowserAccess {
 
@@ -72,14 +71,13 @@ public abstract class AeSecurityGuiMixin implements NativeUiAnchors, AppliedEner
             .availableHeight(gui.height, Math.max(8, patch.value(14)), Math.max(28, patch.value(15))) - patch.value(4);
         // 22px native boundary + 42px player chrome + the panel fitter's 8px allowance.
         cir.setReturnValue(
-            TerminalViewportLayout.terminalRows(
+            TerminalPanelSpace.rows(
+                gui,
+                patch,
                 available,
                 72 + reservedSpace + Math.max(0, patch.value(11) - 6),
-                NativeLayoutPatches.requestedRows(gui, patch, 9),
-                AEConfig.instance.getConfigManager()
-                    .getSetting(Settings.TERMINAL_STYLE) == TerminalStyle.SMALL,
-                InventoryViewSettings.terminalSmallRows,
-                InventoryViewSettings.terminalTallMinimumRows));
+                (TerminalStyle) AEConfig.instance.getConfigManager()
+                    .getSetting(Settings.TERMINAL_STYLE)));
     }
 
     @Override
