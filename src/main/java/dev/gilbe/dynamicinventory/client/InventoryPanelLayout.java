@@ -27,6 +27,21 @@ public final class InventoryPanelLayout {
         hotbarY = gridY + rows * CELL + 4;
     }
 
+    private InventoryPanelLayout(InventoryPanelLayout layout, int offsetY) {
+        bounds = layout.bounds.translatedVertically(offsetY);
+        columns = layout.columns;
+        rows = layout.rows;
+        gridX = layout.gridX;
+        gridY = layout.gridY + offsetY;
+        hotbarX = layout.hotbarX;
+        hotbarY = layout.hotbarY + offsetY;
+        hotbarColumns = layout.hotbarColumns;
+    }
+
+    InventoryPanelLayout translatedVertically(int offset) {
+        return new InventoryPanelLayout(this, offset);
+    }
+
     public int maxScroll(int storage) {
         return Math.max(0, (storage + columns - 1) / columns - rows);
     }
@@ -339,6 +354,10 @@ public final class InventoryPanelLayout {
 
         public int bottom() {
             return y + height;
+        }
+
+        public Rect translatedVertically(int offset) {
+            return new Rect(x, y + offset, width, height);
         }
 
         public boolean contains(int px, int py) {

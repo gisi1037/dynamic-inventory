@@ -39,6 +39,16 @@ public class ClientProxy extends CommonProxy {
     }
 
     @Override
+    public void receiveAePins(dev.gilbe.dynamicinventory.network.AePinsChannel.Snapshot snapshot) {
+        dev.gilbe.dynamicinventory.client.AePinnedPanel.receive(snapshot);
+    }
+
+    @Override
+    public void receiveAePinsTransfer(long sequence) {
+        dev.gilbe.dynamicinventory.client.AePinnedPanel.receiveTransfer(sequence);
+    }
+
+    @Override
     public void openInventoryController() {
         Minecraft client = Minecraft.getMinecraft();
         if (client.currentScreen == null && client.thePlayer != null
@@ -84,6 +94,13 @@ public class ClientProxy extends CommonProxy {
                 .getResourceManager());
         MinecraftForge.EVENT_BUS.register(new PlayerInventoryEvents());
         MinecraftForge.EVENT_BUS.register(new dev.gilbe.dynamicinventory.client.PanelSettingsOverlay());
+        if (PackCompatibility.aePinnedPanel()) {
+            var pins = dev.gilbe.dynamicinventory.client.AePinnedPanel.instance();
+            MinecraftForge.EVENT_BUS.register(pins);
+            FMLCommonHandler.instance()
+                .bus()
+                .register(pins);
+        }
         InventoryLayoutEditor editor = new InventoryLayoutEditor();
         MinecraftForge.EVENT_BUS.register(editor);
         FMLCommonHandler.instance()

@@ -168,20 +168,26 @@ public final class ContainerInventoryRegion implements PlayerInventoryBinding {
     public int[] destinations(int start, int end, boolean reverse) {
         boolean storage = false;
         boolean hotbar = false;
-        if (start >= end || start < 0 || end > nativeSlotCount) return null;
+        if (start >= end || start < 0 || end > container.inventorySlots.size()) return null;
+        boolean expandedRange = end > nativeSlotCount;
+        if (expandedRange && end != container.inventorySlots.size()) return null;
         for (int id = start; id < end; id++) {
             int logical = logical(id);
             if (logical < 0) return null;
             storage |= logical >= InventoryLayout.HOTBAR_SLOTS;
             hotbar |= logical < InventoryLayout.HOTBAR_SLOTS;
         }
-        if (end - start != (storage ? 27 : 0) + (hotbar ? 9 : 0)) return null;
+        // Vanilla chests end at the live slot count, which already includes our appended slots.
+        int storageCount = expandedRange ? ids.length - InventoryLayout.HOTBAR_SLOTS : 27;
+        if (end - start != (storage ? storageCount : 0) + (hotbar ? 9 : 0)) return null;
         // A region owns this snapshot; never size from a newer process-wide capacity.
         int[] result = new int[(storage ? ids.length - InventoryLayout.HOTBAR_SLOTS : 0) + (hotbar ? 9 : 0)];
         int n = 0;
         if (storage) for (int i = 9; i < ids.length; i++) result[n++] = ids[i];
         if (hotbar) for (int i = 0; i < 9; i++) result[n++] = ids[i];
-        if (reverse) for (int i = 0; i < result.length / 2; i++) {
+        // Vanilla reverses chest destinations to reach the hotbar, which also traverses storage
+        // from the bottom. Expanded storage always fills in its visible top-to-bottom order.
+        if (reverse && !storage) for (int i = 0; i < result.length / 2; i++) {
             int other = result.length - 1 - i;
             int swap = result[i];
             result[i] = result[other];

@@ -66,6 +66,11 @@ public abstract class Mui2InventoryResizeMixin implements Mui2PanelAccess {
         dynamicinventory$panels.drawBackground((ModularScreen) (Object) this);
     }
 
+    @Inject(method = "drawScreen", at = @At("RETURN"))
+    private void dynamicinventory$drawPins(CallbackInfo ci) {
+        dynamicinventory$panels.drawPins((ModularScreen) (Object) this);
+    }
+
     @Inject(method = "drawForeground", at = @At("RETURN"))
     private void dynamicinventory$panelControls(CallbackInfo ci) {
         dynamicinventory$panels.drawForeground((ModularScreen) (Object) this);

@@ -49,6 +49,8 @@ public final class Mui2DetachedPanels {
     private final List<ItemSlot> widgets = new ArrayList<>();
     private int[] slotIds;
     private int screenWidth, screenHeight;
+    private int verticalShift;
+    private boolean centered;
     private boolean updating;
 
     /** Undo only presentation overrides before the framework runs its own layout or update. */
@@ -81,6 +83,8 @@ public final class Mui2DetachedPanels {
         host = null;
         widgets.clear();
         slotIds = null;
+        verticalShift = 0;
+        centered = false;
     }
 
     /** Called after native resizing, before hover calculation, rendering and mouse dispatch. */
@@ -130,12 +134,26 @@ public final class Mui2DetachedPanels {
             }
             if (controller.displayedProfile(dev.gilbe.dynamicinventory.client.PlayerPanelSet.MAIN).detached)
                 compactMachineSiblings();
-            Rect machine = machineBounds();
-            controller.hostBounds(machine, attachedBounds(), auxiliary(screen));
-            controller.attachedControl(controlBounds(screen, machine));
+            Rect machine = machineBounds(), attached = attachedBounds();
+            List<Rect> auxiliary = auxiliary(screen);
+            controller.hostBounds(
+                machine.translatedVertically(verticalShift),
+                attached.translatedVertically(verticalShift),
+                auxiliary);
             boolean detached = controller.detached();
+            if (detached && !centered) {
+                controller.centerFrameworkLayout(owner.getArea().height, ResponsiveInventoryPanel.topOverhang(owner));
+                verticalShift = controller.machineBounds().y - machine.y;
+                centered = true;
+            } else if (!detached && centered) {
+                centered = false;
+                verticalShift = 0;
+                controller.hostBounds(machine, attached, auxiliary);
+            }
             group.setDetachedPresentation(detached);
             if (detached) {
+                if (verticalShift != 0) translateOwner(verticalShift);
+                machine = controller.machineBounds();
                 remember(owner);
                 owner.getArea().height = machine.height;
                 for (IWidget ancestor = group.getParent(); ancestor != null
@@ -147,6 +165,12 @@ public final class Mui2DetachedPanels {
                     }
                 }
                 for (IWidget label : inventoryLabels()) hide(label);
+            }
+            screen.getScreenWrapper()
+                .updateGuiArea(
+                    screen.getMainPanel()
+                        .getArea());
+            if (detached) {
                 // Native slots receive display coordinates only; their IDs and enabled state are untouched.
                 controller.position();
                 dev.gilbe.dynamicinventory.client.HotbarBankPanel.layout(host);
@@ -159,12 +183,21 @@ public final class Mui2DetachedPanels {
                         access.dynamicinventory$top() + slot.yDisplayPosition - 1);
                 }
             }
-            screen.getScreenWrapper()
-                .updateGuiArea(
-                    screen.getMainPanel()
-                        .getArea());
+            controller.attachedControl(controlBounds(screen, machine));
         } finally {
             updating = false;
+        }
+    }
+
+    private void translateOwner(int by) {
+        ArrayDeque<IWidget> pending = new ArrayDeque<>();
+        pending.add(owner);
+        while (!pending.isEmpty()) {
+            IWidget widget = pending.removeFirst();
+            remember(widget);
+            widget.getArea().y += by;
+            if (widget == owner) widget.getArea().ry += by;
+            pending.addAll(widget.getChildren());
         }
     }
 
@@ -386,7 +419,15 @@ public final class Mui2DetachedPanels {
                     .getAbsMouseY(),
                 screen.getContext()
                     .getPartialTicks());
-        } else controller.drawControl(Mui2PanelFrame.textColor(owner));
+        } else {
+            controller.drawControl(Mui2PanelFrame.textColor(owner));
+        }
+    }
+
+    public void drawPins(ModularScreen screen) {
+        if (controller == null || !dev.gilbe.dynamicinventory.compat.PackCompatibility.aePinnedPanel()) return;
+        var context = screen.getContext();
+        dev.gilbe.dynamicinventory.client.AePinnedPanel.draw(host, context.getAbsMouseX(), context.getAbsMouseY());
     }
 
     public static String profileKey(ModularScreen screen) {

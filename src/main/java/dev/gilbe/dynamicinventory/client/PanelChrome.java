@@ -104,16 +104,18 @@ public final class PanelChrome extends Gui {
     }
 
     public static void grips(Rect bounds, int hovered) {
+        for (int corner : new int[] { 5, 6, 9, 10 }) grip(bounds, corner, hovered == corner);
+    }
+
+    public static void grip(Rect bounds, int corner, boolean hovered) {
         InventoryGuiTheme theme = InventoryGuiTheme.get();
-        for (int corner : new int[] { 5, 6, 9, 10 }) {
-            boolean right = (corner & 2) != 0, bottom = (corner & 8) != 0;
-            int x = right ? bounds.right() - 3 : bounds.x + 2;
-            int y = bottom ? bounds.bottom() - 3 : bounds.y + 2;
-            for (int step = 0; step < 3; step++) {
-                int px = x + (right ? -step : step), py = y + (bottom ? step - 2 : 2 - step);
-                drawRect(px, py, px + 1, py + 1, hovered == corner ? theme.panelHighlight : theme.panelShadow);
-                drawRect(px + (right ? -2 : 2), py, px + (right ? -2 : 2) + 1, py + 1, theme.panelShadow);
-            }
+        boolean right = (corner & 2) != 0, bottom = (corner & 8) != 0;
+        int x = right ? bounds.right() - 3 : bounds.x + 2;
+        int y = bottom ? bounds.bottom() - 3 : bounds.y + 2;
+        for (int step = 0; step < 3; step++) {
+            int px = x + (right ? -step : step), py = y + (bottom ? step - 2 : 2 - step);
+            drawRect(px, py, px + 1, py + 1, hovered ? theme.panelHighlight : theme.panelShadow);
+            drawRect(px + (right ? -2 : 2), py, px + (right ? -2 : 2) + 1, py + 1, theme.panelShadow);
         }
     }
 }

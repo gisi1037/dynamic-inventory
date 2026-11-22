@@ -22,7 +22,8 @@ public enum IntegrationProfile {
     private static final Properties PINS = loadPins();
     // Freeze once, before inventory classes load. Changing a system property mid-session
     // must not silently switch the canonical offhand/storage layout.
-    private static final IntegrationProfile CURRENT = named(System.getProperty("dynamicinventory.profile", "isolated"));
+    private static final IntegrationProfile CURRENT = named(
+        System.getProperty("dynamicinventory.profile", PINS.getProperty("default.profile", "isolated")));
     private final String name;
     private final String prefix;
     private final boolean backhand;

@@ -23,5 +23,9 @@ public interface ContainerPanelAccess {
 
     boolean dynamicinventory$draggingItems();
 
+    net.minecraft.inventory.Slot dynamicinventory$hoveredSlot();
+
+    void dynamicinventory$itemTooltip(net.minecraft.item.ItemStack stack, int x, int y);
+
     void dynamicinventory$bounds(int width, int height, int left, int top);
 }

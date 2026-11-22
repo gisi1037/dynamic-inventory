@@ -1,6 +1,10 @@
 package dev.gilbe.dynamicinventory.compat;
 
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.inventory.ContainerRepair;
 import net.minecraft.item.ItemStack;
+import net.minecraft.world.World;
 
 import dev.gilbe.dynamicinventory.api.InventoryTransfers;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
@@ -71,6 +75,33 @@ public final class EnderIoCompatibility {
             "crazypants.enderio.conduit.gui.GuiExternalConnection" } };
 
     private EnderIoCompatibility() {}
+
+    public static ContainerRepair anvilClientContainer(InventoryPlayer inventory, World world, int x, int y, int z,
+        EntityPlayer player) {
+        // Ender IO uses GuiRepair on the client, but advertises ContainerDarkSteelAnvil on the server.
+        if (PackCompatibility.enabled() && world.getBlock(x, y, z)
+            .getClass()
+            .getName()
+            .equals("crazypants.enderio.block.BlockDarkSteelAnvil")
+            && OptionalInventoryAdapters.reviewedVersion("EnderIO")
+            && OptionalInventoryAdapters.reviewedVersion("endercore")) {
+            try {
+                return Class.forName("crazypants.enderio.block.ContainerDarkSteelAnvil")
+                    .asSubclass(ContainerRepair.class)
+                    .getConstructor(
+                        InventoryPlayer.class,
+                        World.class,
+                        int.class,
+                        int.class,
+                        int.class,
+                        EntityPlayer.class)
+                    .newInstance(inventory, world, x, y, z, player);
+            } catch (ReflectiveOperationException failure) {
+                throw new IllegalStateException("Cannot construct Ender IO's Dark Steel Anvil container", failure);
+            }
+        }
+        return new ContainerRepair(inventory, world, x, y, z, player);
+    }
 
     public static void registerInventoryAdapters() {
         for (String[] host : HOSTS) InventoryUi.register(

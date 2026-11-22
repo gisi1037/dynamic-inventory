@@ -1,4 +1,5 @@
 param(
+    [switch] $UseDevelopmentVersion,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $GradleArguments
 )
@@ -25,12 +26,28 @@ if ($changesBuildInputs) {
 $javaRuntime = Resolve-JavaRuntime -MinimumMajor 25
 $env:JAVA_HOME = $javaRuntime.Home
 $env:Path = "$(Split-Path -Parent $javaRuntime.Java);$env:Path"
-# A stable local version until the project has its first Git release tag.
-if (-not $env:VERSION) { $env:VERSION = '0.8.0-dev' }
+# Local and hosted installs must agree even when a calling shell supplies an older version.
+$deploymentBuild = $GradleArguments -contains 'writeHostedInventoryArtifact'
+if ($deploymentBuild -or $UseDevelopmentVersion) {
+    $versionPath = Join-Path $projectRoot 'gradle/development-version.txt'
+    $env:VERSION = (Get-Content -LiteralPath $versionPath -Raw).Trim()
+    if ($env:VERSION -cnotmatch '^\d+\.\d+\.\d+-dev\.[1-9]\d*$') {
+        throw "Invalid development build version in $versionPath."
+    }
+    if ($deploymentBuild) { Write-Host "Dynamic Inventory development version: $env:VERSION" }
+} elseif (-not $env:VERSION) {
+    $env:VERSION = '0.8.0-dev'
+}
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
     & .\gradlew.bat @GradleArguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($GradleArguments -contains 'build' -and $deploymentBuild) {
+        $productionJar = (Get-Content -LiteralPath 'build/hosted-inventory-artifact.txt' -Raw).Trim()
+        $hash = (Get-FileHash -LiteralPath $productionJar -Algorithm SHA256).Hash
+        Write-Host "Production JAR: $productionJar"
+        Write-Host "SHA-256: $hash"
+    }
 } finally {
     Pop-Location
 }

@@ -87,6 +87,7 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
                     "minecraft.InventoryEditorInputMixin",
                     "minecraft.NativeInventoryLabelMixin",
                     "minecraft.GuiContainerRegionMixin",
+                    "minecraft.AePinsInventoryRenderMixin",
                     "minecraft.InventoryOpeningClientMixin",
                     "minecraft.InventoryOpeningPredictionMixin",
                     "minecraft.MainInventoryRoutingClientMixin",

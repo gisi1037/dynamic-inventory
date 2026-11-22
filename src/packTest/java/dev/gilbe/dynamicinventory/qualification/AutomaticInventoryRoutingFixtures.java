@@ -143,6 +143,11 @@ public final class AutomaticInventoryRoutingFixtures {
                 "Pickup respects visible machine Main");
             int[] targets = machine.region.destinations(1, 37, false);
             check(targets.length == 11, "Only two Main storage cells and the hotbar are destinations");
+            check(
+                Arrays.equals(targets, machine.region.destinations(1, 37, true))
+                    && Arrays.equals(targets, machine.region.destinations(1, machine.inventorySlots.size(), true))
+                    && targets[0] == machine.region.id(10),
+                "Reversed chest transfer fills Main storage from the top");
             source.setInventorySlotContents(0, new ItemStack(item, 8));
             check(
                 PlayerInventoryTransfers.transferTo(machine, player, 0, targets) != null,

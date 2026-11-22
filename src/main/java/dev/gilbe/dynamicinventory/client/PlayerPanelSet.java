@@ -165,14 +165,16 @@ public final class PlayerPanelSet {
             }
             kept.add(slots);
         }
-        int free = 0;
+        int free = capacity - 1;
         for (int i = 1; i < entries.size(); i++) {
             List<Integer> slots = kept.get(i);
+            int existing = slots.size();
             while (slots.size() < counts[i]) {
-                while (used.contains(free)) free++;
+                while (used.contains(free)) free--;
                 slots.add(free);
-                used.add(free++);
+                used.add(free--);
             }
+            Collections.reverse(slots.subList(existing, slots.size()));
             // Shrinking capacity hides reservations rather than silently reassigning them to another panel.
             for (int slot : entries.get(i).slots) if (slot >= capacity || excluded.contains(slot)) slots.add(slot);
         }

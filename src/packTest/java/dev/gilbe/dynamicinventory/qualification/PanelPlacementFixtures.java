@@ -7,6 +7,7 @@ import java.util.Collections;
 
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
+import dev.gilbe.dynamicinventory.client.NativeScreenMargins;
 import dev.gilbe.dynamicinventory.client.PanelLayoutReference;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfile;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfiles;
@@ -79,6 +80,31 @@ public final class PanelPlacementFixtures {
             check(
                 side != null && side.bounds.right() < sideMachine.x && side.bounds.y >= sideMachine.y,
                 "A constrained viewport can use space beside the machine");
+            Rect hatchViewport = new Rect(0, 8, 617, 369);
+            var hatchFootprint = Arrays
+                .asList(new Rect(201, 13, 174, 99), new Rect(195, 114, 186, 195), new Rect(70, 96, 122, 213));
+            check(
+                NativeScreenMargins.detachedDownwardShift(hatchViewport, 382, hatchFootprint, Collections.emptyList())
+                    == 31,
+                "Quadruple Input Hatch uses its visible detached footprint");
+            check(
+                NativeScreenMargins.detachedDownwardShift(
+                    hatchViewport,
+                    382,
+                    hatchFootprint,
+                    Collections.singletonList(new Rect(395, 216, 172, 160))) == 31,
+                "A side popup leaves the layout centered");
+            check(
+                NativeScreenMargins.detachedDownwardShift(
+                    hatchViewport,
+                    382,
+                    hatchFootprint,
+                    Collections.singletonList(new Rect(201, 319, 80, 38))) == 10,
+                "A separate popup below constrains movement");
+            check(
+                NativeScreenMargins.detachedDownwardShift(hatchViewport, 280, hatchFootprint, Collections.emptyList())
+                    == 0,
+                "A larger detached layout keeps the native origin");
             System.out.println(
                 "PASS captured MUI2 inherited reopen, custom/global above and beside intent, constrained fallback, scope and byte preservation");
         } finally {

@@ -21,6 +21,20 @@ public final class StoragePanelGeometry {
     }
 
     public static StoragePanelGeometry of(String screen, int width, int storageTop, int contentBottom, int slots) {
+        int enderIoBottom = switch (screen) {
+            case "crazypants.enderio.machine.killera.GuiKillerJoe" -> 88;
+            case "crazypants.enderio.machine.vacuum.GuiVacuumChest" -> 125;
+            case "crazypants.enderio.machine.invpanel.GuiInventoryPanel" -> 187;
+            case "crazypants.enderio.machine.capbank.GuiCapBank" -> Math.max(83, contentBottom + 6);
+            case "crazypants.enderio.conduit.gui.GuiExternalConnection" -> storageTop + 4;
+            case "crazypants.enderio.machine.crafter.GuiCrafter", "crazypants.enderio.machine.spawner.GuiPoweredSpawner", "crazypants.enderio.machine.tank.GuiTank", "crazypants.enderio.machine.buffer.GuiBuffer" -> storageTop
+                + 2;
+            default -> 0;
+        };
+        if (enderIoBottom > 0) {
+            int right = screen.equals("crazypants.enderio.machine.capbank.GuiCapBank") ? width - 21 : width;
+            return new StoragePanelGeometry(0, right, enderIoBottom, enderIoBottom, true);
+        }
         int draconicHeight = switch (screen) {
             case "com.brandon3055.draconicevolution.client.gui.GUIDraconiumChest" -> 256;
             case "com.brandon3055.draconicevolution.client.gui.GUIUpgradeModifier" -> 190;
@@ -30,7 +44,15 @@ public final class StoragePanelGeometry {
         };
         if (draconicHeight > 0)
             // Controls extend beside the old player inventory and need the full native sheet.
-            return new StoragePanelGeometry(0, width, draconicHeight, draconicHeight, true);
+            return new StoragePanelGeometry(
+                0,
+                width,
+                draconicHeight,
+                screen.endsWith(".GUIDraconiumChest") || screen.endsWith(".GUIUpgradeModifier") ? draconicHeight - 3
+                    : draconicHeight,
+                true);
+        if (screen.equals("com.brandon3055.draconicevolution.client.gui.GUIWeatherController"))
+            return new StoragePanelGeometry(0, width, storageTop, storageTop, true);
         if (screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel") && slots == 27 && width == 184)
             // The 184px Barrel draws the 176px vanilla chest sheet, including its old right border.
             return new StoragePanelGeometry(0, 176, contentBottom + 8, contentBottom + 2, true);

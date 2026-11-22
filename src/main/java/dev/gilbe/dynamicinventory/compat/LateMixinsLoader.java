@@ -54,12 +54,16 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "enderio.BaseTransferMixin",
                     "enderio.ConduitContainerMixin",
                     "enderio.CapacitorTransferMixin",
+                    "enderio.DarkSteelAnvilContainerMixin",
                     "enderio.InventoryPanelSlotsMixin"));
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient())
                 mixins.addAll(
                     Arrays.asList(
                         "enderio.EnderGuiMixin",
+                        "enderio.TankGuiMixin",
+                        "enderio.TransceiverGuiMixin",
+                        "enderio.VacuumChestGuiMixin",
                         "enderio.ConduitGuiMixin",
                         "enderio.ConduitTabOriginMixin",
                         "enderio.ConduitSlotVisibilityMixin"));
@@ -98,8 +102,22 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "appliedenergistics2.AeContainerMixin",
                     "appliedenergistics2.AeOpeningActionsMixin",
                     "appliedenergistics2.AePlayerInventoryAdaptorMixin"));
-            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0)
-                mixins.add("appliedenergistics2.AeInterfacePatternTransferMixin");
+            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0) mixins.addAll(
+                Arrays.asList(
+                    "appliedenergistics2.AeInterfacePatternTransferMixin",
+                    "appliedenergistics2.AeSpaceTransferMixin"));
+            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
+                && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                    .isClient())
+                mixins.addAll(
+                    Arrays.asList(
+                        "appliedenergistics2.AeSeparatePinsRepoMixin",
+                        "appliedenergistics2.AeSeparatePinsTerminalMixin",
+                        "appliedenergistics2.AeSpaceTransferGuiMixin"));
+            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0 && loadedMods.contains("MouseTweaks")
+                && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                    .isClient())
+                mixins.add("mousetweaks.PinsWheelMixin");
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient())
                 mixins.addAll(
@@ -109,6 +127,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                         "appliedenergistics2.AeCellWorkbenchGuiMixin",
                         "appliedenergistics2.AeStorageBusGuiMixin",
                         "appliedenergistics2.AeLevelEmitterGuiMixin",
+                        "appliedenergistics2.AeAdvancedLevelEmitterGuiMixin",
                         "appliedenergistics2.AeTerminalOriginMixin",
                         "appliedenergistics2.AePatternTerminalGuiMixin",
                         "appliedenergistics2.AeInterfaceTerminalGuiMixin",
@@ -132,6 +151,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                             "appliedenergistics2.FluidLevelTerminalMixin",
                             "appliedenergistics2.FluidMagnetFilterMixin",
                             "appliedenergistics2.FluidLevelMaintainerMixin",
+                            "appliedenergistics2.FluidInterfaceButtonsMixin",
                             "appliedenergistics2.FluidTextFieldMixin",
                             "appliedenergistics2.FluidLineFieldMixin"));
             }
@@ -159,6 +179,10 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.addAll(
             Arrays.asList(
                 "bogosorter.BogoPlayerSlotsMixin",
+                "bogosorter.BogoBulkTransferMixin",
+                "bogosorter.BogoPinnedSlotsMixin",
+                "bogosorter.BogoPinRequestMixin",
+                "bogosorter.BogoPinSyncMixin",
                 "bogosorter.BogoRefillMixin",
                 "bogosorter.BogoOpeningActionsMixin",
                 "bogosorter.BogoPanelSortMixin"));
@@ -184,6 +208,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                 "modularui2.Mui2PlayerWidgetsMixin",
                 "modularui2.Mui2PlayerSlotTypeMixin",
                 "modularui2.Mui2PlayerLookupMixin"));
+        if (loadedMods.contains("gregtech") && loadedMods.contains("modularui2"))
+            mixins.add("gregtech.RadioHatchGuiMixin");
         if (loadedMods.contains("modularui"))
             mixins.addAll(Arrays.asList("modularui.Mui1PlayerWidgetsMixin", "modularui.Mui1PlayerTransferMixin"));
         if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
@@ -195,7 +221,10 @@ public final class LateMixinsLoader implements ILateMixinLoader {
             if (PackCompatibility.enabled() && loadedMods.contains("bogosorter")) mixins.addAll(
                 Arrays.asList(
                     "bogosorter.BogoSortButtonMixin",
+                    "bogosorter.BogoPinClientMixin",
+                    "bogosorter.BogoPinSyncClientMixin",
                     "bogosorter.BogoClientPanelSortMixin",
+                    "bogosorter.BogoSpaceTransferMixin",
                     "bogosorter.BogoPanelSortButtonMixin"));
             if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
                 mixins.add("craftingtweaks.CraftingTweakButtonMixin");

@@ -3,20 +3,27 @@ package dev.gilbe.dynamicinventory.compat.ae2;
 /** AE2 draws its main sheet, upgrade strip and toolbox separately, unlike a single vanilla sheet. */
 public final class AppliedEnergisticsBackground {
 
+    public static final String WIRELESS_CRAFTING_GUI = "net.p455w0rd.wirelesscraftingterminal.client.gui.GuiWirelessCraftingTerminal";
+    private static final String ADVANCED_LEVEL_EMITTER = "appeng.client.gui.implementations.GuiAdvancedLevelEmitter";
+
     private AppliedEnergisticsBackground() {}
 
     public static boolean hasSidePanels(String guiClass) {
         if (isMonitorable(guiClass)) return true;
         return switch (guiClass) {
             case "appeng.client.gui.implementations.GuiInscriber", "appeng.client.gui.implementations.GuiAdvancedInscriber", "appeng.client.gui.implementations.GuiCrystalGrowthChamber", "appeng.client.gui.implementations.GuiMAC", "appeng.client.gui.implementations.GuiIOPort", "appeng.client.gui.implementations.GuiInterface", "appeng.client.gui.implementations.GuiCellWorkbench", "appeng.client.gui.implementations.GuiSecurity", "appeng.client.gui.implementations.GuiStorageBus", "appeng.client.gui.implementations.GuiBusIO", "appeng.client.gui.implementations.GuiLevelEmitter", "com.glodblock.github.client.gui.GuiLevelEmitterProxy" -> true;
+            case "appeng.client.gui.implementations.GuiFormationPlane" -> true;
             default -> false;
         };
     }
 
     public static int mainSheetWidth(String guiClass, int nativeWidth) {
+        if (WIRELESS_CRAFTING_GUI.equals(guiClass)) return 199;
         if (isMonitorable(guiClass)) return 195;
         if (guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")) return 195;
         if (guiClass.equals("com.glodblock.github.client.gui.GuiLevelMaintainer")) return 176;
+        // The Advanced Level Emitter requests a 246px draw but its texture ends at x=176.
+        if (guiClass.equals(ADVANCED_LEVEL_EMITTER)) return 176;
         return hasSidePanels(guiClass) ? 177 : nativeWidth;
     }
 
@@ -45,7 +52,7 @@ public final class AppliedEnergisticsBackground {
 
     public static boolean isMonitorable(String guiClass) {
         return switch (guiClass) {
-            case "appeng.client.gui.implementations.GuiMEMonitorable", "appeng.client.gui.implementations.GuiCraftingTerm", "appeng.client.gui.implementations.GuiPatternTerm", "appeng.client.gui.implementations.GuiPatternTermEx", "appeng.client.gui.implementations.GuiMEPortableCell", "appeng.client.gui.implementations.GuiSecurity" -> true;
+            case "appeng.client.gui.implementations.GuiMEMonitorable", "appeng.client.gui.implementations.GuiCraftingTerm", "appeng.client.gui.implementations.GuiPatternTerm", "appeng.client.gui.implementations.GuiPatternTermEx", "appeng.client.gui.implementations.GuiMEPortableCell", "appeng.client.gui.implementations.GuiSecurity", WIRELESS_CRAFTING_GUI -> true;
             default -> false;
         };
     }
@@ -62,12 +69,12 @@ public final class AppliedEnergisticsBackground {
     }
 
     public static boolean isAeGui(String guiClass) {
-        return guiClass.startsWith("appeng.client.gui.implementations.Gui")
+        return WIRELESS_CRAFTING_GUI.equals(guiClass) || guiClass.startsWith("appeng.client.gui.implementations.Gui")
             || guiClass.startsWith("com.glodblock.github.client.gui.Gui");
     }
 
     public static int mainContentRight(String guiClass, int inset) {
-        return isMonitorable(guiClass) ? 195 - inset : mainContentRight(inset);
+        return isMonitorable(guiClass) ? mainSheetWidth(guiClass, 195) - inset : mainContentRight(inset);
     }
 
     /** Share the texture edge with the frame's unfilled area, avoiding a transparent seam. */
@@ -78,8 +85,9 @@ public final class AppliedEnergisticsBackground {
     /** Virtual cells and currently disabled pattern rows still need space when editor gaps shrink. */
     public static int minimumContentBottom(String guiClass) {
         return switch (guiClass) {
-            case "appeng.client.gui.implementations.GuiCellWorkbench" -> 154;
+            case "appeng.client.gui.implementations.GuiCellWorkbench", "appeng.client.gui.implementations.GuiFormationPlane" -> 154;
             case "appeng.client.gui.implementations.GuiInterface" -> 124;
+            case ADVANCED_LEVEL_EMITTER -> 137;
             case "com.glodblock.github.client.gui.GuiLevelMaintainer" -> 116;
             case "com.glodblock.github.client.gui.GuiFluidInterface" -> 123;
             case "com.glodblock.github.client.gui.GuiIngredientBuffer" -> 104;
@@ -91,13 +99,22 @@ public final class AppliedEnergisticsBackground {
 
     public static int[] clip(String guiClass, int left, int top, int nativeWidth, int nativeHeight, int playerTop,
         int inset, int x, int y, int u, int v, int width, int height) {
+        if (guiClass.equals(ADVANCED_LEVEL_EMITTER) && x == left
+            && y == top
+            && u == 0
+            && v == 0
+            && width == nativeWidth
+            && height == nativeHeight
+            && width > 176) {
+            return new int[] { x + inset, y + inset, u + inset, v + inset, 176 - inset * 2, playerTop - inset };
+        }
         if (!hasSidePanels(guiClass)) return null;
-        if (isMonitorable(guiClass) && x == left && u == 0 && width == 195) {
+        if (isMonitorable(guiClass) && x == left && u == 0 && width == mainSheetWidth(guiClass, 195)) {
             int offsetY = y - top;
             int cropTop = offsetY == 0 ? inset : 0;
             // Security draws a wide browser above a narrower card editor. Remove both native
             // outer borders; the unified frame supplies the old lower-right cutout's background.
-            int right = v == 70 ? 170 : mainContentRight(guiClass, inset);
+            int right = v == 70 && !WIRELESS_CRAFTING_GUI.equals(guiClass) ? 170 : mainContentRight(guiClass, inset);
             if (inset == 0 && right == width && playerTop - offsetY >= height) return null;
             return new int[] { x + inset, y + cropTop, u + inset, v + cropTop, right - inset,
                 Math.min(height, playerTop - offsetY) - cropTop };

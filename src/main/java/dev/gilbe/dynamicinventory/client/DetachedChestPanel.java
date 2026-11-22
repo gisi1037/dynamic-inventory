@@ -15,6 +15,7 @@ import net.minecraft.inventory.Slot;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ResourceLocation;
 
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 
 import dev.gilbe.dynamicinventory.api.InventoryUi;
@@ -229,17 +230,24 @@ public final class DetachedChestPanel extends Gui {
 
     /** Only the player inventory uses panel routing; open containers keep their native Shift-click rules. */
     public boolean quickMoveToMain(int sourceId) {
-        if (!(gui instanceof PlayerInventoryScreen) || !detached()
-            || blocked()
+        if (!(gui instanceof PlayerInventoryScreen player) || blocked()
             || gui.inventorySlots != Minecraft.getMinecraft().thePlayer.inventoryContainer
             || Minecraft.getMinecraft().thePlayer.inventory.getItemStack() != null) return false;
+        boolean detached = detached();
+        var excluded = excluded();
+        int columns = detached ? main().layout.columns : player.storageColumns();
+        if (!detached && columns == 9 && excluded.isEmpty()) return false;
         int logical = -1;
         for (int i = 0; i < slotIds.length; i++) if (slotId(i) == sourceId) logical = i;
-        if (logical < 0 || logical >= 9 && excluded().contains(logical - 9)) return false;
+        if (logical < 0 || (!detached && logical < 9) || logical >= 9 && excluded.contains(logical - 9)) return false;
         int[] hotbar = java.util.Arrays.copyOf(slotIds, 9);
-        int[] storage = mainStorageSlots();
+        int[] storage = detached ? mainStorageSlots()
+            : java.util.stream.IntStream.range(9, slotIds.length)
+                .filter(index -> !excluded.contains(index - 9))
+                .map(this::slotId)
+                .toArray();
         int[] destinations = dev.gilbe.dynamicinventory.container.PanelTransferTargets
-            .quickMove(sourceId, hotbar, storage, main().layout.columns);
+            .quickMove(sourceId, hotbar, storage, columns);
         if (destinations.length > 0) dev.gilbe.dynamicinventory.network.PanelTransferRequest.send(
             gui.inventorySlots,
             InventoryLayout.of(Minecraft.getMinecraft().thePlayer.inventory)
@@ -274,6 +282,16 @@ public final class DetachedChestPanel extends Gui {
             for (int id : ids) if (id == sourceId) return ids;
         }
         return null; // Hotbar and machine sorting retain their native rules.
+    }
+
+    /** Space-click moves one region. AE2 treats the active hotbar as its own region. */
+    public int[] spaceTransferSlots(int sourceId) {
+        if (!detached() || blocked()) return null;
+        int logical = logicalSlot(sourceId);
+        if (logical < 0) return null;
+        if (logical < 9) return java.util.Arrays.copyOf(slotIds, 9);
+        int[] panel = sortSlots(sourceId);
+        return panel == null ? new int[0] : panel;
     }
 
     /** Prefer Main storage, then its hotbar, without exposing machine or satellite slots to NEI. */
@@ -384,6 +402,10 @@ public final class DetachedChestPanel extends Gui {
         return detached() && main().layout != null ? main().layout.bounds : attached;
     }
 
+    Rect mainControl() {
+        return mainVisible() ? control(playerBounds()) : recoveryControl();
+    }
+
     public Rect machineBounds() {
         return machine;
     }
@@ -409,8 +431,49 @@ public final class DetachedChestPanel extends Gui {
         result.addAll(bounds());
         if (attachedControl != null && (!detached() || !mainVisible())) result.add(attachedControl);
         if (detached() && !mainVisible()) result.add(recoveryControl());
-        // Temporary Shift controls draw over NEI; pressing Shift must not repaginate bookmarks/results.
+        // Temporary resize controls draw over NEI without repaginating bookmarks or results.
         return result;
+    }
+
+    int detachedVerticalOffset(int attachedTop, int attachedHeight, int offset, int topMargin, int bottomMargin) {
+        int top = attachedTop, bottom = machine.bottom();
+        for (Rect rect : occupiedBounds()) {
+            top = Math.min(top, rect.y);
+            bottom = Math.max(bottom, rect.bottom());
+        }
+        // An attached player band can be taller than everything visible in breakout mode.
+        // Use the visible footprint while respecting the reserved space around every panel.
+        int height = bottom - top;
+        if (height >= attachedHeight) return 0;
+        int minTop = Math.max(viewport.y, topMargin);
+        int minBottom = Math.max(gui.height - viewport.bottom(), bottomMargin);
+        int targetTop = NativeScreenMargins.top(gui.height, height, offset, minTop, minBottom);
+        return Math.max(0, Math.min(targetTop - top, gui.height - minBottom - bottom));
+    }
+
+    void translateVertically(int offset) {
+        translateVertically(offset, true);
+    }
+
+    public void centerFrameworkLayout(int attachedHeight, int topOverhang) {
+        List<Rect> visible = bounds();
+        visible.add(new Rect(machine.x, machine.y - topOverhang, machine.width, machine.height + topOverhang));
+        if (!mainVisible()) visible.add(recoveryControl());
+        int shift = NativeScreenMargins
+            .detachedDownwardShift(viewport, attachedHeight + topOverhang, visible, fixed.subList(1, fixed.size()));
+        if (shift > 0) translateVertically(shift, false);
+    }
+
+    private void translateVertically(int offset, boolean translateAuxiliary) {
+        machine = machine.translatedVertically(offset);
+        attached = attached.translatedVertically(offset);
+        if (attachedControl != null) attachedControl = attachedControl.translatedVertically(offset);
+        for (int index = 0; index < (translateAuxiliary ? fixed.size() : 1); index++) fixed.set(
+            index,
+            fixed.get(index)
+                .translatedVertically(offset));
+        for (Panel panel : panels) if (panel.layout != null) panel.layout = panel.layout.translatedVertically(offset);
+        revision++;
     }
 
     public int logicalSlot(int containerSlot) {
@@ -579,7 +642,11 @@ public final class DetachedChestPanel extends Gui {
     }
 
     private boolean resizeControlsVisible() {
-        return detached() && captured == null && GuiScreen.isShiftKeyDown() && !PanelSettingsOverlay.isOpen(gui);
+        return detached() && captured == null && resizeModifierDown() && !PanelSettingsOverlay.isOpen(gui);
+    }
+
+    private static boolean resizeModifierDown() {
+        return Keyboard.isKeyDown(Keyboard.KEY_LMENU) || Keyboard.isKeyDown(Keyboard.KEY_RMENU);
     }
 
     private boolean outerLeft(Panel panel) {
@@ -744,13 +811,22 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public boolean hasItemAt(int x, int y) {
+        return playerSlotAt(x, y) >= 0;
+    }
+
+    int playerSlotAt(int x, int y) {
+        return playerSlotAt(x, y, true);
+    }
+
+    int playerSlotAt(int x, int y, boolean requireStack) {
         for (int id : slotIds) {
             Slot slot = gui.inventorySlots.getSlot(id);
             int sx = access.dynamicinventory$left() + slot.xDisplayPosition,
                 sy = access.dynamicinventory$top() + slot.yDisplayPosition;
-            if (slot.getHasStack() && x >= sx - 1 && x < sx + 17 && y >= sy - 1 && y < sy + 17) return true;
+            if ((!requireStack || slot.getHasStack()) && x >= sx - 1 && x < sx + 17 && y >= sy - 1 && y < sy + 17)
+                return id;
         }
-        return false;
+        return -1;
     }
 
     public void position() {
@@ -950,12 +1026,13 @@ public final class DetachedChestPanel extends Gui {
                 PanelChrome.icon(control, control.contains(mx, my), inherited);
                 if (detached() && panel.layout != null) {
                     PanelChrome.grips(bounds, PanelChrome.corner(bounds, mx, my));
-                    int labelWidth = Math.max(0, bounds.width - (panel.main() ? 74 : 32));
+                    int pinsOffset = panel.main() && PackCompatibility.aePinnedPanel() ? 13 : 0;
+                    int labelWidth = Math.max(0, bounds.width - (panel.main() ? 74 : 32) - pinsOffset);
                     mc.fontRenderer.drawString(
                         mc.fontRenderer.trimStringToWidth(
                             panel.name.equals("Main") && panel.main() ? "Inventory" : panel.name,
                             labelWidth),
-                        bounds.x + 24,
+                        bounds.x + 24 + pinsOffset,
                         bounds.y + 4,
                         panel.profile.frameStyle < 0 ? inheritedLabelColor : InventoryGuiTheme.get().label);
                 }
@@ -964,11 +1041,15 @@ public final class DetachedChestPanel extends Gui {
                     String scope = inherited ? "Global default: adjusts to this machine"
                         : "Custom layout: fixed interface positions";
                     int width = Math.max(mc.fontRenderer.getStringWidth(text), mc.fontRenderer.getStringWidth(scope));
+                    String resizeHint = detached() ? "Hold Alt to snap or show grid controls" : null;
+                    int tooltipHeight = resizeHint == null ? 24 : 35;
+                    if (resizeHint != null) width = Math.max(width, mc.fontRenderer.getStringWidth(resizeHint));
                     int tx = Math.max(0, Math.min(gui.width - width - 8, control.x));
-                    int ty = Math.max(0, control.y - 25);
-                    drawRect(tx, ty, tx + width + 8, ty + 24, 0xf0100010);
+                    int ty = Math.max(0, control.y - tooltipHeight - 1);
+                    drawRect(tx, ty, tx + width + 8, ty + tooltipHeight, 0xf0100010);
                     mc.fontRenderer.drawStringWithShadow(text, tx + 4, ty + 2, 0xffffff);
                     mc.fontRenderer.drawStringWithShadow(scope, tx + 4, ty + 13, 0xffffff);
+                    if (resizeHint != null) mc.fontRenderer.drawStringWithShadow(resizeHint, tx + 4, ty + 24, 0xffffff);
                 }
             }
             drawResizeControls(mx, my);
@@ -1039,6 +1120,17 @@ public final class DetachedChestPanel extends Gui {
         Minecraft mc = Minecraft.getMinecraft();
         return ClientInputGuard.isPending(gui) || mc.thePlayer == null
             || mc.thePlayer.openContainer != gui.inventorySlots;
+    }
+
+    /** Resize chrome owns its mouse gesture before Alt-click shortcuts can use a stale hovered slot. */
+    boolean resizeMouse(int x, int y, int button, boolean down) {
+        if (!resizeModifierDown()) return false;
+        if (captured != null || releaseOwned) return pointer(x, y, button, down);
+        if (button != 0 || !down || !resizeControlsVisible()) return false;
+        if (resizeInput(x, y, button, down)) return true;
+        for (Panel panel : panels) if (panel.layout != null && PanelChrome.corner(panel.layout.bounds, x, y) != 0)
+            return pointer(x, y, button, down);
+        return false;
     }
 
     public boolean pointer(int x, int y, int button, boolean down) {
@@ -1132,7 +1224,7 @@ public final class DetachedChestPanel extends Gui {
             startY = y;
             lastDragX = x;
             lastDragY = y;
-            lastResizeSnap = corner != 0 && GuiScreen.isShiftKeyDown();
+            lastResizeSnap = corner != 0 && resizeModifierDown();
             grip = corner;
             captured = panel;
             return true;
@@ -1164,7 +1256,7 @@ public final class DetachedChestPanel extends Gui {
     }
 
     private void move(int x, int y) {
-        boolean snap = grip != 0 && GuiScreen.isShiftKeyDown();
+        boolean snap = grip != 0 && resizeModifierDown();
         if (x == lastDragX && y == lastDragY && snap == lastResizeSnap) return;
         lastDragX = x;
         lastDragY = y;

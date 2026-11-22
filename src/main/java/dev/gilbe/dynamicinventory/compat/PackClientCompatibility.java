@@ -34,6 +34,7 @@ import codechicken.nei.recipe.GuiOverlayButton.ItemOverlayState;
 import codechicken.nei.recipe.GuiRecipe;
 import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.util.EmptyContainer;
+import cpw.mods.fml.common.Loader;
 import dev.gilbe.dynamicinventory.client.NativeSortButton;
 import dev.gilbe.dynamicinventory.client.PlayerInventoryScreen;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
@@ -60,6 +61,45 @@ public final class PackClientCompatibility {
         return NEIClientConfig.isEnabled() && NEIClientConfig.isMouseScrollTransferEnabled()
             && !GuiInfo.hasCustomSlots(gui)
             && !(gui.inventorySlots instanceof EmptyContainer);
+    }
+
+    /** Positive amounts move items away from the hovered slot. */
+    public static int pinsTransferAmount(int steps, boolean destinationAbove) {
+        if (NEIClientConfig.isMouseScrollTransferEnabled()) {
+            int direction = NEIClientConfig.shouldInvertMouseScrollTransfer() ? -1 : 1;
+            return NEIClientConfig.isEnabled() ? steps * direction : 0;
+        }
+        return MouseTweaksWheel.transferAmount(steps, destinationAbove);
+    }
+
+    private static final class MouseTweaksWheel {
+
+        private static final Class<?> CONFIG = findConfig();
+
+        private static Class<?> findConfig() {
+            if (!Loader.isModLoaded("MouseTweaks")) return null;
+            try {
+                return Class.forName("yalter.mousetweaks.config.MTConfig");
+            } catch (ClassNotFoundException ignored) {
+                return null;
+            }
+        }
+
+        private static int transferAmount(int steps, boolean destinationAbove) {
+            if (CONFIG == null) return 0;
+            try {
+                if (!CONFIG.getField("WheelTweak")
+                    .getBoolean(null)) return 0;
+                int setting = CONFIG.getField("WheelScrollDirection")
+                    .getInt(null);
+                int direction = ((setting & 1) != 0) ^ (setting >= 2 && destinationAbove) ? 1 : -1;
+                int amount = CONFIG.getField("ScrollItemScaling")
+                    .getInt(null) == 0 ? steps : Integer.signum(steps);
+                return amount * direction;
+            } catch (ReflectiveOperationException ignored) {
+                return 0;
+            }
+        }
     }
 
     public static void initialize() {
@@ -89,6 +129,12 @@ public final class PackClientCompatibility {
 
             @Override
             public boolean hideItemPanelSlot(GuiContainer gui, int x, int y, int width, int height) {
+                if (PackCompatibility.aePinnedPanel()) {
+                    var pins = dev.gilbe.dynamicinventory.client.AePinnedPanel.occupied(gui);
+                    if (pins != null && pins.intersects(
+                        new dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect(x, y, width, height)))
+                        return true;
+                }
                 dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect hotbars = dev.gilbe.dynamicinventory.client.HotbarBankPanel
                     .bounds(gui);
                 if (hotbars != null && hotbars

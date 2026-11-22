@@ -180,8 +180,29 @@ public final class PlayerPanelFixtures {
             "new panel reuses the first available default name");
         set = set.allocate(new int[] { 36, 18, 18 }, 72);
         String a = set.entries.get(1).id, b = set.entries.get(2).id;
+        check(
+            set.members(a, 72)
+                .equals(
+                    java.util.stream.IntStream.range(54, 72)
+                        .boxed()
+                        .collect(java.util.stream.Collectors.toList())),
+            "New side panels start at the last available storage slots");
+        check(
+            set.members("main", 72)
+                .get(0) == 0
+                && set.members("main", 72)
+                    .get(35) == 35,
+            "Main keeps the first unallocated slots");
         java.util.List<Integer> stable = set.members(b, 72);
+        java.util.List<Integer> starting = set.members(a, 72);
         set = set.allocate(new int[] { 27, 27, 18 }, 72);
+        check(
+            set.members(a, 72)
+                .subList(0, 18)
+                .equals(starting)
+                && set.members(a, 72)
+                    .get(18) == 27,
+            "Growing a panel keeps its cells and appends the next available slots from the end");
         check(
             set.members(b, 72)
                 .equals(stable),

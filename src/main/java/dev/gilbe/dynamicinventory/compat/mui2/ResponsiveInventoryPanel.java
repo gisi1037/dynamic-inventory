@@ -147,7 +147,7 @@ public final class ResponsiveInventoryPanel {
     }
 
     /** GregTech titles sit above the panel. Each added row consumes space on both sides of its centered body. */
-    private static int topOverhang(ModularPanel panel) {
+    static int topOverhang(ModularPanel panel) {
         int top = panel.getArea().y;
         int overhang = 0;
         for (IWidget child : panel.getChildren())

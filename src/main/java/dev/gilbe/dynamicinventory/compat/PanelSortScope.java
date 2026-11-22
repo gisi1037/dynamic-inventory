@@ -1,9 +1,9 @@
 package dev.gilbe.dynamicinventory.compat;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import net.minecraft.entity.player.InventoryPlayer;
 
@@ -16,15 +16,13 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 /** A single validated server sort; never changes Bogo's cached inventory groups or pin policy. */
 public final class PanelSortScope {
 
-    private static final ThreadLocal<Set<Integer>> ACTIVE = new ThreadLocal<>();
+    private static final ThreadLocal<int[]> ACTIVE = new ThreadLocal<>();
 
     private PanelSortScope() {}
 
     public static void run(int[] ids, Runnable action) {
-        Set<Integer> previous = ACTIVE.get();
-        Set<Integer> selected = new HashSet<>();
-        for (int id : ids) selected.add(id);
-        ACTIVE.set(selected);
+        int[] previous = ACTIVE.get();
+        ACTIVE.set(ids);
         try {
             action.run();
         } finally {
@@ -34,16 +32,27 @@ public final class PanelSortScope {
     }
 
     public static List<SlotAccessor> filter(List<SlotAccessor> slots) {
-        Set<Integer> selected = ACTIVE.get();
+        int[] selected = ACTIVE.get();
+        if (selected == null) return excludeReserved(slots);
         List<SlotAccessor> result = new ArrayList<>();
-        for (SlotAccessor slot : slots) {
-            if ((selected == null || selected.contains(slot.getSlotNumber())) && !reserved(slot)) result.add(slot);
+        // Bogo already removed pinned and locked cells. Visit the others in the panel's visible order.
+        Map<Integer, SlotAccessor> eligible = new HashMap<>();
+        for (SlotAccessor slot : slots) if (!reserved(slot)) eligible.put(slot.getSlotNumber(), slot);
+        for (int id : selected) {
+            SlotAccessor slot = eligible.get(id);
+            if (slot != null) result.add(slot);
         }
+        return result;
+    }
+
+    public static List<SlotAccessor> excludeReserved(List<SlotAccessor> slots) {
+        List<SlotAccessor> result = new ArrayList<>();
+        for (SlotAccessor slot : slots) if (!reserved(slot)) result.add(slot);
         return result.size() == slots.size() ? slots : result;
     }
 
     /** Native sort buttons and hotkeys must protect stored rows even outside a panel sort scope. */
-    private static boolean reserved(SlotAccessor slot) {
+    public static boolean reserved(SlotAccessor slot) {
         if (slot instanceof com.gtnewhorizons.modularui.common.internal.wrapper.BaseSlot legacy && legacy
             .getItemHandler() instanceof dev.gilbe.dynamicinventory.compat.mui1.Mui1PlayerInventory inventory) {
             InventoryPlayer player = inventory.getInventoryPlayer();

@@ -1,6 +1,9 @@
 package dev.gilbe.dynamicinventory.client;
 
+import net.minecraft.client.Minecraft;
+
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 import com.cleanroommc.modularui.api.IMuiScreen;
 import com.cleanroommc.modularui.api.event.KeyboardInputEvent;
@@ -8,6 +11,7 @@ import com.cleanroommc.modularui.api.event.MouseInputEvent;
 
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 import dev.gilbe.dynamicinventory.compat.mui2.Mui2PanelAccess;
 
 /** Registered only when ModularUI2 is loaded; runs before its GUI input dispatchers. */
@@ -31,7 +35,21 @@ public final class Mui2PendingInputEvents {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void beforeMouseInput(MouseInputEvent.Pre event) {
         if (cancelMouseInput(event)) return;
-        if (!(event.gui instanceof IMuiScreen mui) || !(mui.getScreen() instanceof Mui2PanelAccess access)) return;
+        if (!(event.gui instanceof IMuiScreen mui) || !(mui.getScreen() instanceof Mui2PanelAccess access)) {
+            DetachedChestPanel panel = DetachedChestPanel.of(event.gui);
+            if (panel != null && !PanelSettingsOverlay.isOpen(event.gui)) {
+                if (PackCompatibility.aePinnedPanel() && AePinnedPanel.mouse(event.gui)) {
+                    event.setCanceled(true);
+                    return;
+                }
+                Minecraft mc = Minecraft.getMinecraft();
+                int x = Mouse.getEventX() * event.gui.width / mc.displayWidth;
+                int y = event.gui.height - Mouse.getEventY() * event.gui.height / mc.displayHeight - 1;
+                if (panel.resizeMouse(x, y, Mouse.getEventButton(), Mouse.getEventButtonState()))
+                    event.setCanceled(true);
+            }
+            return;
+        }
         access.dynamicinventory$detachedPanels()
             .update(mui.getScreen());
         if (PanelSettingsOverlay.handleMouse(event.gui) || NativeInventoryPanel.handlePointer(event.gui)

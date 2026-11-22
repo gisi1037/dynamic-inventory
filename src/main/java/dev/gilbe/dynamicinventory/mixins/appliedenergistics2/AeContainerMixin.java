@@ -24,6 +24,7 @@ import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsContainerAccess;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
+import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 
 /** Shared AE2 seam only; declarations still choose exact containers, never the entire class hierarchy. */
 @Mixin(targets = "appeng.container.AEBaseContainer", remap = false)
@@ -54,6 +55,15 @@ public abstract class AeContainerMixin extends Container implements AppliedEnerg
             .removeIf(
                 slot -> slot.inventory == inventory
                     && !AutomaticInventoryRouting.transfer(inventory, slot.getSlotIndex()));
+        // Extra player slots are appended after the original hotbar. Sort the player-only
+        // destination list by the logical grid so the hotbar remains the fallback.
+        var shape = InventoryLayout.of(inventory);
+        cir.getReturnValue()
+            .sort(java.util.Comparator.comparingInt(slot -> {
+                int logical = slot.inventory == inventory ? shape.ordinaryIndex(slot.getSlotIndex()) : -1;
+                return logical < 0 ? Integer.MAX_VALUE
+                    : logical < InventoryLayout.HOTBAR_SLOTS ? shape.mainSlots() + logical : logical;
+            }));
     }
 
     @Inject(method = "detectAndSendChanges", at = @At("HEAD"), cancellable = true, remap = true)

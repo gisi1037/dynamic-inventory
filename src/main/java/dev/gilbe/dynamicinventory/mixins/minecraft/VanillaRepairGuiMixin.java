@@ -3,16 +3,22 @@ package dev.gilbe.dynamicinventory.mixins.minecraft;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiRepair;
 import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.inventory.ContainerRepair;
+import net.minecraft.world.World;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.client.NativeUiAnchors;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
+import dev.gilbe.dynamicinventory.compat.EnderIoCompatibility;
 
 /** Move the existing name field without resetting its text, selection or keyboard focus. */
 @Mixin(GuiRepair.class)
@@ -20,6 +26,12 @@ public abstract class VanillaRepairGuiMixin implements NativeUiAnchors {
 
     @Shadow
     private GuiTextField field_147091_w;
+
+    @Redirect(method = "<init>", at = @At(value = "NEW", target = "net/minecraft/inventory/ContainerRepair"))
+    private static ContainerRepair dynamicinventory$repairContainer(InventoryPlayer inventory, World world, int x,
+        int y, int z, EntityPlayer player) {
+        return EnderIoCompatibility.anvilClientContainer(inventory, world, x, y, z, player);
+    }
 
     @Inject(method = "func_147090_g", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$waitForOpening(CallbackInfo ci) {

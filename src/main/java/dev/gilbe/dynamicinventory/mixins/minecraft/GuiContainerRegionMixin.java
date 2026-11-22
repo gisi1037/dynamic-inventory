@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -13,9 +14,11 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import dev.gilbe.dynamicinventory.client.AePinnedPanel;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
 import dev.gilbe.dynamicinventory.client.DetachedChestPanel;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
+import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 
 @Mixin(GuiContainer.class)
 public abstract class GuiContainerRegionMixin extends GuiScreen implements ContainerPanelAccess {
@@ -32,9 +35,22 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     @Shadow
     protected boolean field_147007_t;
 
+    @Shadow
+    private net.minecraft.inventory.Slot theSlot;
+
     @Override
     public boolean dynamicinventory$draggingItems() {
         return field_147007_t;
+    }
+
+    @Override
+    public net.minecraft.inventory.Slot dynamicinventory$hoveredSlot() {
+        return theSlot;
+    }
+
+    @Override
+    public void dynamicinventory$itemTooltip(net.minecraft.item.ItemStack stack, int x, int y) {
+        renderToolTip(stack, x, y);
     }
 
     @Shadow
@@ -104,6 +120,7 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
 
     @Inject(method = "drawScreen", at = @At("HEAD"))
     private void dynamicinventory$dragFrame(int x, int y, float ticks, CallbackInfo ci) {
+        if (dynamicinventory$panel != null) dynamicinventory$panel.updateModeOrigin();
         DetachedChestPanel floating = DetachedChestPanel.of(this);
         if (floating != null) floating.updateDragFrame();
     }
@@ -127,6 +144,15 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     private void dynamicinventory$foreground(GuiContainer gui, int x, int y) {
         if (dynamicinventory$panel == null) drawGuiContainerForegroundLayer(x, y);
         else dynamicinventory$panel.foreground(() -> drawGuiContainerForegroundLayer(x, y));
+        if (PackCompatibility.aePinnedPanel()) {
+            GL11.glPushMatrix();
+            try {
+                GL11.glTranslatef(-guiLeft, -guiTop, 0);
+                AePinnedPanel.draw(gui, x, y);
+            } finally {
+                GL11.glPopMatrix();
+            }
+        }
     }
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
@@ -147,8 +173,13 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
     @Inject(method = "handleMouseClick", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$panelQuickMove(net.minecraft.inventory.Slot slot, int id, int button, int mode,
         CallbackInfo ci) {
+        if (mode != 1 || (button != 0 && button != 1)) return;
+        if (PackCompatibility.aePinnedPanel() && AePinnedPanel.depositMatching(this, id)) {
+            ci.cancel();
+            return;
+        }
         DetachedChestPanel floating = DetachedChestPanel.of(this);
-        if (mode == 1 && (button == 0 || button == 1) && floating != null && floating.quickMoveToMain(id)) ci.cancel();
+        if (floating != null && floating.quickMoveToMain(id)) ci.cancel();
     }
 
     @Inject(method = "mouseClickMove", at = @At("HEAD"), cancellable = true)

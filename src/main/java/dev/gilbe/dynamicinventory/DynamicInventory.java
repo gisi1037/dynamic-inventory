@@ -84,6 +84,8 @@ public class DynamicInventory {
 
     @Mod.EventHandler
     public void serverStopped(FMLServerStoppedEvent event) {
+        if (dev.gilbe.dynamicinventory.compat.PackCompatibility.aePinnedPanel())
+            dev.gilbe.dynamicinventory.network.AePinsChannel.shutdown();
         // A later connection may adopt a different capacity once the last old world has also unloaded.
         InventoryCapacity.endServerSession();
     }

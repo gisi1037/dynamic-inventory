@@ -12,6 +12,11 @@ public final class PackCompatibility {
             .usesPackAdapters();
     }
 
+    public static boolean aePinnedPanel() {
+        return IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
+            && Loader.isModLoaded("appliedenergistics2");
+    }
+
     public static void verifyVersions() {
         if (!enabled()) return;
         require("backhand", "Backhand");

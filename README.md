@@ -1,9 +1,8 @@
 # Dynamic Inventory
 
 An experimental Forge 1.7.10 mod for larger player inventories in GT New Horizons.
-This release targets **GTNH 2.9.0**. Pinned source-build profiles also cover
-RC-2 and nightly builds 795 and 803; other pack versions require review. This is a development
-snapshot, not a stable release or a claim of support for every interface in the pack.
+The **0.8.1** release targets **GTNH 2.9.0** and closes out the 2.9.0 release series.
+Pinned source-build profiles also cover RC-2 and nightly builds 795 and 803.
 
 The default is **72 storage slots plus the nine-slot hotbar**. The server selects
 initial capacity at startup; experimental live resizing safely rebuilds and agrees
@@ -31,21 +30,15 @@ The in-game editor adjusts presentation, not item ownership or compatibility rul
 
 ## Download and install
 
-The current testing release is [0.8.0-alpha.4](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.0-alpha.4).
-Install **`dynamicinventory-0.8.0-alpha.4.jar`** in the `mods` folder on both client
-and server, replacing any older Dynamic Inventory JAR. The `-dev` and `-sources`
-JARs are developer downloads; do not install those in Minecraft. Back up your save
-and try this experimental release in a disposable world first.
+Download [Dynamic Inventory 0.8.1](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.1)
+and install **`dynamicinventory-0.8.1.jar`** in the `mods` folder on both client
+and server, replacing any older Dynamic Inventory JAR. The release JAR selects
+the GTNH 2.9.0 profile automatically. If your launcher already sets
+`dynamicinventory.profile`, use `gtnh-2.9.0` on both sides.
 
-Select the matching pack profile in the launcher's **Java/JVM arguments** on both
-sides, before starting Minecraft:
-
-| Pack | Required JVM argument |
-| --- | --- |
-| GTNH 2.9.0 | `-Ddynamicinventory.profile=gtnh-2.9.0` |
-| nightly-2026-10-27 build 803 | `-Ddynamicinventory.profile=daily-2026-10-27-803` |
-| GTNH 2.9.0-RC-2 | `-Ddynamicinventory.profile=rc2-integration` |
-| daily-2026-10-19 build 795 | `-Ddynamicinventory.profile=daily-2026-10-19` |
+For source builds targeting another pinned pack, select its matching
+`-PinventoryProfile=<profile>` at build time and
+`-Ddynamicinventory.profile=<profile>` when starting Minecraft.
 
 Use the pack's supported Java runtime. Other pack builds require requalification;
 version guards deliberately reject mismatched integration dependencies. The

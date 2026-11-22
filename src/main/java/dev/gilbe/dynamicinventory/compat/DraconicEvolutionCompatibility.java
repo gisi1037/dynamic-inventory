@@ -46,7 +46,9 @@ final class DraconicEvolutionCompatibility {
                 .layout(layout)
                 .nativeTransfers();
             if (host[0].equals("tool-inventory"))
-                adapter.additionalSlots((container, inventory, raw) -> new Slot(inventory, raw, 0, 0) {
+                // The configure picker shares this container, but draws its own item buttons.
+                // Keep real slots parked until the Tool Inventory screen lays out its player panel.
+                adapter.additionalSlots((container, inventory, raw) -> new Slot(inventory, raw, -1000, -1000) {
 
                     @Override
                     public boolean canTakeStack(EntityPlayer player) {

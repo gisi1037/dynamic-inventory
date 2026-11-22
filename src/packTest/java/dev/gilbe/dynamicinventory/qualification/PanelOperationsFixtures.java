@@ -45,6 +45,11 @@ public final class PanelOperationsFixtures {
         }
         List<SlotAccessor> nativeSlots = Arrays.asList(slot(9), slot(13), slot(71), slot(99));
         check(PanelSortScope.filter(nativeSlots) == nativeSlots, "Unscoped sorter is unchanged");
+        PanelSortScope.run(
+            new int[] { 99, 50, 9, 13 },
+            () -> check(
+                ids(PanelSortScope.filter(nativeSlots)).equals(Arrays.asList(99, 9, 13)),
+                "Panel sort follows display order and skips cells omitted by Bogo"));
         PanelSortScope.run(new int[] { 13, 99 }, () -> {
             check(
                 ids(PanelSortScope.filter(nativeSlots)).equals(Arrays.asList(13, 99)),

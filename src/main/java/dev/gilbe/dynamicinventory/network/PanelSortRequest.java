@@ -11,6 +11,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.inventory.Container;
 
 import com.cleanroommc.bogosorter.BogoSortAPI;
+import com.cleanroommc.bogosorter.common.network.CShortcut;
 import com.cleanroommc.bogosorter.common.network.CSort;
 import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 
@@ -34,7 +35,7 @@ public final class PanelSortRequest implements IMessage {
 
     private static final Map<EntityPlayerMP, Deque<PanelSortRequest>> PENDING = new WeakHashMap<>();
     private static SimpleNetworkWrapper channel;
-    private int window;
+    private int window, source = -1;
     private long revision;
     private int[] slots = new int[0];
     private CSort nativeSort;
@@ -59,15 +60,33 @@ public final class PanelSortRequest implements IMessage {
         channel.sendToServer(request);
     }
 
+    public static void moveAll(Container container, long revision, int source, int[] slots) {
+        if (slots.length == 0) return;
+        PanelSortRequest request = new PanelSortRequest();
+        request.window = container.windowId;
+        request.revision = revision;
+        request.source = source;
+        request.slots = slots.clone();
+        channel.sendToServer(request);
+    }
+
     @Override
     public void fromBytes(ByteBuf bytes) {
-        if (bytes.readableBytes() < 16) return;
+        if (bytes.readableBytes() < 20) return;
         window = bytes.readInt();
         revision = bytes.readLong();
+        int candidateSource = bytes.readInt();
+        if (candidateSource < -1) return;
         int count = bytes.readInt();
         if (count < 1 || count > InventoryShape.MAX_STORAGE || bytes.readableBytes() < count * 4) return;
         int[] candidate = new int[count];
         for (int i = 0; i < count; i++) candidate[i] = bytes.readInt();
+        if (candidateSource >= 0) {
+            if (bytes.readableBytes() != 0) return;
+            source = candidateSource;
+            slots = candidate;
+            return;
+        }
         CSort sort = new CSort();
         sort.fromBytes(bytes);
         if (sort.isRejected()) {
@@ -82,14 +101,15 @@ public final class PanelSortRequest implements IMessage {
     public void toBytes(ByteBuf bytes) {
         bytes.writeInt(window)
             .writeLong(revision)
+            .writeInt(source)
             .writeInt(slots.length);
         for (int id : slots) bytes.writeInt(id);
-        nativeSort.toBytes(bytes);
+        if (nativeSort != null) nativeSort.toBytes(bytes);
     }
 
     private void apply(EntityPlayerMP player) {
         Container container = player.openContainer;
-        if (nativeSort == null || player.isDead
+        if (nativeSort == null && source < 0 || player.isDead
             || player.getHealth() <= 0
             || container == null
             || container.windowId != window
@@ -104,6 +124,12 @@ public final class PanelSortRequest implements IMessage {
                 || !unique.add(id)
                 || !BogoSortAPI.isPlayerSlot((SlotAccessor) container.getSlot(id))) return;
         }
+        if (source >= 0) {
+            if (unique.contains(source)) PanelSortScope.run(
+                slots,
+                () -> new CShortcut(CShortcut.Type.MOVE_ALL, source).executeServer(player.playerNetServerHandler));
+            return;
+        }
         // Filtering happens inside Bogo's native sortable-slot policy, after its pin/lock checks.
         PanelSortScope.run(slots, () -> nativeSort.executeServer(player.playerNetServerHandler));
     }
@@ -112,7 +138,7 @@ public final class PanelSortRequest implements IMessage {
 
         @Override
         public IMessage onMessage(PanelSortRequest request, MessageContext context) {
-            if (request.nativeSort == null || request.slots.length == 0) return null;
+            if (request.nativeSort == null && request.source < 0 || request.slots.length == 0) return null;
             synchronized (PENDING) {
                 Deque<PanelSortRequest> queue = PENDING
                     .computeIfAbsent(context.getServerHandler().playerEntity, ignored -> new ArrayDeque<>());

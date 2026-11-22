@@ -9,6 +9,9 @@ import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsContainerAccess;
 /** Exact native machine and terminal hosts reviewed in the pinned AE2 profiles. */
 public final class AppliedEnergisticsCompatibility {
 
+    private static final String WIRELESS_CRAFTING_ID = "dynamicinventory:ae2_wireless_crafting_terminal";
+    private static final String WIRELESS_CRAFTING_CONTAINER = "net.p455w0rd.wirelesscraftingterminal.common.container.ContainerWirelessCraftingTerminal";
+
     private static final String[][] HOSTS = { { "grinder", "Grinder" }, { "condenser", "Condenser" },
         { "chest", "Chest" }, { "sky_chest", "SkyChest" }, { "drive", "Drive" },
         { "vibration_chamber", "VibrationChamber" }, { "inscriber", "Inscriber" },
@@ -21,7 +24,8 @@ public final class AppliedEnergisticsCompatibility {
         { "crafting_terminal", "CraftingTerm" }, { "pattern_terminal", "PatternTerm" },
         { "extended_pattern_terminal", "PatternTermEx" }, { "portable_cell", "MEPortableCell" },
         { "interface_terminal", "InterfaceTerminal" }, { "crafting_diagnostic_terminal", "CraftingDiagnosticTerminal" },
-        { "storage_bus", "StorageBus" }, { "import_export_bus", "BusIO" }, { "level_emitter", "LevelEmitter" } };
+        { "storage_bus", "StorageBus" }, { "import_export_bus", "BusIO" }, { "level_emitter", "LevelEmitter" },
+        { "formation_plane", "FormationPlane" }, { "advanced_level_emitter", "AdvancedLevelEmitter" } };
 
     private static final NativeUiLayout LAYOUT = NativeUiLayout.builder()
         .fixedPlayerColumns(9)
@@ -38,10 +42,19 @@ public final class AppliedEnergisticsCompatibility {
     public static void registerInventoryAdapters() {
         // Core wireless access uses the same MEMonitorable host as the wired ME Terminal.
         for (String[] host : HOSTS) machine(host[0], host[1]);
+        if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
+            && OptionalInventoryAdapters.reviewedVersion("ae2wct"))
+            register(
+                WIRELESS_CRAFTING_ID,
+                WIRELESS_CRAFTING_CONTAINER,
+                AppliedEnergisticsBackground.WIRELESS_CRAFTING_GUI);
     }
 
     static boolean panelHost(InventoryUiAdapter adapter, String container) {
         if (adapter.getCompatibilityRevision() < 3) return false;
+        if (WIRELESS_CRAFTING_CONTAINER.equals(container) && WIRELESS_CRAFTING_ID.equals(adapter.getId()))
+            return WIRELESS_CRAFTING_CONTAINER.equals(adapter.getContainerClassName())
+                && AppliedEnergisticsBackground.WIRELESS_CRAFTING_GUI.equals(adapter.getGuiClassName());
         for (String[] host : HOSTS) if (adapter.getId()
             .equals("dynamicinventory:ae2_" + host[0])
             && container.equals("appeng.container.implementations.Container" + host[1])
@@ -53,10 +66,15 @@ public final class AppliedEnergisticsCompatibility {
     }
 
     private static void machine(String id, String type) {
-        String gui = "appeng.client.gui.implementations.Gui" + type;
+        register(
+            "dynamicinventory:ae2_" + id,
+            "appeng.container.implementations.Container" + type,
+            "appeng.client.gui.implementations.Gui" + type);
+    }
+
+    private static void register(String id, String containerClass, String gui) {
         InventoryUi.register(
-            InventoryUiAdapter
-                .builder("dynamicinventory:ae2_" + id, "appeng.container.implementations.Container" + type)
+            InventoryUiAdapter.builder(id, containerClass)
                 .gui(gui)
                 .compatibilityRevision(3)
                 .layout(AppliedEnergisticsBackground.hasSidePanels(gui) ? SIDE_LAYOUT : LAYOUT)

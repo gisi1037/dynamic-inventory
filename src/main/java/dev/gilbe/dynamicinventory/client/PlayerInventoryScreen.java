@@ -45,6 +45,8 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     private int hotbarRow;
     private net.minecraft.client.settings.KeyBinding bindingHotbarKey;
     private boolean terminalSettings;
+    private boolean craftingTerminalSettings;
+    private static final String[] TERMINAL_ROW_LABELS = { "Small rows", "Tall rows", "Full rows" };
     private boolean scrolling;
     private boolean controlClick;
     private int defaultSectionTop;
@@ -166,7 +168,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 addOwnedButton(baublesButton);
             }
             buttonList.addAll(integrationButtons);
-            nutritionButton = NutritionCompatibility.button(guiLeft + header.resultX - 8, guiTop + tabSpace + 64);
+            nutritionButton = NutritionCompatibility.button(guiLeft + view.width - 22, guiTop + tabSpace + 64);
             if (nutritionButton != null) addOwnedButton(nutritionButton);
             InventoryTabsCompatibility.addTabs(buttonList, guiLeft, guiTop + tabSpace);
             floating = new DetachedChestPanel(
@@ -234,13 +236,18 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 return;
             }
             if (terminalSettings) {
-                int[] counts = { InventoryViewSettings.terminalSmallRows, InventoryViewSettings.terminalTallRows,
-                    InventoryViewSettings.terminalFullRows };
-                for (int setting = 0; setting < counts.length; setting++) {
-                    GuiButton minus = new GuiButton(131 + setting * 2, x + 6, y + 29 + setting * 28, 24, 20, "-");
-                    GuiButton plus = new GuiButton(132 + setting * 2, x + 142, y + 29 + setting * 28, 24, 20, "+");
-                    minus.enabled = counts[setting] > 3;
-                    plus.enabled = counts[setting] < 24;
+                GuiButton normal = new GuiButton(137, x + 6, y + 24, 76, 20, "Normal");
+                GuiButton crafting = new GuiButton(138, x + 90, y + 24, 76, 20, "Crafting");
+                normal.enabled = craftingTerminalSettings;
+                crafting.enabled = !craftingTerminalSettings;
+                addOwnedButton(normal);
+                addOwnedButton(crafting);
+                for (int setting = 0; setting < TERMINAL_ROW_LABELS.length; setting++) {
+                    int count = InventoryViewSettings.terminalRows(craftingTerminalSettings, setting);
+                    GuiButton minus = new GuiButton(131 + setting * 2, x + 6, y + 51 + setting * 27, 24, 20, "-");
+                    GuiButton plus = new GuiButton(132 + setting * 2, x + 142, y + 51 + setting * 27, 24, 20, "+");
+                    minus.enabled = count > 3;
+                    plus.enabled = count < 24;
                     addOwnedButton(minus);
                     addOwnedButton(plus);
                 }
@@ -338,6 +345,10 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
         if (floating != null && floating.detached()) floating.position();
     }
 
+    int storageColumns() {
+        return view.columns;
+    }
+
     @Override
     protected void actionPerformed(GuiButton button) {
         if (!ownedButtons.contains(button)) return;
@@ -420,6 +431,12 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 terminalSettings = button.id == 113;
                 initGui();
                 return;
+            case 137:
+            case 138:
+                if (!settingsOpen || !terminalSettings) return;
+                craftingTerminalSettings = button.id == 138;
+                initGui();
+                return;
             case 131:
             case 132:
             case 133:
@@ -430,9 +447,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 int setting = (button.id - 131) / 2;
                 int delta = button.id % 2 == 0 ? 1 : -1;
                 InventoryViewSettings.setTerminalRows(
-                    InventoryViewSettings.terminalSmallRows + (setting == 0 ? delta : 0),
-                    InventoryViewSettings.terminalTallRows + (setting == 1 ? delta : 0),
-                    InventoryViewSettings.terminalFullRows + (setting == 2 ? delta : 0));
+                    craftingTerminalSettings,
+                    setting,
+                    InventoryViewSettings.terminalRows(craftingTerminalSettings, setting) + delta);
                 initGui();
                 return;
             default:
@@ -696,7 +713,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             baublesButton.yPosition = guiTop + tabSpace + 8;
         }
         if (nutritionButton != null) {
-            nutritionButton.xPosition = guiLeft + header.resultX - 8;
+            nutritionButton.xPosition = guiLeft + view.width - nutritionButton.width - 6;
             nutritionButton.yPosition = guiTop + tabSpace + 64;
             nutritionButton.enabled = controlsAvailable();
         }
@@ -784,26 +801,16 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 y + 139,
                 theme.settingsText);
         } else if (terminalSettings) {
-            drawCenteredString(
-                fontRendererObj,
-                "Small rows: " + InventoryViewSettings.terminalSmallRows,
-                width / 2,
-                y + 35,
-                theme.settingsText);
-            drawCenteredString(
-                fontRendererObj,
-                "Tall rows: " + InventoryViewSettings.terminalTallRows,
-                width / 2,
-                y + 63,
-                theme.settingsText);
-            drawCenteredString(
-                fontRendererObj,
-                "Full rows: " + InventoryViewSettings.terminalFullRows,
-                width / 2,
-                y + 91,
-                theme.settingsText);
-            drawCenteredString(fontRendererObj, "Saved immediately", width / 2, y + 125, theme.settingsText);
-            drawCenteredString(fontRendererObj, "Reopen terminal to apply", width / 2, y + 141, theme.settingsText);
+            for (int setting = 0; setting < TERMINAL_ROW_LABELS.length; setting++) {
+                drawCenteredString(
+                    fontRendererObj,
+                    TERMINAL_ROW_LABELS[setting] + ": "
+                        + InventoryViewSettings.terminalRows(craftingTerminalSettings, setting),
+                    width / 2,
+                    y + 57 + setting * 27,
+                    theme.settingsText);
+            }
+            drawCenteredString(fontRendererObj, "Reopen terminal to apply", width / 2, y + 138, theme.settingsText);
         } else {
             drawCenteredString(
                 fontRendererObj,

@@ -38,6 +38,13 @@ tasks.register("writeInventoryExampleClasspath") {
 }
 
 def inventoryProfile = providers.gradleProperty("inventoryProfile").getOrElse("isolated")
+def defaultInventoryProfile = inventoryProfile == "gtnh-2.9.0" ? inventoryProfile : "isolated"
+tasks.named("processResources") {
+    inputs.property("defaultInventoryProfile", defaultInventoryProfile)
+    filesMatching("integration-profiles.properties") {
+        filter { line -> line.startsWith("default.profile=") ? "default.profile=${defaultInventoryProfile}".toString() : line }
+    }
+}
 if (inventoryProfile != "isolated") {
     sourceSets {
         rc2Compat {

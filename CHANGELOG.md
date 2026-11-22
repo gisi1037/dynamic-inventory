@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.1 — 2026-11-22
+
+This is the final Dynamic Inventory release for **GT New Horizons 2.9.0** on Minecraft 1.7.10.
+
+Replace your previous Dynamic Inventory JAR with `dynamicinventory-0.8.1.jar` on both client and server. The release JAR selects the GTNH 2.9.0 profile by default.
+
+- AE2 Pins reopens immediately from a cached snapshot. It refreshes about every 10 seconds while inventory is closed and stops polling when the panel is disabled.
+- The movable Pins grid preserves empty cells and supports pin editing, full tooltips, crafting requests, and inventory transfers. The panel can stay connected to the wireless network while another terminal is open.
+- Scroll transfers prioritize a matching AE2 pin. Pull scrolling refills the hovered stack, and scrolling directly over a pin fills the active hotbar first. The client preview keeps the helmet slot intact.
+- Detached panels allocate storage from the end of the inventory. Shift-clicking a player crafting result targets Main. Bulk transfers stay within the initiating panel and skip hidden alternate hotbars.
+- Reviewed AE2, Ender IO, Draconic Evolution, backpack, and Thaumcraft interfaces gained inventory layout or transfer fixes.
+
+The GTNH 2.9.0 build and artifact checks passed. Focused in-game checks covered AE2 Pins caching and scroll transfers with NEI and Mouse Tweaks.
+
 ## 0.8.0 Alpha 4 — 2026-11-21
 
 Targets **GT New Horizons 2.9.0** on Minecraft 1.7.10. Replace the previous mod with

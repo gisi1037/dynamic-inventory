@@ -17,10 +17,18 @@ public final class PanelTransferTargets {
             // Divide at a row boundary, including offscreen rows and a partial last row.
             int rows = (mainStorage.length + columns - 1) / columns;
             int split = Math.min(mainStorage.length, (rows + 1) / 2 * columns);
-            int[] opposite = Arrays
-                .copyOfRange(mainStorage, i < split ? split : 0, i < split ? mainStorage.length : split);
-            int[] result = Arrays.copyOf(hotbar, hotbar.length + opposite.length);
-            System.arraycopy(opposite, 0, result, hotbar.length, opposite.length);
+            boolean sourceAbove = i < split;
+            int[] result = Arrays.copyOf(hotbar, hotbar.length + (sourceAbove ? mainStorage.length - split : split));
+            if (sourceAbove) {
+                // Start with the bottom row, preserving left-to-right placement within each row.
+                int destination = hotbar.length;
+                for (int end = mainStorage.length; end > split;) {
+                    int start = (end - 1) / columns * columns;
+                    System.arraycopy(mainStorage, start, result, destination, end - start);
+                    destination += end - start;
+                    end = start;
+                }
+            } else System.arraycopy(mainStorage, 0, result, hotbar.length, split);
             return result;
         }
         int[] result = Arrays.copyOf(hotbar, hotbar.length + mainStorage.length);

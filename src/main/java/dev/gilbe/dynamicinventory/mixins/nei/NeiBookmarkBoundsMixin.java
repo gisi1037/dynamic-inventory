@@ -21,9 +21,13 @@ public abstract class NeiBookmarkBoundsMixin {
     @Inject(method = "calculateBounds", at = @At("RETURN"), cancellable = true)
     private void dynamicinventory$fitBookmarks(GuiContainer gui, CallbackInfoReturnable<Rectangle4i> cir) {
         DetachedChestPanel panel = DetachedChestPanel.of(gui);
-        if (panel == null || !panel.detached()) return;
+        Rect pins = dev.gilbe.dynamicinventory.compat.PackCompatibility.aePinnedPanel()
+            ? dev.gilbe.dynamicinventory.client.AePinnedPanel.occupied(gui)
+            : null;
+        if (panel == null || !panel.detached() && pins == null) return;
         Rectangle4i original = cir.getReturnValue();
         java.util.List<Rect> obstacles = new java.util.ArrayList<>(panel.occupiedBounds());
+        if (pins != null) obstacles.add(pins);
         Rect hotbars = dev.gilbe.dynamicinventory.client.HotbarBankPanel.bounds(gui);
         if (hotbars != null) obstacles.add(hotbars);
         Rect fitted = InventoryPanelLayout

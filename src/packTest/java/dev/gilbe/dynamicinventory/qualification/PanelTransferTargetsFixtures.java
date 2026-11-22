@@ -31,11 +31,22 @@ public final class PanelTransferTargetsFixtures {
             concat(hotbar, java.util.Arrays.copyOfRange(rows, 0, 18)));
         check(
             PanelTransferTargets.quickMove(400, hotbar, rows, 5),
-            concat(hotbar, java.util.Arrays.copyOfRange(rows, 15, 27)));
+            concat(hotbar, new int[] { 425, 426, 420, 421, 422, 423, 424, 415, 416, 417, 418, 419 }));
         check(
             PanelTransferTargets.quickMove(426, hotbar, rows, 5),
             concat(hotbar, java.util.Arrays.copyOfRange(rows, 0, 15)));
-        System.out.println("PASS Main/hotbar-only transfers, satellite returns, empty Main and noncontiguous IDs");
+        int[] expanded = java.util.stream.IntStream.range(500, 554)
+            .toArray();
+        check(
+            PanelTransferTargets.quickMove(518, hotbar, expanded, 9),
+            concat(
+                hotbar,
+                new int[] { 545, 546, 547, 548, 549, 550, 551, 552, 553, 536, 537, 538, 539, 540, 541, 542, 543, 544,
+                    527, 528, 529, 530, 531, 532, 533, 534, 535 }));
+        check(
+            PanelTransferTargets.quickMove(553, hotbar, expanded, 9),
+            concat(hotbar, java.util.Arrays.copyOfRange(expanded, 0, 27)));
+        System.out.println("PASS Main/hotbar transfers, partial bottom row, hidden rows and noncontiguous IDs");
     }
 
     private static int[] concat(int[] first, int[] last) {

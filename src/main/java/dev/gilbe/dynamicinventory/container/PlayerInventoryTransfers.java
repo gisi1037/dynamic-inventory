@@ -39,7 +39,7 @@ public final class PlayerInventoryTransfers {
         ItemStack original = source.copy();
         boolean moved;
         if (id == PlayerContainerLayout.RESULT) {
-            moved = merge(container, source, reversed(allMain));
+            moved = mergeAutomaticAll(container, source, allMain);
             if (moved) slot.onSlotChange(source, original);
         } else if (id < PlayerContainerLayout.LEGACY_STORAGE_START
             || (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND)) {
@@ -195,9 +195,4 @@ public final class PlayerInventoryTransfers {
             && dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, slot.getSlotIndex());
     }
 
-    private static int[] reversed(int[] source) {
-        int[] result = new int[source.length];
-        for (int i = 0; i < source.length; i++) result[i] = source[source.length - i - 1];
-        return result;
-    }
 }

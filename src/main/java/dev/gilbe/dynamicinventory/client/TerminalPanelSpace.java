@@ -3,9 +3,11 @@ package dev.gilbe.dynamicinventory.client;
 import net.minecraft.client.gui.inventory.GuiContainer;
 
 import appeng.api.config.TerminalStyle;
+import appeng.client.gui.implementations.GuiCraftingTerm;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
+import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
 
 /** Resolve saved panel preferences during native terminal initialization, before the decorator exists. */
 public final class TerminalPanelSpace {
@@ -13,11 +15,14 @@ public final class TerminalPanelSpace {
     private TerminalPanelSpace() {}
 
     public static int rows(GuiContainer gui, NativeLayoutPatch patch, int available, int fixed, TerminalStyle style) {
-        int requestedRows = switch (style) {
-            case SMALL -> InventoryViewSettings.terminalSmallRows;
-            case TALL -> InventoryViewSettings.terminalTallRows;
-            case FULL -> InventoryViewSettings.terminalFullRows;
-        };
+        boolean crafting = gui instanceof GuiCraftingTerm || AppliedEnergisticsBackground.WIRELESS_CRAFTING_GUI.equals(
+            gui.getClass()
+                .getName());
+        int requestedRows = InventoryViewSettings.terminalRows(crafting, switch (style) {
+            case SMALL -> 0;
+            case TALL -> 1;
+            case FULL -> 2;
+        });
         InventoryUiAdapter adapter = InventoryUi.findAdapter(gui.inventorySlots);
         if (adapter == null) return TerminalViewportLayout.terminalRows(available, fixed, requestedRows);
         String key = PlayerPanelProfiles.key(
