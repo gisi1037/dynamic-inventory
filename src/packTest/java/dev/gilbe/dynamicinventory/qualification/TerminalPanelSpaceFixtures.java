@@ -1,5 +1,7 @@
 package dev.gilbe.dynamicinventory.qualification;
 
+import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
+import dev.gilbe.dynamicinventory.client.InventoryViewSettings.TerminalKind;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfile;
 import dev.gilbe.dynamicinventory.client.TerminalPanelSpace;
 import dev.gilbe.dynamicinventory.client.TerminalViewportLayout;
@@ -10,6 +12,13 @@ public final class TerminalPanelSpaceFixtures {
     private TerminalPanelSpaceFixtures() {}
 
     public static void main(String[] args) {
+        InventoryViewSettings.setTerminalRows(TerminalKind.NORMAL, 1, 5);
+        InventoryViewSettings.setTerminalRows(TerminalKind.CRAFTING, 1, 7);
+        InventoryViewSettings.setTerminalRows(TerminalKind.INTERFACE, 1, 11);
+        check(InventoryViewSettings.terminalRows(TerminalKind.NORMAL, 1) == 5, "Normal rows are independent");
+        check(InventoryViewSettings.terminalRows(TerminalKind.CRAFTING, 1) == 7, "Crafting rows are independent");
+        check(InventoryViewSettings.terminalRows(TerminalKind.INTERFACE, 1) == 11, "Interface rows are independent");
+        check(InventoryViewSettings.terminalRows(TerminalKind.INTERFACE, 0) == 3, "Interface styles are independent");
         PlayerPanelProfile wide = new PlayerPanelProfile(true, 280, 164, 5000, 9000);
         check(rows(wide, 444, 145, 6) == 6, "Tall stays at six rows when the screen could fit more");
         check(

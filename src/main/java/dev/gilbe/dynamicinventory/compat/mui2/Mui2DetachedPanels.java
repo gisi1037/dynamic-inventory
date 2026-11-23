@@ -35,6 +35,7 @@ import dev.gilbe.dynamicinventory.client.PanelSettingsOverlay;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfiles;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.mixins.modularui2.Mui2PanelHoverAccess;
 
 /**
  * Projects the existing MUI2 player widgets into shared inventory panels. Nothing is reparented,
@@ -429,7 +430,7 @@ public final class Mui2DetachedPanels {
     }
 
     public void rememberHover(ModularScreen screen) {
-        if (controller == null) return;
+        if (!hasDetachedLayout()) return;
         var context = screen.getContext();
         hoverX = context.getAbsMouseX();
         hoverY = context.getAbsMouseY();
@@ -437,11 +438,24 @@ public final class Mui2DetachedPanels {
     }
 
     public void refreshHover(ModularScreen screen, int x, int y) {
-        if (controller == null || hoverCurrent && hoverX == x && hoverY == y) return;
+        if (!hasDetachedLayout() || hoverCurrent && hoverX == x && hoverY == y) return;
         var context = screen.getContext();
         context.updateState(x, y, context.getPartialTicks());
+        rebuildHover(screen);
         context.onFrameUpdate();
         rememberHover(screen);
+    }
+
+    public void rebuildHover(ModularScreen screen) {
+        if (!hasDetachedLayout()) return;
+        // ModularPanel gathers candidates in a frame listener, before ModularGuiContext resolves hover.
+        // Its original candidates were measured while the widgets still had their attached bounds.
+        for (ModularPanel panel : screen.getPanelManager()
+            .getOpenPanels()) ((Mui2PanelHoverAccess) panel).dynamicinventory$findHoveredWidgets();
+    }
+
+    private boolean hasDetachedLayout() {
+        return controller != null && controller.detached();
     }
 
     public void invalidateHover() {

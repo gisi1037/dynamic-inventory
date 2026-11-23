@@ -23,6 +23,8 @@ public final class InventoryViewSettings {
     private static final String[] TERMINAL_ROW_KEYS = { "smallRows", "tallRows", "fullRows" };
     private static final int[] terminalRows = { 3, 6, 6 };
     private static final int[] craftingTerminalRows = { 3, 6, 6 };
+    private static final int[] interfaceTerminalRows = { 3, 6, 6 };
+    private static final String NATIVE_AE2_CATEGORY = "ae2nativepanels";
     public static int playerSectionAnchorX = -1, playerSectionAnchorY = -1;
     static PinsPanelGeometry legacyPinsGeometry = PinsPanelGeometry.DEFAULT;
     static AePinsGrid pinsGrid;
@@ -30,6 +32,12 @@ public final class InventoryViewSettings {
     private static Configuration configuration;
 
     private InventoryViewSettings() {}
+
+    public enum TerminalKind {
+        NORMAL,
+        CRAFTING,
+        INTERFACE
+    }
 
     public static void initialize(File file) {
         configuration = new Configuration(file);
@@ -123,19 +131,26 @@ public final class InventoryViewSettings {
         int tallDefault = legacyTall == null ? 6 : Math.max(3, Math.min(24, legacyTall.getInt(6)));
         for (int style = 0; style < TERMINAL_ROW_KEYS.length; style++) {
             terminalRows[style] = configuration.getInt(
-                terminalRowKey(false, style),
+                terminalRowKey(TerminalKind.NORMAL, style),
                 TERMINAL_CATEGORY,
                 style == 0 ? 3 : tallDefault,
                 3,
                 24,
                 "Fixed network-browser row count for normal AE2 terminals.");
             craftingTerminalRows[style] = configuration.getInt(
-                terminalRowKey(true, style),
+                terminalRowKey(TerminalKind.CRAFTING, style),
                 TERMINAL_CATEGORY,
                 terminalRows[style],
                 3,
                 24,
                 "Fixed network-browser row count for AE2 crafting terminals.");
+            interfaceTerminalRows[style] = configuration.getInt(
+                terminalRowKey(TerminalKind.INTERFACE, style),
+                TERMINAL_CATEGORY,
+                terminalRows[style],
+                3,
+                24,
+                "Fixed pattern-browser row count for the AE2 Interface Terminal.");
         }
         if (legacyDefault && columns == 18 && rows == 3) {
             // Only migrate the original, unversioned default. Saved modern/custom
@@ -241,23 +256,46 @@ public final class InventoryViewSettings {
         }
     }
 
-    public static int terminalRows(boolean crafting, int style) {
-        return (crafting ? craftingTerminalRows : terminalRows)[style];
+    private static int[] rows(TerminalKind kind) {
+        return switch (kind) {
+            case NORMAL -> terminalRows;
+            case CRAFTING -> craftingTerminalRows;
+            case INTERFACE -> interfaceTerminalRows;
+        };
     }
 
-    public static void setTerminalRows(boolean crafting, int style, int count) {
+    public static int terminalRows(TerminalKind kind, int style) {
+        return rows(kind)[style];
+    }
+
+    public static void setTerminalRows(TerminalKind kind, int style, int count) {
         int value = Math.max(3, Math.min(24, count));
-        (crafting ? craftingTerminalRows : terminalRows)[style] = value;
+        rows(kind)[style] = value;
         if (configuration != null) {
-            configuration.get(TERMINAL_CATEGORY, terminalRowKey(crafting, style), value)
+            configuration.get(TERMINAL_CATEGORY, terminalRowKey(kind, style), value)
                 .set(value);
             configuration.save();
         }
     }
 
-    private static String terminalRowKey(boolean crafting, int style) {
+    private static String terminalRowKey(TerminalKind kind, int style) {
         String key = TERMINAL_ROW_KEYS[style];
-        return crafting ? "crafting" + Character.toUpperCase(key.charAt(0)) + key.substring(1) : key;
+        return kind == TerminalKind.NORMAL ? key
+            : kind.name()
+                .toLowerCase(java.util.Locale.ROOT) + Character.toUpperCase(key.charAt(0))
+                + key.substring(1);
     }
 
+    public static int[] nativeAe2Panel(String key) {
+        return configuration == null || !configuration.hasKey(NATIVE_AE2_CATEGORY, key) ? new int[0]
+            : configuration.get(NATIVE_AE2_CATEGORY, key, new int[0])
+                .getIntList();
+    }
+
+    public static void setNativeAe2Panel(String key, int[] geometry) {
+        if (configuration == null) return;
+        configuration.get(NATIVE_AE2_CATEGORY, key, new int[0])
+            .set(geometry);
+        if (configuration.hasChanged()) configuration.save();
+    }
 }

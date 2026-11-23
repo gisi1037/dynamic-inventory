@@ -77,6 +77,15 @@ public final class PanelChrome extends Gui {
         }
     }
 
+    public static void insetDragGrip(Rect target, boolean hovered) {
+        InventoryGuiTheme theme = InventoryGuiTheme.get();
+        int y = target.y + 2;
+        for (int x = target.x + 2; x < target.right() - 1; x += 3) {
+            drawRect(x, y, x + 1, y + 1, theme.panelShadow);
+            drawRect(x, y + 1, x + 1, y + 2, hovered ? theme.label : theme.panelHighlight);
+        }
+    }
+
     public static int corner(Rect panel, int x, int y) {
         if (!panel.contains(x, y)) return 0;
         int horizontal = x < panel.x + 8 ? 1 : x >= panel.right() - 8 ? 2 : 0;

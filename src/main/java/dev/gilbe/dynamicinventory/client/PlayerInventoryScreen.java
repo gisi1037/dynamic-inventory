@@ -45,7 +45,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     private int hotbarRow;
     private net.minecraft.client.settings.KeyBinding bindingHotbarKey;
     private boolean terminalSettings;
-    private boolean craftingTerminalSettings;
+    private InventoryViewSettings.TerminalKind terminalKind = InventoryViewSettings.TerminalKind.NORMAL;
     private static final String[] TERMINAL_ROW_LABELS = { "Small rows", "Tall rows", "Full rows" };
     private boolean scrolling;
     private boolean controlClick;
@@ -236,14 +236,14 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 return;
             }
             if (terminalSettings) {
-                GuiButton normal = new GuiButton(137, x + 6, y + 24, 76, 20, "Normal");
-                GuiButton crafting = new GuiButton(138, x + 90, y + 24, 76, 20, "Crafting");
-                normal.enabled = craftingTerminalSettings;
-                crafting.enabled = !craftingTerminalSettings;
-                addOwnedButton(normal);
-                addOwnedButton(crafting);
+                String[] titles = { "Normal", "Crafting", "Interface" };
+                for (int i = 0; i < titles.length; i++) {
+                    GuiButton tab = new GuiButton(137 + i, x + 6 + 54 * i, y + 24, 52, 20, titles[i]);
+                    tab.enabled = terminalKind.ordinal() != i;
+                    addOwnedButton(tab);
+                }
                 for (int setting = 0; setting < TERMINAL_ROW_LABELS.length; setting++) {
-                    int count = InventoryViewSettings.terminalRows(craftingTerminalSettings, setting);
+                    int count = InventoryViewSettings.terminalRows(terminalKind, setting);
                     GuiButton minus = new GuiButton(131 + setting * 2, x + 6, y + 51 + setting * 27, 24, 20, "-");
                     GuiButton plus = new GuiButton(132 + setting * 2, x + 142, y + 51 + setting * 27, 24, 20, "+");
                     minus.enabled = count > 3;
@@ -433,8 +433,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 return;
             case 137:
             case 138:
+            case 139:
                 if (!settingsOpen || !terminalSettings) return;
-                craftingTerminalSettings = button.id == 138;
+                terminalKind = InventoryViewSettings.TerminalKind.values()[button.id - 137];
                 initGui();
                 return;
             case 131:
@@ -447,9 +448,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 int setting = (button.id - 131) / 2;
                 int delta = button.id % 2 == 0 ? 1 : -1;
                 InventoryViewSettings.setTerminalRows(
-                    craftingTerminalSettings,
+                    terminalKind,
                     setting,
-                    InventoryViewSettings.terminalRows(craftingTerminalSettings, setting) + delta);
+                    InventoryViewSettings.terminalRows(terminalKind, setting) + delta);
                 initGui();
                 return;
             default:
@@ -804,8 +805,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
             for (int setting = 0; setting < TERMINAL_ROW_LABELS.length; setting++) {
                 drawCenteredString(
                     fontRendererObj,
-                    TERMINAL_ROW_LABELS[setting] + ": "
-                        + InventoryViewSettings.terminalRows(craftingTerminalSettings, setting),
+                    TERMINAL_ROW_LABELS[setting] + ": " + InventoryViewSettings.terminalRows(terminalKind, setting),
                     width / 2,
                     y + 57 + setting * 27,
                     theme.settingsText);

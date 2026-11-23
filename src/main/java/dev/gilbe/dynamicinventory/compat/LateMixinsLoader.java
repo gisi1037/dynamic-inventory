@@ -84,7 +84,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "nei.NeiPanelOverlapMixin",
                     "nei.NeiBookmarkBoundsMixin",
                     "nei.NeiPanelSpawningMixin",
-                    "nei.NeiPlayerSectionOriginMixin"));
+                    "nei.NeiPlayerSectionOriginMixin",
+                    "nei.NeiPinnedRecipeMixin"));
         if (PackCompatibility.enabled() && loadedMods.contains("Forestry")
             && OptionalInventoryAdapters.reviewedVersion("Forestry")) {
             mixins.addAll(
@@ -233,8 +234,11 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "bogosorter.BogoPanelSortButtonMixin"));
             if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
                 mixins.add("craftingtweaks.CraftingTweakButtonMixin");
-            if (loadedMods.contains("modularui2"))
-                mixins.addAll(Arrays.asList("modularui2.Mui2InventoryResizeMixin", "modularui2.Mui2TextLayoutMixin"));
+            if (loadedMods.contains("modularui2")) mixins.addAll(
+                Arrays.asList(
+                    "modularui2.Mui2InventoryResizeMixin",
+                    "modularui2.Mui2TextLayoutMixin",
+                    "modularui2.Mui2PanelHoverAccess"));
             if (loadedMods.contains("modularui")) mixins.add("modularui.Mui1InventoryResizeMixin");
         }
         if (loadedMods.contains("NotEnoughItems") && cpw.mods.fml.relauncher.FMLLaunchHandler.side()

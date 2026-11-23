@@ -33,6 +33,7 @@ public final class DetachedChestPanel extends Gui {
     private final GuiContainer gui;
     private final ContainerPanelAccess access;
     private Rect machine;
+    private Rect nativeLayoutAnchor;
     private final Rect viewport;
     private Rect attached;
     private Rect attachedControl;
@@ -168,7 +169,7 @@ public final class DetachedChestPanel extends Gui {
     }
 
     private Rect profileMachine() {
-        return gui instanceof PlayerInventoryScreen player ? player.panelLayoutReferenceBounds() : machine;
+        return gui instanceof PlayerInventoryScreen player ? player.panelLayoutReferenceBounds() : pinsLayoutAnchor();
     }
 
     public String selected() {
@@ -410,6 +411,10 @@ public final class DetachedChestPanel extends Gui {
         return machine;
     }
 
+    Rect pinsLayoutAnchor() {
+        return nativeLayoutAnchor == null ? machine : nativeLayoutAnchor;
+    }
+
     public List<Rect> bounds() {
         List<Rect> result = new ArrayList<>();
         if (detached()) for (Panel panel : panels) if (panel.layout != null) result.add(panel.layout.bounds);
@@ -501,10 +506,22 @@ public final class DetachedChestPanel extends Gui {
         } else auxiliaryBounds(auxiliary);
     }
 
+    void nativeBounds(Rect anchor, Rect bounds, List<Rect> auxiliary, boolean preview) {
+        nativeLayoutAnchor = anchor;
+        machine = bounds;
+        if (!preview) auxiliaryBounds(auxiliary);
+    }
+
     /** Native optional inventories can change size without reopening their container. */
     public void auxiliaryBounds(List<Rect> auxiliary) {
         if (captured != null) return;
         boolean changed = fixed.size() != auxiliary.size() + 1;
+        if (!changed) {
+            Rect previous = fixed.get(0);
+            changed = machine.x != previous.x || machine.y != previous.y
+                || machine.width != previous.width
+                || machine.height != previous.height;
+        }
         for (int i = 0; !changed && i < auxiliary.size(); i++) {
             Rect a = auxiliary.get(i), b = fixed.get(i + 1);
             changed = a.x != b.x || a.y != b.y || a.width != b.width || a.height != b.height;

@@ -63,6 +63,8 @@ public final class AePinnedPanel extends Gui {
     private GuiScreen optionsScreen, scrollingScreen, pressedScreen;
     private int scrollGrab;
     private Rect paintedBounds;
+    private Rect retainedBounds;
+    private PinsPanelGeometry retainedGeometry;
     private Object connection;
     private AePinsChannel.Snapshot snapshot;
     private final AePinsPrediction prediction = new AePinsPrediction();
@@ -158,6 +160,7 @@ public final class AePinnedPanel extends Gui {
             optionsScreen = scrollingScreen = pressedScreen = null;
             paintedScreen = null;
             paintedBounds = null;
+            retainedBounds = null;
             snapshot = null;
             INCOMING.set(null);
             prediction.clear();
@@ -197,6 +200,7 @@ public final class AePinnedPanel extends Gui {
         scroll = columnScroll = 0;
         clearGesture();
         paintedBounds = null;
+        retainedBounds = null;
         if (!enabled) {
             if (connection != null) AePinsChannel.send(++epoch, false, false, false);
             remote = foreground = false;
@@ -252,10 +256,18 @@ public final class AePinnedPanel extends Gui {
     private Rect bounds(GuiScreen gui, DetachedChestPanel host) {
         if (gesture != null && gestureScreen == gui && lastBounds != null) return lastBounds;
         Rect viewport = viewport(gui);
-        Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), host.machineBounds());
+        Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), host.pinsLayoutAnchor());
         int width = Math.min(preferred.width, viewport.width);
         int height = Math.min(preferred.height, viewport.height);
         List<Rect> occupied = obstacles(gui, host);
+        Rect retained = retainedBounds;
+        if (paintedScreen == gui && retained != null
+            && retainedGeometry == PlayerPanelProfiles.pins(host.key())
+            && viewport.contains(retained.x, retained.y)
+            && viewport.contains(retained.right() - 1, retained.bottom() - 1)
+            && occupied.stream()
+                .noneMatch(retained::intersects))
+            return retained;
         Rect desired = new Rect(preferred.x, preferred.y, width, height);
         Rect fitted = InventoryPanelLayout.snapDrag(desired, viewport, occupied);
         if (fitted != null) return fitted;
@@ -267,6 +279,15 @@ public final class AePinnedPanel extends Gui {
 
     public static Rect occupied(GuiScreen gui) {
         return PANEL.enabled && gui == PANEL.paintedScreen ? PANEL.paintedBounds : null;
+    }
+
+    static void retainPositionAfterNativeDrag(GuiContainer gui) {
+        Rect visible = occupied(gui);
+        DetachedChestPanel host = DetachedChestPanel.of(gui);
+        if (visible == null || host == null) return;
+        // Removing the terminal as an obstacle must not make Pins jump into the freed space.
+        PANEL.retainedBounds = visible;
+        PANEL.retainedGeometry = PlayerPanelProfiles.pins(host.key());
     }
 
     public static void draw(GuiScreen gui, int x, int y) {
@@ -309,9 +330,13 @@ public final class AePinnedPanel extends Gui {
         int text = InventoryGuiTheme.get().label;
         Rect toggle = button(host);
         PanelChrome.raisedButton(toggle, true, toggle.contains(x, y));
-        int pinColor = enabled ? 0xffffcb77 : text;
-        drawRect(toggle.x + 3, toggle.y + 3, toggle.x + 9, toggle.y + 5, pinColor);
-        drawRect(toggle.x + 5, toggle.y + 5, toggle.x + 7, toggle.y + 10, pinColor);
+        int pin = enabled ? 0xffffcb77 : text;
+        int pinX = toggle.x + 4, pinY = toggle.y + 2;
+        drawRect(pinX - 2, pinY, pinX + 3, pinY + 2, pin);
+        drawRect(pinX - 1, pinY + 2, pinX + 2, pinY + 4, pin);
+        drawRect(pinX - 2, pinY + 4, pinX + 3, pinY + 5, pin);
+        drawRect(pinX - 3, pinY + 5, pinX + 4, pinY + 6, pin);
+        drawRect(pinX, pinY + 6, pinX + 1, pinY + 9, pin);
         if (toggle.contains(x, y) && optionsScreen != gui) drawTooltip(
             gui,
             I18n.format("dynamicinventory.ae2pins.title"),
@@ -319,6 +344,7 @@ public final class AePinnedPanel extends Gui {
             x,
             y);
         if (!enabled) return;
+        if (paintedScreen != gui) retainedBounds = null;
         Rect area = bounds(gui, host);
         paintedScreen = gui;
         paintedBounds = area;
@@ -471,7 +497,7 @@ public final class AePinnedPanel extends Gui {
     }
 
     private static void saveGeometry(GuiScreen gui, DetachedChestPanel host, Rect bounds, boolean resize) {
-        Rect machine = host.machineBounds();
+        Rect machine = host.pinsLayoutAnchor();
         Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), machine);
         int width = resize ? Math.max(72, bounds.width) : preferred.width;
         int height = resize ? Math.max(43, bounds.height) : preferred.height;
@@ -989,6 +1015,21 @@ public final class AePinnedPanel extends Gui {
         int required = Math.max(configured, Math.max(last + 1 - start, editable ? 1 : 0));
         int end = start + Math.min(limit, (required + 8) / 9 * 9);
         for (int index = start; index < end; index++) result.add(new Entry(index, pins.apply(index)));
+    }
+
+    public static ItemStack recipeStack(GuiScreen gui, int x, int y) {
+        Rect area = PANEL.paintedBounds;
+        if (!PANEL.enabled || PANEL.paintedScreen != gui
+            || area == null
+            || PANEL.optionsScreen == gui
+            || PanelSettingsOverlay.isOpen(gui)
+            || ClientInputGuard.isPending(gui)
+            || !area.contains(x, y)) return null;
+        List<Entry> entries = PANEL.entries(gui);
+        Rect scrollbar = scrollTrack(area, entries.size());
+        if (scrollbar != null && scrollbar.contains(x, y)) return null;
+        Entry entry = PANEL.entryAt(area, entries, x, y);
+        return entry == null || entry.stack == null ? null : entry.stack.getItemStackForNEI();
     }
 
     private Entry entryAt(Rect area, List<Entry> entries, int x, int y) {

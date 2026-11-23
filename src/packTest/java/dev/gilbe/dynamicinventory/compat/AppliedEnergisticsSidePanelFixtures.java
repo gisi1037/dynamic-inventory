@@ -1,15 +1,24 @@
 package dev.gilbe.dynamicinventory.compat;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import net.minecraft.inventory.InventoryBasic;
 import net.minecraft.inventory.Slot;
+import net.minecraftforge.common.config.Configuration;
 
 import appeng.container.slot.SlotPatternTerm;
+import cpw.mods.fml.relauncher.FMLInjectionData;
+import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Frame;
+import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Placement;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
+import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsSidePanels;
 
@@ -19,13 +28,43 @@ public final class AppliedEnergisticsSidePanelFixtures {
     private AppliedEnergisticsSidePanelFixtures() {}
 
     public static void main(String[] args) throws Exception {
+        checkSavedPlacement();
         for (int size : new int[] { 3, 5 }) {
             checkToolbox(size, false);
             checkToolbox(size, true);
         }
         checkPatternResult();
-        System.out
-            .println("PASS AE2 toolbox columns: 3x3/5x5, live upgrades, repeated placement and native slot identity");
+        System.out.println("PASS AE2 toolbox: native margins, 3x3/5x5, resizing, live upgrades and unchanged slot IDs");
+    }
+
+    private static void checkSavedPlacement() throws Exception {
+        Field home = FMLInjectionData.class.getDeclaredField("minecraftHome");
+        home.setAccessible(true);
+        Object originalHome = home.get(null);
+        Path file = Files.createTempFile("dynamicinventory-ae2-layout-", ".cfg");
+        try {
+            home.set(
+                null,
+                file.getParent()
+                    .toFile());
+            String key = "appeng.client.gui.implementations.GuiInterfaceTerminal.main";
+            int[] old = { 42, 33, 0, 0 };
+            Configuration legacy = new Configuration(file.toFile());
+            legacy.get("ae2NativePanels", key, new int[0])
+                .set(old);
+            legacy.save();
+            InventoryViewSettings.initialize(file.toFile());
+            check(Arrays.equals(old, InventoryViewSettings.nativeAe2Panel(key)), "Reads existing Forge layout");
+
+            int[] moved = { 150, 85, 0, 0 };
+            InventoryViewSettings.setNativeAe2Panel(key, moved);
+            InventoryViewSettings.initialize(file.toFile());
+            check(Arrays.equals(moved, InventoryViewSettings.nativeAe2Panel(key)), "Position survives reload");
+            System.out.println("PASS Interface Terminal placement reload and existing configuration");
+        } finally {
+            home.set(null, originalHome);
+            Files.deleteIfExists(file);
+        }
     }
 
     private static void checkPatternResult() throws Exception {
@@ -80,7 +119,7 @@ public final class AppliedEnergisticsSidePanelFixtures {
         add.setAccessible(true);
         List<Object> panels = new ArrayList<>();
         // Deliberately reversed: placement must retain native top-to-bottom group order.
-        for (List<TestSlot> group : java.util.Arrays.asList(toolbox, upgrades)) {
+        for (List<TestSlot> group : Arrays.asList(toolbox, upgrades)) {
             Object panel = createPanel.newInstance(false);
             for (Slot slot : group) add.invoke(panel, slot);
             panels.add(panel);
@@ -125,6 +164,46 @@ public final class AppliedEnergisticsSidePanelFixtures {
             layout.bounds(0, 0)
                 .get(1).x == toolX,
             "Live upgrade visibility restores tool placement");
+
+        Object toolPanel = panels.get(1);
+        Field isToolbox = panelType.getDeclaredField("toolbox");
+        isToolbox.setAccessible(true);
+        isToolbox.setBoolean(toolPanel, true);
+        Field detached = panelType.getDeclaredField("detached");
+        detached.setAccessible(true);
+        Constructor<Placement> place = Placement.class
+            .getDeclaredConstructor(Rect.class, int.class, int.class, int.class);
+        place.setAccessible(true);
+        Method frameSize = Frame.class.getDeclaredMethod("size", int.class, int.class, int.class, int.class);
+        frameSize.setAccessible(true);
+        Frame frame = new Frame(
+            "toolbox",
+            layout.bounds(0, 0)
+                .get(1),
+            toolbox.size(),
+            size,
+            size);
+        Rect full = (Rect) frameSize.invoke(frame, 230, 20, size, size);
+        check(full.width == toolWidth && full.height == toolWidth, "Detached toolbox uses attached margins");
+        Rect moved = (Rect) frameSize.invoke(frame, 230, 20, 2, 2);
+        check(moved.width == 46 && moved.height == 46, "No extra header or scrollbar margin when resized");
+        for (int row = 0; row < (toolbox.size() + 1) / 2; row++) {
+            detached.set(toolPanel, place.newInstance(moved, 2, 2, row));
+            layout.positionSlots(17, 8);
+            check(
+                layout.bounds(17, 8)
+                    .get(1) == moved,
+                "Tool frame follows an independent drag");
+            for (int i = 0; i < toolbox.size(); i++) {
+                TestSlot slot = toolbox.get(i);
+                boolean visible = i / 2 >= row && i / 2 < row + 2;
+                check(slot.xDisplayPosition == (visible ? 219 + i % 2 * 18 : -10000), "Resized tool x");
+                check(slot.yDisplayPosition == (visible ? 18 + (i / 2 - row) * 18 : -10000), "Scrolled tool y");
+                check(slot.slotNumber == 100 + i && slot.getSlotIndex() == i, "Resizing preserves native slot IDs");
+            }
+        }
+        layout.position(176, 10);
+        check(toolbox.get(0).xDisplayPosition == toolX + 6, "Returning to attached restores native columns");
     }
 
     private static List<TestSlot> slots(int columns, int rows, int x, int y, int firstId) {

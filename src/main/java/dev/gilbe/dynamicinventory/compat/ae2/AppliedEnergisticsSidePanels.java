@@ -15,6 +15,9 @@ import net.minecraft.util.ResourceLocation;
 
 import org.lwjgl.opengl.GL11;
 
+import dev.gilbe.dynamicinventory.client.AeNativePanelControls;
+import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Frame;
+import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Placement;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.client.NativePanelFrame;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
@@ -23,7 +26,7 @@ import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 public final class AppliedEnergisticsSidePanels extends Gui {
 
     private static final int GAP = 3;
-    private static final int PADDING = 6;
+    private static final int PADDING = AeNativePanelControls.PADDING;
     private static final ResourceLocation SLOTS = new ResourceLocation("textures/gui/container/inventory.png");
     private static final ResourceLocation SECURITY = new ResourceLocation(
         "appliedenergistics2",
@@ -64,6 +67,14 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             groups.computeIfAbsent(slot.inventory, ignored -> new Panel(linking))
                 .add(slot);
         }
+        for (Map.Entry<IInventory, Panel> entry : groups.entrySet()) {
+            Panel panel = entry.getValue();
+            panel.toolbox = entry.getKey()
+                .getClass()
+                .getName()
+                .equals("appeng.items.contents.NetworkToolViewer");
+            panel.id = panel.toolbox ? "toolbox" : "side" + panel.slots.get(0).slotNumber;
+        }
         return groups.isEmpty() ? null
             : new AppliedEnergisticsSidePanels(
                 new ArrayList<>(groups.values()),
@@ -91,29 +102,58 @@ public final class AppliedEnergisticsSidePanels extends Gui {
 
     public List<Rect> bounds(int left, int top) {
         List<Rect> result = new ArrayList<>();
-        for (Panel panel : panels)
-            if (panel.visible()) result.add(new Rect(left + panel.x, top + panel.y, panel.width(), panel.height()));
+        for (Panel panel : panels) if (panel.visible()) result.add(panel.bounds(left, top));
         return result;
+    }
+
+    public void detachedFrames(List<Frame> frames, int left, int top) {
+        for (Panel panel : panels) if (panel.visible()) {
+            Rect suggested = new Rect(left + panel.x, top + panel.y, panel.width(), panel.height());
+            if (panel.toolbox) {
+                int columns = Math.max(1, (panel.contentWidth + 2) / 18);
+                int rows = Math.max(1, (panel.contentHeight + 2) / 18);
+                frames.add(new Frame(panel.id, suggested, panel.slots.size(), columns, rows));
+            } else frames.add(new Frame(panel.id, suggested));
+        }
+    }
+
+    public void placeDetached(AeNativePanelControls controls) {
+        for (Panel panel : panels) panel.detached = controls.placement(panel.id);
+    }
+
+    public void positionSlots(int left, int top) {
+        for (Panel panel : panels) if (panel.visible()) for (int i = 0; i < panel.slots.size(); i++) {
+            Slot slot = panel.slots.get(i);
+            Placement custom = panel.detached;
+            if (custom != null && panel.toolbox) {
+                boolean visible = custom.slotVisible(i);
+                slot.xDisplayPosition = visible ? custom.slotX(i) - left : -10000;
+                slot.yDisplayPosition = visible ? custom.slotY(i) - top : -10000;
+            } else {
+                int[] origin = origins.get(slot);
+                Rect bounds = panel.bounds(left, top);
+                int padding = panel.linking ? 0 : PADDING;
+                slot.xDisplayPosition = bounds.x - left + padding + origin[0];
+                slot.yDisplayPosition = bounds.y - top + padding + origin[1];
+            }
+        }
     }
 
     public int position(int mainWidth, int headerTop) {
         int bottom = headerTop;
         int nextX = mainWidth + GAP;
         for (Panel panel : panels) {
+            panel.detached = null;
             measure(panel);
             if (!panel.visible()) continue;
             // Keep every native side inventory beside the machine. A borrowed tool must not
             // occupy the player band's height or displace detached player panels to the right.
             panel.x = nextX;
             panel.y = stacked && bottom > headerTop ? bottom + GAP : headerTop;
-            for (Slot slot : panel.slots) {
-                int[] origin = origins.get(slot);
-                slot.xDisplayPosition = panel.x + (panel.linking ? 0 : PADDING) + origin[0];
-                slot.yDisplayPosition = panel.y + (panel.linking ? 0 : PADDING) + origin[1];
-            }
             bottom = Math.max(bottom, panel.y + panel.height());
             if (!stacked) nextX += panel.width() + GAP;
         }
+        positionSlots(0, 0);
         return bottom;
     }
 
@@ -124,11 +164,12 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
             for (Panel panel : panels) {
                 if (!panel.visible()) continue;
+                Rect bounds = panel.bounds(left, top);
                 NativePanelFrame.draw(
-                    left + panel.x,
-                    top + panel.y,
-                    panel.width(),
-                    panel.height(),
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     style == 0 ? 2 : style,
                     borderWidth,
                     frameCrop,
@@ -140,21 +181,23 @@ public final class AppliedEnergisticsSidePanels extends Gui {
                         .getTextureManager()
                         .bindTexture(SECURITY);
                     // Keep AE2's linking arrow and larger output-slot artwork, without its old frame.
-                    drawTexturedModalRect(left + panel.x + 16, top + panel.y + 9, 211, 9, 18, 18);
-                    drawTexturedModalRect(left + panel.x + 17, top + panel.y + 32, 212, 32, 18, 25);
-                    drawTexturedModalRect(left + panel.x + 12, top + panel.y + 63, 207, 63, 26, 26);
+                    int contentTop = bounds.y;
+                    drawTexturedModalRect(bounds.x + 16, contentTop + 9, 211, 9, 18, 18);
+                    drawTexturedModalRect(bounds.x + 17, contentTop + 32, 212, 32, 18, 25);
+                    drawTexturedModalRect(bounds.x + 12, contentTop + 63, 207, 63, 26, 26);
                     continue;
                 }
                 Minecraft.getMinecraft()
                     .getTextureManager()
                     .bindTexture(SLOTS);
-                for (Slot slot : panel.slots) if (slot.func_111238_b()) drawTexturedModalRect(
-                    left + slot.xDisplayPosition - 1,
-                    top + slot.yDisplayPosition - 1,
-                    7,
-                    83,
-                    18,
-                    18);
+                for (Slot slot : panel.slots)
+                    if (slot.func_111238_b() && slot.xDisplayPosition != -10000) drawTexturedModalRect(
+                        left + slot.xDisplayPosition - 1,
+                        top + slot.yDisplayPosition - 1,
+                        7,
+                        83,
+                        18,
+                        18);
             }
         } finally {
             GL11.glPopAttrib();
@@ -175,6 +218,9 @@ public final class AppliedEnergisticsSidePanels extends Gui {
 
         private final List<Slot> slots = new ArrayList<>();
         private final boolean linking;
+        private boolean toolbox;
+        private String id;
+        private Placement detached;
         private int left = Integer.MAX_VALUE, top = Integer.MAX_VALUE, x, y;
         private int contentWidth, contentHeight;
 
@@ -198,6 +244,10 @@ public final class AppliedEnergisticsSidePanels extends Gui {
 
         private boolean visible() {
             return linking || contentWidth > 0;
+        }
+
+        private Rect bounds(int originX, int originY) {
+            return detached == null ? new Rect(originX + x, originY + y, width(), height()) : detached.bounds();
         }
     }
 }

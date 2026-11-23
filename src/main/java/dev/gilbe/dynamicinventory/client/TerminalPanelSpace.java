@@ -6,6 +6,7 @@ import appeng.api.config.TerminalStyle;
 import appeng.client.gui.implementations.GuiCraftingTerm;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
+import dev.gilbe.dynamicinventory.client.InventoryViewSettings.TerminalKind;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
 
@@ -18,7 +19,10 @@ public final class TerminalPanelSpace {
         boolean crafting = gui instanceof GuiCraftingTerm || AppliedEnergisticsBackground.WIRELESS_CRAFTING_GUI.equals(
             gui.getClass()
                 .getName());
-        int requestedRows = InventoryViewSettings.terminalRows(crafting, switch (style) {
+        TerminalKind kind = AppliedEnergisticsBackground.isInterfaceTerminal(
+            gui.getClass()
+                .getName()) ? TerminalKind.INTERFACE : crafting ? TerminalKind.CRAFTING : TerminalKind.NORMAL;
+        int requestedRows = InventoryViewSettings.terminalRows(kind, switch (style) {
             case SMALL -> 0;
             case TALL -> 1;
             case FULL -> 2;

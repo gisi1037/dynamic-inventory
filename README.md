@@ -1,7 +1,7 @@
 # Dynamic Inventory
 
 An experimental Forge 1.7.10 mod for larger player inventories in GT New Horizons.
-The **0.8.2** release targets **GTNH 2.9.1**.
+The **0.8.3** release targets **GTNH 2.9.1**.
 Pinned source-build profiles also cover RC-2 and nightly builds 795 and 803.
 
 The default is **72 storage slots plus the nine-slot hotbar**. The server selects
@@ -30,8 +30,8 @@ The in-game editor adjusts presentation, not item ownership or compatibility rul
 
 ## Download and install
 
-Download [Dynamic Inventory 0.8.2](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.2)
-for GTNH **2.9.1** and install **`dynamicinventory-0.8.2.jar`** on both client
+Download [Dynamic Inventory 0.8.3](https://github.com/gisi1037/dynamic-inventory/releases/tag/v0.8.3)
+for GTNH **2.9.1** and install **`dynamicinventory-0.8.3.jar`** on both client
 and server. Replace the previous Dynamic Inventory JAR in each `mods` folder.
 The release JAR selects the GTNH 2.9.1 profile automatically. If your launcher
 sets `dynamicinventory.profile`, use `gtnh-2.9.1` on both sides.
@@ -54,21 +54,21 @@ Install JDK 25 and use the Gradle wrapper. The build produces Java 8-compatible
 mod classes; the RC-2 Java 17–26 runtime is the development target.
 
 ```sh
-VERSION=0.8.2 ./gradlew build -PinventoryProfile=gtnh-2.9.1
+VERSION=0.8.3 ./gradlew build -PinventoryProfile=gtnh-2.9.1
 ```
 
 On Windows, from the repository root:
 
 ```powershell
-$env:VERSION = '0.8.2'
+$env:VERSION = '0.8.3'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\gradle.ps1 build -PinventoryProfile=gtnh-2.9.1
 ```
 
 The 2.9.1 build writes artifacts under `build/libs/gtnh-2.9.1/`:
 
-- `dynamicinventory-0.8.2.jar` for Minecraft.
-- `dynamicinventory-0.8.2-dev.jar` for compiling against the API.
-- `dynamicinventory-0.8.2-sources.jar` for the matching source.
+- `dynamicinventory-0.8.3.jar` for Minecraft.
+- `dynamicinventory-0.8.3-dev.jar` for compiling against the API.
+- `dynamicinventory-0.8.3-sources.jar` for the matching source.
 
 The mod is required on client and server. Use matching versions and compatibility
 profiles. Back up saves and use disposable worlds during development. Do not remove

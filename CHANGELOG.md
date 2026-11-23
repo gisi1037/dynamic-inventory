@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.3 — 2026-11-22
+
+Replaces 0.8.2 for **GT New Horizons 2.9.1** on Minecraft 1.7.10.
+Install the 0.8.3 JAR on both client and server.
+
+- AE2 Interface Terminal has its own row settings and remembers its position.
+- AE2 terminal panels and the Network Tool can move independently of AE2 Pins.
+  The Network Tool is resizable and keeps its original margins.
+- Smaller drag grips and a redesigned AE2 Pins toggle.
+- NEI's Show Recipe key opens recipes for items hovered in AE2 Pins.
+- Detached ModularUI2 panels use their displayed slot positions for highlighting.
+
 ## 0.8.2 — 2026-11-22
 
 Dynamic Inventory for **GT New Horizons 2.9.1** on Minecraft 1.7.10.

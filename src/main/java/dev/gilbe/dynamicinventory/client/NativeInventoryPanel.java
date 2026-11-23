@@ -19,6 +19,7 @@ import org.lwjgl.opengl.GL11;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.NativeUiLayout;
 import dev.gilbe.dynamicinventory.api.client.NativeUiAnchors;
+import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
 import dev.gilbe.dynamicinventory.compat.InventoryTabsCompatibility;
@@ -46,12 +47,14 @@ public final class NativeInventoryPanel extends Gui {
         Minecraft client = Minecraft.getMinecraft();
         int px = org.lwjgl.input.Mouse.getEventX() * screen.width / client.displayWidth;
         int py = screen.height - org.lwjgl.input.Mouse.getEventY() * screen.height / client.displayHeight - 1;
+        NativeInventoryPanel panel = ((ContainerPanelAccess) screen).dynamicinventory$panel();
+        int direction = org.lwjgl.input.Mouse.getEventDWheel() < 0 ? 1 : -1;
+        if (panel != null && panel.scrollAeToolbox(px, py, direction)) return true;
         if (floating != null && floating.detached()) {
             if (PackCompatibility.enabled() && PackClientCompatibility.usesItemWheelTransfer((GuiContainer) screen)
                 && floating.hasItemAt(px, py)) return false;
             return floating.scrollAt(px, py, org.lwjgl.input.Mouse.getEventDWheel() < 0 ? 1 : -1);
         }
-        NativeInventoryPanel panel = ((ContainerPanelAccess) screen).dynamicinventory$panel();
         if (panel == null || panel.maxScroll() == 0) return false;
         int x = org.lwjgl.input.Mouse.getEventX() * screen.width / client.displayWidth;
         int y = screen.height - org.lwjgl.input.Mouse.getEventY() * screen.height / client.displayHeight - 1;
@@ -71,6 +74,10 @@ public final class NativeInventoryPanel extends Gui {
         Minecraft client = Minecraft.getMinecraft();
         int x = org.lwjgl.input.Mouse.getEventX() * screen.width / client.displayWidth;
         int y = screen.height - org.lwjgl.input.Mouse.getEventY() * screen.height / client.displayHeight - 1;
+        NativeInventoryPanel nativePanel = ((ContainerPanelAccess) screen).dynamicinventory$panel();
+        if (nativePanel != null && nativePanel
+            .pointerAePanels(x, y, org.lwjgl.input.Mouse.getEventButton(), org.lwjgl.input.Mouse.getEventButtonState()))
+            return true;
         if (PackCompatibility.aePinnedPanel() && AePinnedPanel
             .mouse(screen, x, y, org.lwjgl.input.Mouse.getEventButton(), org.lwjgl.input.Mouse.getEventButtonState()))
             return true;
@@ -117,6 +124,7 @@ public final class NativeInventoryPanel extends Gui {
     private final int nativeWidth;
     private final int nativeHeight;
     private final AppliedEnergisticsSidePanels aeSidePanels;
+    private final AeNativePanelControls aeNativeControls;
     private final int mainFrameWidth;
     private final int viewportWidth, viewportHeight;
     private int panelTop;
@@ -177,6 +185,9 @@ public final class NativeInventoryPanel extends Gui {
 
     public NativeInventoryPanel(GuiContainer gui) {
         this.gui = gui;
+        String screenClass = gui.getClass()
+            .getName();
+        aeNativeControls = AppliedEnergisticsBackground.isAeGui(screenClass) ? new AeNativePanelControls(gui) : null;
         movingButtons = gui instanceof AppliedEnergisticsMovingButtons moving
             ? java.util.Arrays.asList(moving.dynamicinventory$movingButtons())
             : java.util.Collections.emptyList();
@@ -409,11 +420,10 @@ public final class NativeInventoryPanel extends Gui {
         nativeClipBottom = storageGeometry == null
             ? Math.max(nativeContentBottom, Math.min(nativeStorageTop, playerY - headerY))
             : storageGeometry.cropBottom;
-        // Center the workbench and player stack independently of its toolbox and optional upgrade columns.
+        // Center the browser or workbench independently of its toolbox and optional upgrade columns.
         // The full width still limits the position so those columns have room when a cell is inserted.
-        int centeredWidth = gui.getClass()
-            .getName()
-            .equals("appeng.client.gui.implementations.GuiCellWorkbench") ? mainFrameWidth : totalWidth;
+        int centeredWidth = screenClass.equals("appeng.client.gui.implementations.GuiCellWorkbench")
+            || AppliedEnergisticsBackground.isInterfaceTerminal(screenClass) ? mainFrameWidth : totalWidth;
         // Offsets are preferences relative to the centered layout. Keep the fitted panel on screen.
         int left = Math
             .max(0, Math.min(Math.max(0, gui.width - totalWidth), (gui.width - centeredWidth) / 2 + patch.value(2)));
@@ -434,15 +444,7 @@ public final class NativeInventoryPanel extends Gui {
                 conduitLayout.dynamicinventory$tabBounds(left + headerX, attachedTop + headerY, nativeWidth));
             floating = new DetachedChestPanel(
                 gui,
-                new InventoryPanelLayout.Rect(
-                    left + headerX + nativeClipLeft,
-                    attachedTop + headerY,
-                    nativeClipRight - nativeClipLeft,
-                    storageGeometry == null ? AppliedEnergisticsBackground.detachedHeaderHeight(
-                        gui.getClass()
-                            .getName(),
-                        nativeHeight,
-                        nativeStorageTop) : storageGeometry.bottom),
+                defaultMachine(left, attachedTop),
                 new InventoryPanelLayout.Rect(left + playerX, attachedTop + playerY, panelWidth, panelHeight),
                 frameStyle,
                 borderWidth,
@@ -636,6 +638,7 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     public void restore() {
+        if (aeNativeControls != null) aeNativeControls.clear();
         if (floating != null) floating.cancel();
         for (Map.Entry<Slot, int[]> entry : nativePositions.entrySet())
             placeNativeSlot(entry.getKey(), entry.getValue(), 0, 0);
@@ -665,19 +668,19 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     public int headerOffsetX() {
-        return headerX;
+        return detachedAe() ? nativeHeaderLeft() - access.dynamicinventory$left() : headerX;
     }
 
     public int headerOffsetY() {
-        return headerY;
+        return detachedAe() ? nativeHeaderTop() - access.dynamicinventory$top() : headerY;
     }
 
     public int craftingOffsetX() {
-        return chestLayout == null ? headerX : gui.inventorySlots.getSlot(1).xDisplayPosition - 30;
+        return chestLayout == null ? headerOffsetX() : gui.inventorySlots.getSlot(1).xDisplayPosition - 30;
     }
 
     public int craftingOffsetY() {
-        return chestLayout == null ? headerY : gui.inventorySlots.getSlot(1).yDisplayPosition - 17;
+        return chestLayout == null ? headerOffsetY() : gui.inventorySlots.getSlot(1).yDisplayPosition - 17;
     }
 
     /** A tall adjacent chest must not reveal the crafting station's obsolete player-slot artwork. */
@@ -784,12 +787,81 @@ public final class NativeInventoryPanel extends Gui {
         return true;
     }
 
+    private Rect defaultMachine(int left, int top) {
+        int height = storageGeometry == null ? AppliedEnergisticsBackground.detachedHeaderHeight(
+            gui.getClass()
+                .getName(),
+            nativeHeight,
+            nativeStorageTop) : storageGeometry.bottom;
+        return new Rect(left + headerX + nativeClipLeft, top + headerY, nativeClipRight - nativeClipLeft, height);
+    }
+
+    private boolean detachedAe() {
+        return aeNativeControls != null && floating != null && floating.detached();
+    }
+
+    private void layoutAePanels() {
+        if (aeSidePanels != null) aeSidePanels.position(mainFrameWidth, headerY + nativeClipTop);
+        if (aeNativeControls == null) return;
+        int left = access.dynamicinventory$left(), top = access.dynamicinventory$top();
+        Rect anchor = defaultMachine(left, top);
+        List<Rect> sideBounds = aeSidePanels == null ? java.util.Collections.emptyList()
+            : aeSidePanels.bounds(left, top);
+        if (!detachedAe()) {
+            aeNativeControls.clear();
+            if (floating != null) floating.nativeBounds(anchor, anchor, sideBounds, false);
+            return;
+        }
+        List<Rect> fixed = floating.bounds();
+        Rect hotbars = HotbarBankPanel.bounds(gui);
+        if (hotbars != null) fixed.add(hotbars);
+        List<AeNativePanelControls.Frame> frames = new ArrayList<>();
+        frames.add(new AeNativePanelControls.Frame(AeNativePanelControls.MAIN, anchor));
+        if (aeSidePanels != null) aeSidePanels.detachedFrames(frames, left, top);
+        aeNativeControls.layout(new Rect(0, 8, gui.width, Math.max(0, gui.height - 36)), frames, fixed);
+        if (aeSidePanels != null) {
+            aeSidePanels.placeDetached(aeNativeControls);
+            sideBounds = aeSidePanels.bounds(left, top);
+        }
+        floating.nativeBounds(
+            anchor,
+            aeNativeControls.placement(AeNativePanelControls.MAIN)
+                .bounds(),
+            sideBounds,
+            aeNativeControls.dragging());
+    }
+
+    public void updateAeDragFrame(int x, int y) {
+        if (!detachedAe() || !aeNativeControls.dragging()) return;
+        aeNativeControls.updateDragFrame(x, y);
+        position();
+    }
+
+    public boolean pointerAePanels(int x, int y, int button, boolean down) {
+        if (!detachedAe() || !aeNativeControls.pointer(x, y, button, down)) return false;
+        position();
+        return true;
+    }
+
+    private boolean scrollAeToolbox(int x, int y, int direction) {
+        if (!detachedAe() || !aeNativeControls.wheel(x, y, direction)) return false;
+        position();
+        return true;
+    }
+
+    public boolean cancelAeDrag() {
+        if (!detachedAe() || !aeNativeControls.cancel()) return false;
+        position();
+        return true;
+    }
+
     public void position() {
+        layoutAePanels();
+        int offsetX = headerOffsetX(), offsetY = headerOffsetY();
+        int originX = access.dynamicinventory$left() + offsetX, originY = access.dynamicinventory$top() + offsetY;
         if (headerOrigins != null) {
             int[] translated = headerOrigins.clone();
-            for (int i = 0; i < translated.length; i++)
-                translated[i] += i % 2 == 0 ? access.dynamicinventory$left() + headerX
-                    : access.dynamicinventory$top() + headerY;
+            for (int i = 0; i < translated.length; i++) translated[i] += i % 2 == 0 ? originX : originY;
             if (chestLayout != null) {
                 // Crafting/description use the normal header translation. Chest, border and slider
                 // share the independent top-pane translation, retaining their native relative offsets.
@@ -805,8 +877,6 @@ public final class NativeInventoryPanel extends Gui {
                 attachedChest.dynamicinventory$positionText(access.dynamicinventory$left() + headerX);
         }
         positionMachineSlots();
-        if (floating != null && aeSidePanels != null) floating
-            .auxiliaryBounds(aeSidePanels.bounds(access.dynamicinventory$left(), access.dynamicinventory$top()));
         if (floating != null && floating.detached()) floating.position();
         else {
             int storageCell = 0;
@@ -833,8 +903,8 @@ public final class NativeInventoryPanel extends Gui {
         }
         for (Map.Entry<GuiButton, int[]> entry : buttons.entrySet()) {
             if (movingButtons.contains(entry.getKey())) continue;
-            entry.getKey().xPosition = access.dynamicinventory$left() + headerX + entry.getValue()[0];
-            entry.getKey().yPosition = access.dynamicinventory$top() + headerY + entry.getValue()[1];
+            entry.getKey().xPosition = originX + entry.getValue()[0];
+            entry.getKey().yPosition = originY + entry.getValue()[1];
             int field = widgetField(entry.getKey());
             if (field >= 20) {
                 // Always start from the captured native origin. Previews and repeated draws cannot
@@ -846,14 +916,13 @@ public final class NativeInventoryPanel extends Gui {
         // Tabs belong to the visible frame, not the old 176px header centered inside a wider frame.
         dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsWirelessWidgets.position(
             gui,
-            access.dynamicinventory$left() + headerX,
-            access.dynamicinventory$top() + headerY,
-            access.dynamicinventory$top() + headerY
-                + AppliedEnergisticsBackground.headerBottom(
-                    gui.getClass()
-                        .getName(),
-                    nativeHeight,
-                    nativeStorageTop));
+            originX,
+            originY,
+            originY + AppliedEnergisticsBackground.headerBottom(
+                gui.getClass()
+                    .getName(),
+                nativeHeight,
+                nativeStorageTop));
         InventoryTabsCompatibility.positionTabs(
             access.dynamicinventory$buttons(),
             access.dynamicinventory$left(),
@@ -869,7 +938,7 @@ public final class NativeInventoryPanel extends Gui {
         if (craftingOrigin == null
             && gui instanceof dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBrowserAccess browser) {
             int[] origin = browser.dynamicinventory$virtualCraftingOrigin();
-            if (origin != null) craftingOrigin = new int[] { headerX + origin[0], headerY + origin[1] };
+            if (origin != null) craftingOrigin = new int[] { offsetX + origin[0], offsetY + origin[1] };
         }
         if (craftingOrigin == null) craftingOrigin = new int[] { gui.inventorySlots.getSlot(1).xDisplayPosition,
             gui.inventorySlots.getSlot(1).yDisplayPosition };
@@ -1084,15 +1153,17 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     private void positionMachineSlots() {
+        int offsetX = headerOffsetX(), offsetY = headerOffsetY();
         for (Slot slot : machineSlots) {
             boolean chest = chestLayout != null && attachedChest.dynamicinventory$isChestSlot(slot);
             placeNativeSlot(
                 slot,
                 nativePositions.get(slot),
-                chest ? chestOffsetX : headerX,
-                chest ? chestOffsetY : headerY);
+                chest ? chestOffsetX : offsetX,
+                chest ? chestOffsetY : offsetY);
         }
-        if (aeSidePanels != null) aeSidePanels.position(mainFrameWidth, headerY + nativeClipTop);
+        if (aeSidePanels != null)
+            aeSidePanels.positionSlots(access.dynamicinventory$left(), access.dynamicinventory$top());
     }
 
     private static boolean isAePatternResult(Slot slot) {
@@ -1171,17 +1242,18 @@ public final class NativeInventoryPanel extends Gui {
             for (Slot slot : machineSlots) nativePositions.put(slot, captureNativePosition(slot));
     }
 
-    public void foreground(Runnable nativeDraw) {
+    public void foreground(Runnable nativeDraw, int mouseX, int mouseY) {
         int w = access.dynamicinventory$width(), h = access.dynamicinventory$height();
         int x = access.dynamicinventory$left(), y = access.dynamicinventory$top();
         GL11.glPushMatrix();
         NativeInventoryPanel previousForeground = drawingForeground;
-        try {
-            drawingForeground = this;
-            int hx = floating != null && floating.detached()
+        int hx = detachedAe() ? headerOffsetX()
+            : floating != null && floating.detached()
                 ? floating.machineBounds().x - x - (storageGeometry == null ? 0 : storageGeometry.left)
                 : headerX;
-            int hy = floating != null && floating.detached() ? floating.machineBounds().y - y : headerY;
+        int hy = floating != null && floating.detached() ? floating.machineBounds().y - y : headerY;
+        try {
+            drawingForeground = this;
             GL11.glTranslatef(hx, hy, 0);
             access.dynamicinventory$bounds(nativeWidth, nativeHeight, x + hx, y + hy);
             nativeDraw.run();
@@ -1202,6 +1274,7 @@ public final class NativeInventoryPanel extends Gui {
             try {
                 GL11.glTranslatef(-x, -y, 0);
                 floating.drawControl();
+                if (detachedAe()) aeNativeControls.draw(mouseX, mouseY);
             } finally {
                 GL11.glPopMatrix();
             }

@@ -167,7 +167,7 @@ public final class NativeEditorClientFixtures {
                     caption != null && caption[1] + previewPanel.headerOffsetY()
                         == previewPanel.editorSectionBounds(1)[1] - access.dynamicinventory$top() + 4,
                     "inventory caption follows the independently moved player band");
-            });
+            }, 0, 0);
             action(editor, 5); // Panel X + 1.
             NativeLayoutPatch expected = NativeLayoutPatches.resolve(host);
             action(editor, 100);

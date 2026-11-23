@@ -60,7 +60,9 @@ public abstract class Mui2InventoryResizeMixin implements Mui2PanelAccess {
             value = "INVOKE",
             target = "Lcom/cleanroommc/modularui/screen/viewport/ModularGuiContext;onFrameUpdate()V"))
     private void dynamicinventory$projectBeforeHover(CallbackInfo ci) {
-        dynamicinventory$panels.update((ModularScreen) (Object) this);
+        ModularScreen screen = (ModularScreen) (Object) this;
+        dynamicinventory$panels.update(screen);
+        dynamicinventory$panels.rebuildHover(screen);
     }
 
     @Inject(method = "onFrameUpdate", at = @At("RETURN"))
