@@ -3,8 +3,10 @@ package dev.gilbe.dynamicinventory.mixins.appliedenergistics2;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import appeng.api.config.Settings;
@@ -14,7 +16,10 @@ import appeng.client.gui.widgets.MEGuiTextField;
 import appeng.core.AEConfig;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.client.NativeUiAnchors;
+import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
+import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
 import dev.gilbe.dynamicinventory.client.NativeScreenMargins;
+import dev.gilbe.dynamicinventory.client.PlayerInventoryEvents;
 import dev.gilbe.dynamicinventory.client.TerminalPanelSpace;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
@@ -32,6 +37,30 @@ public abstract class AeInterfaceTerminalGuiMixin implements NativeUiAnchors {
     @Shadow
     @Final
     private MEGuiTextField searchFieldNames;
+
+    @Unique
+    private boolean dynamicinventory$refreshingLayout;
+
+    @Inject(
+        method = "updateLayout",
+        at = @At(value = "INVOKE", target = "Lappeng/client/gui/implementations/GuiInterfaceTerminal$Layout;width()I"),
+        require = 0)
+    private void dynamicinventory$beforeLayoutChange(CallbackInfo ci) {
+        ContainerPanelAccess access = (ContainerPanelAccess) this;
+        NativeInventoryPanel panel = access.dynamicinventory$panel();
+        if (panel == null) return;
+        // AE2 1104 changes the sidebar when a remote interface is selected, during drawScreen.
+        panel.restore();
+        access.dynamicinventory$panel(null);
+        dynamicinventory$refreshingLayout = true;
+    }
+
+    @Inject(method = "updateLayout", at = @At("RETURN"), require = 0)
+    private void dynamicinventory$afterLayoutChange(CallbackInfo ci) {
+        if (!dynamicinventory$refreshingLayout) return;
+        dynamicinventory$refreshingLayout = false;
+        PlayerInventoryEvents.decorate((GuiInterfaceTerminal) (Object) this);
+    }
 
     @Inject(method = "calculateViewHeight", at = @At("RETURN"), cancellable = true)
     private void dynamicinventory$viewport(CallbackInfoReturnable<Integer> cir) {

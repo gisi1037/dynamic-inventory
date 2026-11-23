@@ -17,7 +17,8 @@ public enum IntegrationProfile {
     RC2("rc2-integration", "rc2", true, true),
     DAILY_2026_10_19("daily-2026-10-19", "daily-2026-10-19", true, true),
     DAILY_2026_10_27_803("daily-2026-10-27-803", "daily-2026-10-27-803", true, true),
-    RELEASE_2_9_0("gtnh-2.9.0", "gtnh-2.9.0", true, true);
+    RELEASE_2_9_0("gtnh-2.9.0", "gtnh-2.9.0", true, true),
+    RELEASE_2_9_1("gtnh-2.9.1", "gtnh-2.9.1", true, true);
 
     private static final Properties PINS = loadPins();
     // Freeze once, before inventory classes load. Changing a system property mid-session
@@ -57,6 +58,10 @@ public enum IntegrationProfile {
         return pack;
     }
 
+    public boolean usesRelease29Adapters() {
+        return this == RELEASE_2_9_0 || this == RELEASE_2_9_1;
+    }
+
     /** Keys are Maven project names, matching the shared Gradle pins. No version ranges. */
     public String version(String project) {
         return pin(prefix + "." + project);
@@ -64,7 +69,9 @@ public enum IntegrationProfile {
 
     /** Optional native contracts share this table with the required profile bridges. */
     public static String reviewedVersion(String modId) {
-        return pin("reviewed." + modId);
+        String key = "reviewed." + modId;
+        String override = PINS.getProperty(CURRENT.prefix + "." + key);
+        return override == null ? pin(key) : override;
     }
 
     private static String pin(String key) {

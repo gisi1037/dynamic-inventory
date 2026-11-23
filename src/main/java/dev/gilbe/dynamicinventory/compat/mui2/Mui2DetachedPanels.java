@@ -23,6 +23,7 @@ import com.cleanroommc.modularui.screen.ModularContainer;
 import com.cleanroommc.modularui.screen.ModularPanel;
 import com.cleanroommc.modularui.screen.ModularScreen;
 import com.cleanroommc.modularui.utils.item.PlayerMainInvWrapper;
+import com.cleanroommc.modularui.widget.WidgetTree;
 import com.cleanroommc.modularui.widget.sizer.Area;
 import com.cleanroommc.modularui.widgets.TextWidget;
 import com.cleanroommc.modularui.widgets.slot.ItemSlot;
@@ -42,6 +43,7 @@ import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 public final class Mui2DetachedPanels {
 
     private final Map<IWidget, Area> originalAreas = new IdentityHashMap<>();
+    private final ArrayDeque<TextWidget<?>> pendingTextLayouts = new ArrayDeque<>();
     private PlayerInventoryWidgetGroup group;
     private ModularPanel owner;
     private GuiContainer host;
@@ -52,10 +54,23 @@ public final class Mui2DetachedPanels {
     private int verticalShift;
     private boolean centered;
     private boolean updating;
+    private boolean hoverCurrent;
+    private int hoverX, hoverY;
 
     /** Undo only presentation overrides before the framework runs its own layout or update. */
     public void beforeLayout() {
+        hoverCurrent = false;
         restoreAreas();
+        while (!pendingTextLayouts.isEmpty()) {
+            TextWidget<?> widget = pendingTextLayouts.removeFirst();
+            if (widget.isValid() && widget.getPanel() == owner) WidgetTree.resizeInternal(widget.resizer(), false);
+        }
+    }
+
+    public boolean deferTextLayout(TextWidget<?> widget) {
+        if (originalAreas.isEmpty() || widget.getPanel() != owner) return false;
+        pendingTextLayouts.addLast(widget);
+        return true;
     }
 
     private void restoreAreas() {
@@ -73,6 +88,7 @@ public final class Mui2DetachedPanels {
 
     public void close() {
         restoreAreas();
+        pendingTextLayouts.clear();
         if (group != null) group.setDetachedPresentation(false);
         if (controller != null) controller.cancel();
         if (host != null && ((ContainerPanelAccess) host).dynamicinventory$floating() == controller)
@@ -85,6 +101,7 @@ public final class Mui2DetachedPanels {
         slotIds = null;
         verticalShift = 0;
         centered = false;
+        hoverCurrent = false;
     }
 
     /** Called after native resizing, before hover calculation, rendering and mouse dispatch. */
@@ -406,6 +423,29 @@ public final class Mui2DetachedPanels {
             dev.gilbe.dynamicinventory.client.HotbarBankPanel
                 .drawFramework(host, frame, Mui2PanelFrame.textColor(owner));
         }
+        // MUI2 samples hover on its own timer, before the draw event supplies this frame's mouse position.
+        var context = screen.getContext();
+        refreshHover(screen, context.getAbsMouseX(), context.getAbsMouseY());
+    }
+
+    public void rememberHover(ModularScreen screen) {
+        if (controller == null) return;
+        var context = screen.getContext();
+        hoverX = context.getAbsMouseX();
+        hoverY = context.getAbsMouseY();
+        hoverCurrent = true;
+    }
+
+    public void refreshHover(ModularScreen screen, int x, int y) {
+        if (controller == null || hoverCurrent && hoverX == x && hoverY == y) return;
+        var context = screen.getContext();
+        context.updateState(x, y, context.getPartialTicks());
+        context.onFrameUpdate();
+        rememberHover(screen);
+    }
+
+    public void invalidateHover() {
+        hoverCurrent = false;
     }
 
     public void drawForeground(ModularScreen screen) {

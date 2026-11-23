@@ -5,7 +5,9 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import com.cleanroommc.modularui.api.UpOrDown;
 import com.cleanroommc.modularui.screen.ModularScreen;
 
 import dev.gilbe.dynamicinventory.compat.mui2.Mui2DetachedPanels;
@@ -28,7 +30,7 @@ public abstract class Mui2InventoryResizeMixin implements Mui2PanelAccess {
         return dynamicinventory$panels;
     }
 
-    @Inject(method = { "onResize", "onUpdate" }, at = @At("HEAD"))
+    @Inject(method = { "onResize", "onUpdate", "onFrameUpdate" }, at = @At("HEAD"))
     private void dynamicinventory$restoreLayout(CallbackInfo ci) {
         dynamicinventory$panels.beforeLayout();
     }
@@ -59,6 +61,17 @@ public abstract class Mui2InventoryResizeMixin implements Mui2PanelAccess {
             target = "Lcom/cleanroommc/modularui/screen/viewport/ModularGuiContext;onFrameUpdate()V"))
     private void dynamicinventory$projectBeforeHover(CallbackInfo ci) {
         dynamicinventory$panels.update((ModularScreen) (Object) this);
+    }
+
+    @Inject(method = "onFrameUpdate", at = @At("RETURN"))
+    private void dynamicinventory$rememberHover(CallbackInfo ci) {
+        dynamicinventory$panels.rememberHover((ModularScreen) (Object) this);
+    }
+
+    @Inject(method = "onMouseScroll", at = @At("RETURN"))
+    private void dynamicinventory$refreshAfterScroll(UpOrDown direction, int amount,
+        CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValue()) dynamicinventory$panels.invalidateHover();
     }
 
     @Inject(method = "drawScreen", at = @At("HEAD"))

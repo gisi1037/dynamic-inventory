@@ -48,10 +48,10 @@
         "-File",
         "${workspaceFolder}/scripts/gradle.ps1",
         "build",
-        "-PinventoryProfile=gtnh-2.9.0"
+        "-PinventoryProfile=gtnh-2.9.1"
       ],
       "problemMatcher": [],
-      "detail": "Build the production mod and run build checks against the current nightly APIs.",
+      "detail": "Build Dynamic Inventory and run build checks for GTNH 2.9.1.",
       "group": {
         "kind": "build",
         "isDefault": true

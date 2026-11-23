@@ -42,8 +42,8 @@ public final class AppliedEnergisticsCompatibility {
     public static void registerInventoryAdapters() {
         // Core wireless access uses the same MEMonitorable host as the wired ME Terminal.
         for (String[] host : HOSTS) machine(host[0], host[1]);
-        if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
-            && OptionalInventoryAdapters.reviewedVersion("ae2wct"))
+        if (IntegrationProfile.selected()
+            .usesRelease29Adapters() && OptionalInventoryAdapters.reviewedVersion("ae2wct"))
             register(
                 WIRELESS_CRAFTING_ID,
                 WIRELESS_CRAFTING_CONTAINER,
@@ -77,7 +77,9 @@ public final class AppliedEnergisticsCompatibility {
             InventoryUiAdapter.builder(id, containerClass)
                 .gui(gui)
                 .compatibilityRevision(3)
-                .layout(AppliedEnergisticsBackground.hasSidePanels(gui) ? SIDE_LAYOUT : LAYOUT)
+                .layout(
+                    AppliedEnergisticsBackground.hasSidePanels(gui)
+                        && !AppliedEnergisticsBackground.isInterfaceTerminal(gui) ? SIDE_LAYOUT : LAYOUT)
                 // AE2 casts every real slot to AppEngSlot and routes by isPlayerSide(), not fixed ranges.
                 // Its addSlotToContainer override also assigns the slot's owning container for callbacks.
                 .additionalSlots(

@@ -13,8 +13,8 @@ public final class PackCompatibility {
     }
 
     public static boolean aePinnedPanel() {
-        return IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
-            && Loader.isModLoaded("appliedenergistics2");
+        return IntegrationProfile.selected()
+            .usesRelease29Adapters() && Loader.isModLoaded("appliedenergistics2");
     }
 
     public static void verifyVersions() {

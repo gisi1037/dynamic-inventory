@@ -50,12 +50,20 @@ public final class Mui2PendingInputEvents {
             }
             return;
         }
-        access.dynamicinventory$detachedPanels()
-            .update(mui.getScreen());
+        var screen = mui.getScreen();
+        var panels = access.dynamicinventory$detachedPanels();
+        panels.update(screen);
         if (PanelSettingsOverlay.handleMouse(event.gui) || NativeInventoryPanel.handlePointer(event.gui)
-            || NativeInventoryPanel.handleWheel(event.gui)) event.setCanceled(true);
-        access.dynamicinventory$detachedPanels()
-            .update(mui.getScreen());
+            || NativeInventoryPanel.handleWheel(event.gui)) {
+            event.setCanceled(true);
+            panels.invalidateHover();
+            panels.update(screen);
+        } else {
+            Minecraft mc = Minecraft.getMinecraft();
+            int x = Mouse.getEventX() * event.gui.width / mc.displayWidth;
+            int y = event.gui.height - Mouse.getEventY() * event.gui.height / mc.displayHeight - 1;
+            panels.refreshHover(screen, x, y);
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)

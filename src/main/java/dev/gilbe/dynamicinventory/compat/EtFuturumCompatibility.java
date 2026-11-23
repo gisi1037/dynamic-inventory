@@ -26,9 +26,9 @@ public final class EtFuturumCompatibility {
                 // Native transfer also handles blaze-powder fuel and single-bottle slots.
                 .nativeTransfers()
                 .build());
-        if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
-            ? OptionalInventoryAdapters.profileVersion("etfuturum", "EtFuturum")
-            : OptionalInventoryAdapters.reviewedVersion("etfuturum")) {
+        if (IntegrationProfile.selected()
+            .usesRelease29Adapters() ? OptionalInventoryAdapters.profileVersion("etfuturum", "EtFuturum")
+                : OptionalInventoryAdapters.reviewedVersion("etfuturum")) {
             // Both hosts own vanilla-style transfers, but use different recipe registries.
             // Delegate their input/fuel checks and retain their native output/XP slots.
             NativeMachineAdapters.furnace(
@@ -66,7 +66,8 @@ public final class EtFuturumCompatibility {
                         .transfer(container, player, id, binding);
                 })
                 .build());
-        if (IntegrationProfile.selected() != IntegrationProfile.RELEASE_2_9_0) return;
+        if (!IntegrationProfile.selected()
+            .usesRelease29Adapters()) return;
         InventoryUi.register(
             InventoryUiAdapter
                 .builder(

@@ -244,7 +244,7 @@ public final class NativeInventoryPanel extends Gui {
             if (gui instanceof AttachedChestAccess && ((AttachedChestAccess) gui).dynamicinventory$isChestSlot(slot))
                 chestSlots.add(slot);
             if (logical >= 9) storageY = Math.min(storageY, slot.yDisplayPosition);
-            else if (logical < 0 && slot.func_111238_b() && !isHiddenAeReturnIcon(slot, origin)) {
+            else if (logical < 0 && slot.func_111238_b() && !isParkedAeSlot(slot, origin)) {
                 // These hosts park disabled slots thousands of pixels outside the viewport.
                 if (parksNativeSlots && (Math.abs(origin[0]) >= 2400 || Math.abs(origin[1]) >= 2400)) continue;
                 if (gui.getClass()
@@ -286,13 +286,12 @@ public final class NativeInventoryPanel extends Gui {
             nativeLeft = storageGeometry.left;
             nativeRight = storageGeometry.right;
         }
-        int terminalBoundary = gui.getClass()
-            .getName()
-            .equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")
-                ? AppliedEnergisticsBackground.headerBottom(
-                    gui.getClass()
-                        .getName(),
-                    nativeStorageTop)
+        String guiClass = gui.getClass()
+            .getName();
+        int terminalBoundary = AppliedEnergisticsBackground.isInterfaceTerminal(guiClass)
+            ? AppliedEnergisticsBackground.detachedHeaderHeight(guiClass, nativeHeight, nativeStorageTop)
+            : guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")
+                ? AppliedEnergisticsBackground.headerBottom(guiClass, nativeHeight, nativeStorageTop)
                 : nativeStorageTop;
         if (AppliedEnergisticsBackground.isTerminal(
             gui.getClass()
@@ -442,6 +441,7 @@ public final class NativeInventoryPanel extends Gui {
                     storageGeometry == null ? AppliedEnergisticsBackground.detachedHeaderHeight(
                         gui.getClass()
                             .getName(),
+                        nativeHeight,
                         nativeStorageTop) : storageGeometry.bottom),
                 new InventoryPanelLayout.Rect(left + playerX, attachedTop + playerY, panelWidth, panelHeight),
                 frameStyle,
@@ -852,6 +852,7 @@ public final class NativeInventoryPanel extends Gui {
                 + AppliedEnergisticsBackground.headerBottom(
                     gui.getClass()
                         .getName(),
+                    nativeHeight,
                     nativeStorageTop));
         InventoryTabsCompatibility.positionTabs(
             access.dynamicinventory$buttons(),
@@ -903,6 +904,7 @@ public final class NativeInventoryPanel extends Gui {
                 storageGeometry == null ? AppliedEnergisticsBackground.headerBottom(
                     gui.getClass()
                         .getName(),
+                    nativeHeight,
                     nativeStorageTop) : storageGeometry.cropBottom,
                 !aeGui);
             position();
@@ -951,6 +953,7 @@ public final class NativeInventoryPanel extends Gui {
         int reviewedBottom = AppliedEnergisticsBackground.headerBottom(
             gui.getClass()
                 .getName(),
+            nativeHeight,
             nativeStorageTop);
         if (reviewedBottom != nativeStorageTop) clipBottom = Math.min(clipBottom, top + headerY + reviewedBottom);
         final int nativeBottom = clipBottom;
@@ -1098,12 +1101,14 @@ public final class NativeInventoryPanel extends Gui {
             .equals("appeng.container.slot.SlotPatternTerm");
     }
 
-    private static boolean isHiddenAeReturnIcon(Slot slot, int[] origin) {
-        // AE2 syncs the return-tab icon through a real slot parked at y=-9000.
-        // It still reports itself as enabled, but has no space in the machine layout.
-        return (origin[1] <= -9000 || origin[0] <= -1000 && origin[1] <= -1000) && slot.getClass()
+    private static boolean isParkedAeSlot(Slot slot, int[] origin) {
+        if (!slot.getClass()
             .getName()
-            .equals("appeng.container.slot.SlotInaccessible");
+            .equals("appeng.container.slot.SlotInaccessible")) return false;
+        // AE2 parks the return-tab icon at y=-9000. Standalone WCT starts its placeholders at
+        // (-1000, -1000) and shifts their Y with the terminal rows, so use their fixed coordinates.
+        var nativeSlot = (appeng.container.slot.AppEngSlot) slot;
+        return origin[1] <= -9000 || nativeSlot.getX() <= -1000 && nativeSlot.getY() <= -1000;
     }
 
     private static int[] captureNativePosition(Slot slot) {
@@ -1114,7 +1119,7 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     private static void placeNativeSlot(Slot slot, int[] origin, int dx, int dy) {
-        if (isHiddenAeReturnIcon(slot, origin)) {
+        if (isParkedAeSlot(slot, origin)) {
             slot.xDisplayPosition = origin[0];
             slot.yDisplayPosition = origin[1];
             return;

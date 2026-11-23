@@ -24,7 +24,7 @@ public final class InventoryViewSettings {
     private static final int[] terminalRows = { 3, 6, 6 };
     private static final int[] craftingTerminalRows = { 3, 6, 6 };
     public static int playerSectionAnchorX = -1, playerSectionAnchorY = -1;
-    static int pinsX = -1, pinsY = -1, pinsWidth = 178, pinsHeight = 101;
+    static PinsPanelGeometry legacyPinsGeometry = PinsPanelGeometry.DEFAULT;
     static AePinsGrid pinsGrid;
     static boolean pinsWirelessOnly, pinsReturnMatching;
     private static Configuration configuration;
@@ -33,10 +33,13 @@ public final class InventoryViewSettings {
 
     public static void initialize(File file) {
         configuration = new Configuration(file);
-        pinsX = configuration.getInt("x", "ae2Pins", -1, -1, 10000, "Pinned panel horizontal position.");
-        pinsY = configuration.getInt("y", "ae2Pins", -1, -1, 10000, "Pinned panel vertical position.");
-        pinsWidth = configuration.getInt("width", "ae2Pins", 178, 72, 450, "Pinned panel width.");
-        pinsHeight = configuration.getInt("height", "ae2Pins", 101, 43, 450, "Pinned panel height.");
+        legacyPinsGeometry = new PinsPanelGeometry(
+            new InventoryPanelLayout.Rect(
+                configuration.getInt("x", "ae2Pins", -1, -1, 10000, "Legacy pinned panel horizontal position."),
+                configuration.getInt("y", "ae2Pins", -1, -1, 10000, "Legacy pinned panel vertical position."),
+                configuration.getInt("width", "ae2Pins", 178, 72, 450, "Legacy pinned panel width."),
+                configuration.getInt("height", "ae2Pins", 101, 43, 450, "Legacy pinned panel height.")),
+            null);
         pinsGrid = AePinsGrid.load(
             configuration
                 .getInt("gridColumns", "ae2Pins", 0, 0, AePinsGrid.MAX_COLUMNS, "Columns in the custom pins grid."),
@@ -147,22 +150,6 @@ public final class InventoryViewSettings {
         configuration.get("layout", "defaultsVersion", 2)
             .set(2);
         if (configuration.hasChanged()) configuration.save();
-    }
-
-    static void setPinsGeometry(int x, int y, int width, int height) {
-        pinsX = x;
-        pinsY = y;
-        pinsWidth = width;
-        pinsHeight = height;
-        configuration.get("ae2Pins", "x", -1)
-            .set(x);
-        configuration.get("ae2Pins", "y", -1)
-            .set(y);
-        configuration.get("ae2Pins", "width", 178)
-            .set(width);
-        configuration.get("ae2Pins", "height", 101)
-            .set(height);
-        configuration.save();
     }
 
     static void setPinsGrid(AePinsGrid grid) {

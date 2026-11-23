@@ -43,7 +43,13 @@ try {
     & .\gradlew.bat @GradleArguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if ($GradleArguments -contains 'build' -and $deploymentBuild) {
-        $productionJar = (Get-Content -LiteralPath 'build/hosted-inventory-artifact.txt' -Raw).Trim()
+        $artifactManifest = if ($GradleArguments -contains '-PinventoryProfile=gtnh-2.9.1' -or
+            $GradleArguments -contains 'inventoryProfile=gtnh-2.9.1') {
+            'build/hosted-inventory-artifact-2.9.1.txt'
+        } else {
+            'build/hosted-inventory-artifact.txt'
+        }
+        $productionJar = (Get-Content -LiteralPath $artifactManifest -Raw).Trim()
         $hash = (Get-FileHash -LiteralPath $productionJar -Algorithm SHA256).Hash
         Write-Host "Production JAR: $productionJar"
         Write-Host "SHA-256: $hash"

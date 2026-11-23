@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.2 — 2026-11-22
+
+Dynamic Inventory for **GT New Horizons 2.9.1** on Minecraft 1.7.10.
+Install `dynamicinventory-0.8.2.jar` on both client and server. The release JAR
+selects the GTNH 2.9.1 compatibility profile automatically.
+
+- Fits the AE2 Interface Terminal's pattern browser and keeps upgrade cards and
+  the network toolbox clear of the player inventory.
+- Uses the current cursor position for ModularUI2 slot highlights and clicks,
+  and preserves native machine text layout.
+- Improves wireless AE2 Pins recovery, panel placement, and pattern transfers.
+- Corrects held-Shift handling so moving the pointer alone does not transfer items.
+
 ## 0.8.1 — 2026-11-22
 
 This is the final Dynamic Inventory release for **GT New Horizons 2.9.0** on Minecraft 1.7.10.

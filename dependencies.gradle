@@ -53,8 +53,8 @@ dependencies {
     // GTNHExtLib bundles this at runtime; Bogo's refill field exposes its API directly.
     compileOnly("it.unimi.dsi:fastutil:8.5.18") { transitive = false }
     compileOnly("com.github.GTNewHorizons:Minecraft-Backpack-Mod:2.6.18-GTNH:dev") { transitive = false }
-    compileOnly("com.github.GTNewHorizons:AE2FluidCraft-Rework:1.5.116-gtnh:dev") { transitive = false }
-    compileOnly("com.github.GTNewHorizons:Draconic-Evolution:1.5.35-GTNH:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:AE2FluidCraft-Rework:${pins['AE2FluidCraft-Rework'] ?: '1.5.116-gtnh'}:dev") { transitive = false }
+    compileOnly("com.github.GTNewHorizons:Draconic-Evolution:${pins['Draconic-Evolution'] ?: '1.5.35-GTNH'}:dev") { transitive = false }
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:GTNHExtLib:${pin('GTNHExtLib')}")
 }
 

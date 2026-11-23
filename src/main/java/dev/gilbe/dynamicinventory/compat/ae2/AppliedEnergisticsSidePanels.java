@@ -29,10 +29,12 @@ public final class AppliedEnergisticsSidePanels extends Gui {
         "appliedenergistics2",
         "textures/guis/security.png");
     private final List<Panel> panels;
+    private final boolean stacked;
     private final Map<Slot, int[]> origins = new IdentityHashMap<>();
 
-    private AppliedEnergisticsSidePanels(List<Panel> panels) {
+    private AppliedEnergisticsSidePanels(List<Panel> panels, boolean stacked) {
         this.panels = panels;
+        this.stacked = stacked;
         panels.sort(Comparator.comparingInt(panel -> panel.top));
         for (Panel panel : panels) for (Slot slot : panel.slots) origins.put(
             slot,
@@ -62,7 +64,12 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             groups.computeIfAbsent(slot.inventory, ignored -> new Panel(linking))
                 .add(slot);
         }
-        return groups.isEmpty() ? null : new AppliedEnergisticsSidePanels(new ArrayList<>(groups.values()));
+        return groups.isEmpty() ? null
+            : new AppliedEnergisticsSidePanels(
+                new ArrayList<>(groups.values()),
+                AppliedEnergisticsBackground.isInterfaceTerminal(
+                    gui.getClass()
+                        .getName()));
     }
 
     public boolean contains(Slot slot) {
@@ -76,7 +83,8 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             // Reserve their possible column now so revealing them cannot push the toolbox off screen.
             int contentWidth = 0;
             for (Slot slot : panel.slots) contentWidth = Math.max(contentWidth, origins.get(slot)[0] + 16);
-            width += GAP + (panel.linking ? 47 : contentWidth + PADDING * 2);
+            int panelWidth = GAP + (panel.linking ? 47 : contentWidth + PADDING * 2);
+            width = stacked ? Math.max(width, mainWidth + panelWidth) : width + panelWidth;
         }
         return width;
     }
@@ -97,14 +105,14 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             // Keep every native side inventory beside the machine. A borrowed tool must not
             // occupy the player band's height or displace detached player panels to the right.
             panel.x = nextX;
-            panel.y = headerTop;
+            panel.y = stacked && bottom > headerTop ? bottom + GAP : headerTop;
             for (Slot slot : panel.slots) {
                 int[] origin = origins.get(slot);
                 slot.xDisplayPosition = panel.x + (panel.linking ? 0 : PADDING) + origin[0];
                 slot.yDisplayPosition = panel.y + (panel.linking ? 0 : PADDING) + origin[1];
             }
             bottom = Math.max(bottom, panel.y + panel.height());
-            nextX += panel.width() + GAP;
+            if (!stacked) nextX += panel.width() + GAP;
         }
         return bottom;
     }

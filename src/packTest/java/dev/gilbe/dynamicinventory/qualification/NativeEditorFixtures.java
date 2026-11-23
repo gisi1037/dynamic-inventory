@@ -328,7 +328,7 @@ public final class NativeEditorFixtures {
             "existing layouts retain neutral independent pin offsets");
         check(
             AppliedEnergisticsBackground
-                .headerBottom("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal", 167) == 126
+                .headerBottom("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal", 210, 167) == 126
                 && AppliedEnergisticsBackground
                     .mainSheetWidth("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal", 208) == 195,
             "diagnostic frame excludes the old transparent strip and stepped player cap");
@@ -356,7 +356,7 @@ public final class NativeEditorFixtures {
         // Native Interface slots start at y=108: icons end at 124 and the lower bevel ends at 125.
         // Its old player grid starts at 129; the legacy header crop is 125. A 127px frame's
         // four-pixel inner scissor ended at 123, cutting both artwork and bottom clearance.
-        int interfaceHeight = AppliedEnergisticsBackground.detachedHeaderHeight(meInterface, 125);
+        int interfaceHeight = AppliedEnergisticsBackground.detachedHeaderHeight(meInterface, 211, 125);
         check(interfaceHeight == 129, "ME Interface reserves the missing two pixels below its pattern row");
         for (int scale = 1; scale <= 4; scale++) for (int crop = 0; crop <= 8; crop++) {
             int[] sheet = AppliedEnergisticsBackground
@@ -367,14 +367,22 @@ public final class NativeEditorFixtures {
             check(nativeBottom < 128, "Old player-slot artwork remains excluded");
         }
         check(
-            AppliedEnergisticsBackground.detachedHeaderHeight(meInterface, 140) == 142,
+            AppliedEnergisticsBackground.detachedHeaderHeight(meInterface, 226, 140) == 142,
             "A taller native Interface header is retained");
-        for (String gui : new String[] { "CellWorkbench", "AdvancedInscriber", "InterfaceTerminal",
-            "CraftingDiagnosticTerminal" }) {
+        String interfaceTerminal = "appeng.client.gui.implementations.GuiInterfaceTerminal";
+        check(
+            AppliedEnergisticsBackground.hasSidePanels(interfaceTerminal)
+                && AppliedEnergisticsBackground.mainSheetWidth(interfaceTerminal, 315) == 209
+                && AppliedEnergisticsBackground.detachedHeaderHeight(interfaceTerminal, 258, 182) - 4 == 160,
+            "Interface Terminal isolates its sidebars and fits the full browser");
+        int[] toolbox = AppliedEnergisticsBackground
+            .clip(interfaceTerminal, 30, 20, 315, 258, 182, 4, 241, 104, 0, 0, 104, 104);
+        check(toolbox[4] == 0, "The original toolbox artwork is replaced by the detached side panel");
+        for (String gui : new String[] { "CellWorkbench", "AdvancedInscriber", "CraftingDiagnosticTerminal" }) {
             String name = "appeng.client.gui.implementations.Gui" + gui;
             check(
-                AppliedEnergisticsBackground.detachedHeaderHeight(name, 165)
-                    == AppliedEnergisticsBackground.headerBottom(name, 165) + 2,
+                AppliedEnergisticsBackground.detachedHeaderHeight(name, 247, 165)
+                    == AppliedEnergisticsBackground.headerBottom(name, 247, 165) + 2,
                 "Other reviewed AE2 frame heights remain unchanged: " + gui);
         }
         for (int field : new int[] { 18, 19 }) {

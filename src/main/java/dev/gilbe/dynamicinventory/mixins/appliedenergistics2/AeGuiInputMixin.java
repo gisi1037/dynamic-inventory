@@ -1,5 +1,6 @@
 package dev.gilbe.dynamicinventory.mixins.appliedenergistics2;
 
+import org.lwjgl.input.Mouse;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,6 +17,12 @@ import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsUpgradeTooltip;
 /** Native virtual-slot dragging and its scrollbar use the machine origin, not the expanded outer frame. */
 @Mixin(targets = "appeng.client.gui.AEBaseGui", remap = false)
 public abstract class AeGuiInputMixin {
+
+    @Inject(method = "mouseClickMove", remap = true, at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$requireMouseButton(int x, int y, int button, long elapsed, CallbackInfo ci) {
+        // A panel can consume the release before GuiScreen clears its native drag state.
+        if ((button == 0 || button == 1) && !Mouse.isButtonDown(button)) ci.cancel();
+    }
 
     @Inject(method = "drawScreen", remap = true, at = @At("HEAD"))
     private void dynamicinventory$upgradeTooltip(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {

@@ -5,10 +5,15 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 
+import com.google.gson.JsonParser;
+
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
+import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.NativeScreenMargins;
+import dev.gilbe.dynamicinventory.client.PanelLayoutPresets;
 import dev.gilbe.dynamicinventory.client.PanelLayoutReference;
+import dev.gilbe.dynamicinventory.client.PinsPanelGeometry;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfile;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfiles;
 import dev.gilbe.dynamicinventory.client.PlayerPanelSet;
@@ -105,6 +110,7 @@ public final class PanelPlacementFixtures {
                 NativeScreenMargins.detachedDownwardShift(hatchViewport, 280, hatchFootprint, Collections.emptyList())
                     == 0,
                 "A larger detached layout keeps the native origin");
+            pinsScopes(file);
             System.out.println(
                 "PASS captured MUI2 inherited reopen, custom/global above and beside intent, constrained fallback, scope and byte preservation");
         } finally {
@@ -113,6 +119,86 @@ public final class PanelPlacementFixtures {
             }
             Files.delete(directory);
         }
+    }
+
+    private static void pinsScopes(Path file) throws Exception {
+        var old = new JsonParser().parse(new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8))
+            .getAsJsonObject();
+        old.addProperty("schemaVersion", 7);
+        old.remove("pinsLayout");
+        Files.write(
+            file,
+            old.toString()
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var legacyFile = file.resolveSibling("legacy-client.cfg")
+            .toFile();
+        var home = cpw.mods.fml.relauncher.FMLInjectionData.class.getDeclaredField("minecraftHome");
+        home.setAccessible(true);
+        Object previous = home.get(null);
+        try {
+            home.set(
+                null,
+                file.getParent()
+                    .toFile());
+            var legacy = new net.minecraftforge.common.config.Configuration(legacyFile);
+            legacy.get("ae2Pins", "x", -1)
+                .set(620);
+            legacy.get("ae2Pins", "height", 101)
+                .set(130);
+            legacy.save();
+            InventoryViewSettings.initialize(legacyFile);
+        } finally {
+            home.set(null, previous);
+        }
+        PlayerPanelProfiles.initialize(file.toFile());
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(KEY, MACHINE), new Rect(620, 97, 178, 130)),
+            "Legacy Pins geometry becomes the global default");
+
+        String chest = "dynamicinventory:chest|net.minecraft.inventory.ContainerChest|net.minecraft.client.gui.GuiChest";
+        Rect authored = new Rect(570, 110, 210, 118);
+        Rect custom = new Rect(559, 140, 175, 152);
+        Rect moved = new Rect(359, 112, 196, 92);
+        var origin = new PanelLayoutReference(MACHINE, VIEWPORT);
+        PlayerPanelProfiles.savePins(KEY, new PinsPanelGeometry(authored, origin));
+        check(!PlayerPanelProfiles.hasOverride(KEY), "A Pins-only edit preserves the Main panel's inheritance");
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(KEY, moved), new Rect(590, 125, 210, 118)),
+            "A Pins override follows its own interface origin");
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(chest, MACHINE), new Rect(620, 97, 178, 130)),
+            "Editing Pins on one interface leaves other screens on their global layout");
+        PlayerPanelProfiles.applyGlobalPanels(PlayerPanelSet.DEFAULT, KEY, PlayerPanelProfile.DEFAULT, origin);
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(KEY, moved), new Rect(600, 132, 210, 118)),
+            "Make global default promotes Pins and uses the global machine reference");
+        PlayerPanelProfiles.savePins(chest, new PinsPanelGeometry(custom, origin));
+        PanelLayoutPresets.save("With Pins", PlayerPanelSet.DEFAULT, PlayerPanelProfile.DEFAULT, null, origin);
+        PlayerPanelProfiles.initialize(file.toFile());
+        check(same(PlayerPanelProfiles.requestedPinsBounds(chest, MACHINE), custom), "Pins override survives reload");
+        PlayerPanelProfiles.resetGlobal();
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(chest, MACHINE), custom),
+            "Resetting global Pins keeps the interface geometry");
+        PanelLayoutPresets.load("With Pins", KEY);
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(KEY, MACHINE), authored),
+            "Named layout restores global Pins");
+        PlayerPanelProfiles.inherit(chest);
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(chest, MACHINE), authored),
+            "Reset to global clears Pins override");
+        PlayerPanelProfiles.savePins(chest, new PinsPanelGeometry(custom, origin));
+        PlayerPanelProfiles.reset("Vanilla");
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(chest, MACHINE), authored),
+            "Group reset clears Pins-only overrides");
+        PlayerPanelProfiles.resetGlobal();
+        PlayerPanelProfiles.initialize(file.toFile());
+        check(
+            same(PlayerPanelProfiles.requestedPinsBounds(KEY, MACHINE), new Rect(521, 97, 178, 101)),
+            "Reset geometry survives reload without reinstating the legacy position");
+        System.out.println("PASS AE2 Pins migration, per-interface geometry, global defaults, presets, and resets");
     }
 
     private static void authored(Path file, Rect authored, boolean global) throws Exception {

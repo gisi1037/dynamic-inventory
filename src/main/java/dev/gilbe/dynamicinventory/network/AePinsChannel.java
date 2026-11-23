@@ -259,11 +259,29 @@ public final class AePinsChannel {
         }
     }
 
+    public enum WirelessStatus {
+
+        RETRYING,
+        NO_LINK,
+        CHOOSE_TERMINAL,
+        NO_POWER,
+        NETWORK_UNAVAILABLE,
+        NO_ACCESS,
+        SNAPSHOT_FAILED;
+
+        private static final WirelessStatus[] VALUES = values();
+
+        String translationSuffix() {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
+    }
+
     public static final class Snapshot implements IMessage {
 
         private long epoch;
         private IAEStack<?>[] stacks;
         private int craftingSlots, playerSlots;
+        private WirelessStatus status = WirelessStatus.SNAPSHOT_FAILED;
 
         public Snapshot() {}
 
@@ -272,6 +290,16 @@ public final class AePinsChannel {
             this.stacks = stacks;
             this.craftingSlots = craftingSlots;
             this.playerSlots = playerSlots;
+        }
+
+        public static Snapshot unavailable(long epoch, WirelessStatus status) {
+            Snapshot snapshot = new Snapshot(epoch, null, 0, 0);
+            snapshot.status = status;
+            return snapshot;
+        }
+
+        public String statusKey() {
+            return "dynamicinventory.ae2pins." + (available() ? "empty" : status.translationSuffix());
         }
 
         public long epoch() {
@@ -294,7 +322,11 @@ public final class AePinsChannel {
         public void fromBytes(ByteBuf bytes) {
             if (bytes.readableBytes() < 9 || bytes.readableBytes() > MAX_BYTES + 11) return;
             epoch = bytes.readLong();
-            if (!bytes.readBoolean()) return;
+            if (!bytes.readBoolean()) {
+                int reason = bytes.isReadable() ? bytes.readUnsignedByte() : 0;
+                if (reason < WirelessStatus.VALUES.length) status = WirelessStatus.VALUES[reason];
+                return;
+            }
             IAEStack<?>[] decoded = new IAEStack<?>[PinList.TOTAL_SLOTS];
             try {
                 int crafting = bytes.readUnsignedByte(), player = bytes.readUnsignedByte();
@@ -319,7 +351,8 @@ public final class AePinsChannel {
         public void toBytes(ByteBuf bytes) {
             bytes.writeLong(epoch);
             if (stacks == null) {
-                bytes.writeBoolean(false);
+                bytes.writeBoolean(false)
+                    .writeByte(status.ordinal());
                 return;
             }
             ByteBuf payload = Unpooled.buffer(256, MAX_BYTES);
@@ -333,7 +366,8 @@ public final class AePinsChannel {
                     .writeByte(playerSlots)
                     .writeBytes(payload);
             } catch (RuntimeException invalid) {
-                bytes.writeBoolean(false);
+                bytes.writeBoolean(false)
+                    .writeByte(WirelessStatus.SNAPSHOT_FAILED.ordinal());
             } finally {
                 payload.release();
             }
@@ -382,18 +416,20 @@ public final class AePinsChannel {
             WirelessPinsFeed feed = ACTIVE.get(player);
             if (request != null && (feed == null || request.epoch >= feed.epoch())) {
                 if (request.kind == RENEW) {
-                    if (feed == null) channel.sendTo(new Snapshot(request.epoch, null, 0, 0), player);
+                    if (feed == null)
+                        channel.sendTo(Snapshot.unavailable(request.epoch, WirelessStatus.RETRYING), player);
                     else if (request.epoch == feed.epoch()) feed.renew(request.background);
                 } else {
                     cleanup(player);
-                    feed = request.kind == OPEN ? WirelessPinsFeed.open(player, request.epoch, request.background)
+                    feed = request.kind == OPEN
+                        ? WirelessPinsFeed
+                            .open(player, request.epoch, request.background, value -> channel.sendTo(value, player))
                         : null;
                     if (feed != null) ACTIVE.put(player, feed);
-                    else if (request.kind == OPEN) channel.sendTo(new Snapshot(request.epoch, null, 0, 0), player);
                 }
             }
             if (feed != null && feed.expired()) {
-                channel.sendTo(new Snapshot(feed.epoch(), null, 0, 0), player);
+                channel.sendTo(Snapshot.unavailable(feed.epoch(), WirelessStatus.RETRYING), player);
                 cleanup(player);
                 feed = null;
             }

@@ -1,5 +1,6 @@
 package dev.gilbe.dynamicinventory.client;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -23,15 +24,19 @@ import org.lwjgl.opengl.GL11;
 import appeng.api.config.PinSectionOrder;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
+import appeng.container.implementations.ContainerMEMonitorable;
 import appeng.core.AEConfig;
+import appeng.helpers.WirelessTerminalGuiObject;
 import appeng.items.contents.PinList;
 import appeng.util.item.AEItemStack;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
+import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.compat.PackClientCompatibility;
+import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsPatternTransfers;
 import dev.gilbe.dynamicinventory.compat.ae2.PinnedItemTransfer;
 import dev.gilbe.dynamicinventory.compat.ae2.TerminalPinsView;
 import dev.gilbe.dynamicinventory.network.AePinsChannel;
@@ -65,6 +70,7 @@ public final class AePinnedPanel extends Gui {
     private ItemStack shiftClickItem;
     private int shiftClickSlot;
     private long shiftClickAt;
+    private boolean shiftClickReleased;
 
     public static boolean separates(GuiScreen gui) {
         return PANEL.enabled && terminal(gui) != null
@@ -127,7 +133,11 @@ public final class AePinnedPanel extends Gui {
     }
 
     private static TerminalPinsView sourceTerminal(GuiScreen gui) {
-        return InventoryViewSettings.pinsWirelessOnly ? null : terminal(gui);
+        TerminalPinsView view = terminal(gui);
+        if (view == null || !InventoryViewSettings.pinsWirelessOnly) return view;
+        // The open wireless terminal already syncs the pins for this exact item.
+        return gui instanceof GuiContainer container && container.inventorySlots instanceof ContainerMEMonitorable me
+            && me.getTarget() instanceof WirelessTerminalGuiObject ? view : null;
     }
 
     @SubscribeEvent
@@ -135,10 +145,7 @@ public final class AePinnedPanel extends Gui {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft client = Minecraft.getMinecraft();
         GuiScreen gui = client.currentScreen;
-        if (shiftClickScreen != gui) {
-            shiftClickScreen = null;
-            shiftClickItem = null;
-        }
+        if (shiftClickScreen != gui) clearShiftClick();
         if (!(gui instanceof GuiContainer) || client.thePlayer == null) prediction.clear();
         if (optionsScreen != gui) optionsScreen = null;
         if (scrollingScreen != gui) scrollingScreen = null;
@@ -166,10 +173,7 @@ public final class AePinnedPanel extends Gui {
         AePinsChannel.Snapshot reply = INCOMING.getAndSet(null);
         if (reply != null && remote && reply.epoch() == epoch) {
             if (!reply.available()) {
-                renewIn = Math.min(
-                    renewIn,
-                    snapshot != null && snapshot.available() && visible ? FOREGROUND_RENEW_TICKS
-                        : AePinsChannel.BACKGROUND_REFRESH_TICKS);
+                renewIn = Math.min(renewIn, visible ? FOREGROUND_RENEW_TICKS : AePinsChannel.BACKGROUND_REFRESH_TICKS);
                 remote = false;
                 prediction.clear();
             }
@@ -178,6 +182,7 @@ public final class AePinnedPanel extends Gui {
 
         boolean changedMode = visible != foreground;
         foreground = visible;
+        if (!remote && visible && changedMode) renewIn = Math.min(renewIn, FOREGROUND_RENEW_TICKS);
         if (--renewIn > 0 && (!remote || !changedMode)) return;
 
         AePinsChannel.send(remote ? epoch : ++epoch, true, remote, !visible);
@@ -187,6 +192,7 @@ public final class AePinnedPanel extends Gui {
 
     private void toggle(GuiScreen gui) {
         enabled = !enabled;
+        clearShiftClick();
         prediction.clear();
         scroll = columnScroll = 0;
         clearGesture();
@@ -245,13 +251,12 @@ public final class AePinnedPanel extends Gui {
 
     private Rect bounds(GuiScreen gui, DetachedChestPanel host) {
         if (gesture != null && gestureScreen == gui && lastBounds != null) return lastBounds;
-        Rect viewport = viewport(gui), machine = host.machineBounds();
-        int width = Math.min(InventoryViewSettings.pinsWidth, viewport.width);
-        int height = Math.min(InventoryViewSettings.pinsHeight, viewport.height);
-        int x = InventoryViewSettings.pinsX >= 0 ? InventoryViewSettings.pinsX : machine.right() + 6;
-        int y = InventoryViewSettings.pinsY >= 0 ? InventoryViewSettings.pinsY : Math.max(viewport.y, machine.y);
+        Rect viewport = viewport(gui);
+        Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), host.machineBounds());
+        int width = Math.min(preferred.width, viewport.width);
+        int height = Math.min(preferred.height, viewport.height);
         List<Rect> occupied = obstacles(gui, host);
-        Rect desired = new Rect(x, y, width, height);
+        Rect desired = new Rect(preferred.x, preferred.y, width, height);
         Rect fitted = InventoryPanelLayout.snapDrag(desired, viewport, occupied);
         if (fitted != null) return fitted;
         Rect free = InventoryPanelLayout.freeRegion(viewport, occupied, 72, 43);
@@ -336,10 +341,10 @@ public final class AePinnedPanel extends Gui {
         scroll = Math.min(scroll, maxScroll(entries.size(), columns, rows));
         columnScroll = Math.min(columnScroll, columns - visibleColumns);
         if (entries.isEmpty()) {
-            String status = sourceTerminal(gui) != null ? "empty"
-                : snapshot == null ? "loading" : snapshot.available() ? "empty" : "unavailable";
+            String status = sourceTerminal(gui) != null ? "dynamicinventory.ae2pins.empty"
+                : snapshot == null ? "dynamicinventory.ae2pins.loading" : snapshot.statusKey();
             client.fontRenderer.drawSplitString(
-                I18n.format("dynamicinventory.ae2pins." + status),
+                I18n.format(status),
                 area.x + PADDING,
                 area.y + HEADER + 2,
                 area.width - PADDING * 2,
@@ -461,8 +466,24 @@ public final class AePinnedPanel extends Gui {
             : area.height;
         Rect requested = new Rect(area.x, area.y, w, h);
         Rect fitted = InventoryPanelLayout.snapDrag(requested, viewport(gui), obstacles(gui, host));
-        if (fitted != null && fitted.x == area.x && fitted.y == area.y)
-            InventoryViewSettings.setPinsGeometry(area.x, area.y, w, h);
+        if (fitted != null && fitted.x == area.x && fitted.y == area.y && (w != area.width || h != area.height))
+            saveGeometry(gui, host, requested, true);
+    }
+
+    private static void saveGeometry(GuiScreen gui, DetachedChestPanel host, Rect bounds, boolean resize) {
+        Rect machine = host.machineBounds();
+        Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), machine);
+        int width = resize ? Math.max(72, bounds.width) : preferred.width;
+        int height = resize ? Math.max(43, bounds.height) : preferred.height;
+        try {
+            PlayerPanelProfiles.savePins(
+                host.key(),
+                new PinsPanelGeometry(
+                    new Rect(bounds.x, bounds.y, width, height),
+                    new PanelLayoutReference(machine, viewport(gui))));
+        } catch (IOException | IllegalArgumentException failure) {
+            DynamicInventory.LOG.warn("Could not save AE2 Pins layout for {}", host.key(), failure);
+        }
     }
 
     private void drawReturnWidget(GuiScreen gui, Rect widget, int x, int y, int text) {
@@ -498,9 +519,15 @@ public final class AePinnedPanel extends Gui {
     }
 
     public static boolean mouse(GuiScreen gui, int x, int y, int button, boolean down) {
+        if (button == 0 && !down && PANEL.shiftClickScreen == gui) PANEL.shiftClickReleased = true;
+        if (button >= 0 && down && (button != 0 || !GuiScreen.isShiftKeyDown() || bulkModifier()))
+            PANEL.clearShiftClick();
         DetachedChestPanel host = DetachedChestPanel.of(gui);
         if (host == null || PanelSettingsOverlay.isOpen(gui)) return false;
-        if (PANEL.pointer(gui, host, x, y, button, down)) return true;
+        if (PANEL.pointer(gui, host, x, y, button, down)) {
+            if (button >= 0 && down) PANEL.clearShiftClick();
+            return true;
+        }
         if (PANEL.enabled && button < 0
             && Mouse.getEventDWheel() != 0
             && gui instanceof GuiContainer container
@@ -512,11 +539,13 @@ public final class AePinnedPanel extends Gui {
                 y,
                 wheelSteps(Mouse.getEventDWheel())))
             return true;
-        if (button == 0 && down
-            && gui instanceof GuiContainer container
-            && PANEL.playerClick(container, host.playerSlotAt(x, y, false), true)) {
-            PANEL.pressedScreen = gui;
-            return true;
+        if (button == 0 && down && gui instanceof GuiContainer container) {
+            int slotId = host.playerSlotAt(x, y, false);
+            if (slotId < 0) PANEL.clearShiftClick();
+            if (PANEL.playerClick(container, slotId, true)) {
+                PANEL.pressedScreen = gui;
+                return true;
+            }
         }
         return false;
     }
@@ -527,6 +556,11 @@ public final class AePinnedPanel extends Gui {
 
     public static boolean protects(GuiScreen gui, InventoryPlayer inventory, int slotId, int mode) {
         return gui instanceof GuiContainer container && PANEL.prediction.protects(container, inventory, slotId, mode);
+    }
+
+    private void clearShiftClick() {
+        shiftClickScreen = null;
+        shiftClickItem = null;
     }
 
     private boolean playerClick(GuiContainer container, int slotId, boolean trackDoubleClick) {
@@ -548,33 +582,41 @@ public final class AePinnedPanel extends Gui {
         // Bogo Sorter suppresses canTakeStack on the client. The server checks it before returning the stack.
         if (PinnedItemTransfer.playerIndex(player, slot) < 0) return false;
         ItemStack stack = prediction.slot(container, player.inventory, slot);
+        if (shift && !bulk && AppliedEnergisticsPatternTransfers.canLoadPattern(container.inventorySlots, stack))
+            return false;
         if (gui instanceof TerminalPinsView) {
             if (bulk && stack != null) {
                 move(container, 0, 0, Transfer.DEPOSIT_TERMINAL_ALL, slotId, AEItemStack.create(stack));
                 return true;
             }
             if (shift && trackDoubleClick) {
+                // ModularUI's pre-event and NEI's dispatcher can see the same mouse press.
+                if (shiftClickScreen == container && !shiftClickReleased) return false;
                 long now = Minecraft.getSystemTime();
                 boolean repeated = shiftClickScreen == container && shiftClickSlot == slotId
                     && shiftClickItem != null
                     && now - shiftClickAt < 250;
                 if (repeated) {
                     IAEItemStack item = AEItemStack.create(shiftClickItem);
-                    shiftClickItem = null;
-                    for (var source : PinnedItemTransfer.sourceSlots(player, container.inventorySlots, false)) {
-                        if (source == null) continue;
-                        ItemStack candidate = prediction.slot(container, player.inventory, source);
-                        if (candidate != null && item.isSameType(candidate)) {
-                            move(container, 0, 0, Transfer.DEPOSIT_TERMINAL_ALL, source.slotNumber, item);
-                            return true;
+                    if (stack == null || item.isSameType(stack)) {
+                        clearShiftClick();
+                        for (var source : PinnedItemTransfer.sourceSlots(player, container.inventorySlots, false)) {
+                            // The first click can empty this slot on the server before its update reaches us.
+                            if (source == null || source.slotNumber == slotId) continue;
+                            ItemStack candidate = prediction.slot(container, player.inventory, source);
+                            if (candidate != null && item.isSameType(candidate)) {
+                                move(container, 0, 0, Transfer.DEPOSIT_TERMINAL_ALL, source.slotNumber, item);
+                                return true;
+                            }
                         }
+                        return true;
                     }
-                    return true;
                 }
                 shiftClickScreen = container;
                 shiftClickSlot = slotId;
                 shiftClickAt = now;
                 shiftClickItem = ItemStack.copyItemStack(stack);
+                shiftClickReleased = false;
             }
         }
         if (!InventoryViewSettings.pinsReturnMatching || stack == null) return false;
@@ -672,8 +714,7 @@ public final class AePinnedPanel extends Gui {
                     : InventoryPanelLayout.snapDrag(lastBounds, viewport(gui), obstacles(gui, host));
                 if (settled != null && (settled.x != gesture.x || settled.y != gesture.y
                     || settled.width != gesture.width
-                    || settled.height != gesture.height))
-                    InventoryViewSettings.setPinsGeometry(settled.x, settled.y, settled.width, settled.height);
+                    || settled.height != gesture.height)) saveGeometry(gui, host, settled, resizing);
             }
             clearGesture();
             return true;

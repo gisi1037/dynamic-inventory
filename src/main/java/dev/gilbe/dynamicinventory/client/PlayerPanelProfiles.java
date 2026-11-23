@@ -28,6 +28,8 @@ public final class PlayerPanelProfiles {
     private static Map<String, PlayerPanelSet> interfacePanels = new TreeMap<>();
     private static PanelLayoutReference reference;
     private static Map<String, PanelLayoutReference> interfaceReferences = new TreeMap<>();
+    private static PinsPanelGeometry globalPins = PinsPanelGeometry.DEFAULT;
+    private static Map<String, PinsPanelGeometry> interfacePins = new TreeMap<>();
 
     private PlayerPanelProfiles() {}
 
@@ -41,33 +43,30 @@ public final class PlayerPanelProfiles {
         legacy = 0;
         reference = null;
         interfaceReferences.clear();
+        globalPins = InventoryViewSettings.legacyPinsGeometry;
+        interfacePins.clear();
         if (!Files.isRegularFile(file)) return;
         try {
             if (Files.size(file) > 1048576) throw new IllegalArgumentException("Panel profiles too large");
             JsonObject root = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
                 .getAsJsonObject();
-            boolean anchored = "7".equals(
-                root.get("schemaVersion")
-                    .getAsString());
-            boolean modern = anchored || "6".equals(
-                root.get("schemaVersion")
-                    .getAsString());
-            boolean collection = java.util.Arrays.asList("3", "4", "5", "6", "7")
-                .contains(
-                    root.get("schemaVersion")
-                        .getAsString());
+            String version = root.get("schemaVersion")
+                .getAsString();
+            boolean hasPins = "8".equals(version);
+            boolean anchored = hasPins || "7".equals(version);
+            boolean modern = anchored || "6".equals(version);
+            boolean collection = version.matches("[345678]");
             if (root.has("panels") != collection) throw new IllegalArgumentException("Invalid panel collection schema");
             if (root.entrySet()
                 .size()
-                != (root.has("panelLayouts") ? 5 : root.has("panels") ? 4 : 3) + (modern ? 1 : 0) + (anchored ? 1 : 0)
-                || !root.get("schemaVersion")
-                    .getAsString()
-                    .matches("[1234567]")
+                != (root.has("panelLayouts") ? 5 : root.has("panels") ? 4 : 3) + (modern ? 1 : 0)
+                    + (anchored ? 1 : 0)
+                    + (hasPins ? 1 : 0)
+                || !version.matches("[12345678]")
+                || root.has("pinsLayout") != hasPins
                 || root.has("globalReference") != modern
                 || root.has("interfaceReferences") != anchored
-                || root.has("panelLayouts") != (modern || "5".equals(
-                    root.get("schemaVersion")
-                        .getAsString())))
+                || root.has("panelLayouts") != (modern || "5".equals(version)))
                 throw new IllegalArgumentException("Unknown panel profile schema");
             PlayerPanelProfile loadedGlobal = PlayerPanelProfile.fromJson(root.getAsJsonObject("global"));
             Map<String, PlayerPanelProfile> loaded = new TreeMap<>();
@@ -82,11 +81,8 @@ public final class PlayerPanelProfiles {
             }
             PanelLayoutReference loadedReference = modern && !root.get("globalReference")
                 .isJsonNull() ? PanelLayoutReference.fromJson(root.getAsJsonObject("globalReference")) : null;
-            PlayerPanelSet loadedPanels = java.util.Arrays.asList("3", "4", "5", "6", "7")
-                .contains(
-                    root.get("schemaVersion")
-                        .getAsString()) ? PlayerPanelSet.fromJson(root.getAsJsonArray("panels"))
-                            : PlayerPanelSet.DEFAULT;
+            PlayerPanelSet loadedPanels = collection ? PlayerPanelSet.fromJson(root.getAsJsonArray("panels"))
+                : PlayerPanelSet.DEFAULT;
             Map<String, PlayerPanelSet> loadedSets = new TreeMap<>();
             if (root.has("panelLayouts")) {
                 for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject("panelLayouts")
@@ -119,15 +115,33 @@ public final class PlayerPanelProfiles {
                             entry.getValue()
                                 .getAsJsonObject()));
                 }
+            PinsPanelGeometry loadedPins = globalPins;
+            Map<String, PinsPanelGeometry> loadedInterfacePins = new TreeMap<>();
+            if (hasPins) {
+                JsonObject pinsLayout = root.getAsJsonObject("pinsLayout");
+                if (pinsLayout.entrySet()
+                    .size() != 2 || !pinsLayout.has("interfaces"))
+                    throw new IllegalArgumentException("Invalid AE2 Pins layouts");
+                loadedPins = PinsPanelGeometry.fromJson(pinsLayout.getAsJsonObject("global"));
+                for (Map.Entry<String, JsonElement> entry : pinsLayout.getAsJsonObject("interfaces")
+                    .entrySet()) {
+                    validateKey(entry.getKey());
+                    loadedInterfacePins.put(
+                        entry.getKey(),
+                        PinsPanelGeometry.fromJson(
+                            entry.getValue()
+                                .getAsJsonObject()));
+                }
+            }
             panels = loadedPanels;
             interfacePanels = loadedSets;
             global = loadedGlobal;
             overrides = loaded;
             reference = loadedReference;
             interfaceReferences = loadedReferences;
-            legacy = root.get("schemaVersion")
-                .getAsInt() < 7 ? root.get("schemaVersion")
-                    .getAsInt() : 0;
+            globalPins = loadedPins;
+            interfacePins = loadedInterfacePins;
+            legacy = hasPins ? 0 : Integer.parseInt(version);
         } catch (IOException | RuntimeException invalid) {
             DynamicInventory.LOG.warn("Ignoring invalid player panel profiles {}", file, invalid);
         }
@@ -155,6 +169,21 @@ public final class PlayerPanelProfiles {
 
     public static boolean hasOverride(String key) {
         return overrides.containsKey(key) || interfacePanels.containsKey(key);
+    }
+
+    public static PinsPanelGeometry pins(String key) {
+        return key == null ? globalPins : interfacePins.getOrDefault(key, globalPins);
+    }
+
+    public static InventoryPanelLayout.Rect requestedPinsBounds(String key, InventoryPanelLayout.Rect machine) {
+        return pins(key).requested(machine, key != null && interfacePins.containsKey(key));
+    }
+
+    public static void savePins(String key, PinsPanelGeometry geometry) throws IOException {
+        validateKey(key);
+        Map<String, PinsPanelGeometry> next = new TreeMap<>(interfacePins);
+        next.put(key, geometry);
+        commit(global, overrides, panels, interfacePanels, reference, interfaceReferences, globalPins, next);
     }
 
     public static PanelLayoutReference globalReference() {
@@ -205,7 +234,15 @@ public final class PlayerPanelProfiles {
     }
 
     public static void resetGlobal() throws IOException {
-        commit(PlayerPanelProfile.DEFAULT, overrides, PlayerPanelSet.DEFAULT, interfacePanels, null);
+        commit(
+            PlayerPanelProfile.DEFAULT,
+            overrides,
+            PlayerPanelSet.DEFAULT,
+            interfacePanels,
+            null,
+            interfaceReferences,
+            PinsPanelGeometry.DEFAULT,
+            interfacePins);
     }
 
     public static void inherit(String key) throws IOException {
@@ -214,7 +251,9 @@ public final class PlayerPanelProfiles {
         next.remove(key);
         Map<String, PlayerPanelSet> sets = new TreeMap<>(interfacePanels);
         sets.remove(key);
-        commit(global, next, panels, sets);
+        Map<String, PinsPanelGeometry> pins = new TreeMap<>(interfacePins);
+        pins.remove(key);
+        commit(global, next, panels, sets, reference, interfaceReferences, globalPins, pins);
     }
 
     public static void reset(String group) throws IOException {
@@ -224,7 +263,10 @@ public final class PlayerPanelProfiles {
         Map<String, PlayerPanelSet> sets = new TreeMap<>(interfacePanels);
         sets.keySet()
             .removeIf(key -> group == null || group.equals(group(key.split("\\|")[1])));
-        commit(global, next, panels, sets);
+        Map<String, PinsPanelGeometry> pins = new TreeMap<>(interfacePins);
+        pins.keySet()
+            .removeIf(key -> group == null || group.equals(group(key.split("\\|")[1])));
+        commit(global, next, panels, sets, reference, interfaceReferences, globalPins, pins);
     }
 
     public static PlayerPanelSet panels() {
@@ -288,12 +330,27 @@ public final class PlayerPanelProfiles {
 
     public static void applyGlobalPanels(PlayerPanelSet set, String key, PlayerPanelProfile main,
         PanelLayoutReference origin) throws IOException {
+        applyGlobalPanels(set, key, main, origin, pins(key));
+    }
+
+    static void applyGlobalPanels(PlayerPanelSet set, String key, PlayerPanelProfile main, PanelLayoutReference origin,
+        PinsPanelGeometry newPins) throws IOException {
         if (key != null) validateKey(key);
         Map<String, PlayerPanelProfile> next = new TreeMap<>(overrides);
         if (key != null) next.remove(key);
         Map<String, PlayerPanelSet> sets = new TreeMap<>(interfacePanels);
         if (key != null) sets.remove(key);
-        commit(main, next, scoped(set, null), sets, origin);
+        Map<String, PinsPanelGeometry> pins = new TreeMap<>(interfacePins);
+        if (key != null && newPins != null) pins.remove(key);
+        commit(
+            main,
+            next,
+            scoped(set, null),
+            sets,
+            origin,
+            interfaceReferences,
+            newPins == null ? globalPins : newPins,
+            pins);
     }
 
     public static Map<String, Integer> groups() {
@@ -301,6 +358,8 @@ public final class PlayerPanelProfiles {
         for (String key : overrides.keySet()) groups.merge(group(key.split("\\|")[1]), 1, Integer::sum);
         for (String key : interfacePanels.keySet())
             if (!overrides.containsKey(key)) groups.merge(group(key.split("\\|")[1]), 1, Integer::sum);
+        for (String key : interfacePins.keySet())
+            if (!hasOverride(key)) groups.merge(group(key.split("\\|")[1]), 1, Integer::sum);
         return groups;
     }
 
@@ -354,9 +413,16 @@ public final class PlayerPanelProfiles {
     private static void commit(PlayerPanelProfile preference, Map<String, PlayerPanelProfile> profiles,
         PlayerPanelSet nextPanels, Map<String, PlayerPanelSet> nextLayouts, PanelLayoutReference nextReference,
         Map<String, PanelLayoutReference> origins) throws IOException {
+        commit(preference, profiles, nextPanels, nextLayouts, nextReference, origins, globalPins, interfacePins);
+    }
+
+    private static void commit(PlayerPanelProfile preference, Map<String, PlayerPanelProfile> profiles,
+        PlayerPanelSet nextPanels, Map<String, PlayerPanelSet> nextLayouts, PanelLayoutReference nextReference,
+        Map<String, PanelLayoutReference> origins, PinsPanelGeometry nextPins, Map<String, PinsPanelGeometry> pins)
+        throws IOException {
         if (file == null) throw new IllegalStateException("Player panel preferences not initialized");
         JsonObject root = new JsonObject(), entries = new JsonObject();
-        root.addProperty("schemaVersion", 7);
+        root.addProperty("schemaVersion", 8);
         root.add("globalReference", nextReference == null ? null : nextReference.toJson());
         root.add("panels", nextPanels.toJson());
         root.add("global", preference.toJson());
@@ -380,6 +446,14 @@ public final class PlayerPanelProfiles {
             entry.getValue()
                 .toJson());
         root.add("interfaceReferences", references);
+        JsonObject pinsLayout = new JsonObject(), pinsOverrides = new JsonObject();
+        pinsLayout.add("global", nextPins.toJson());
+        for (Map.Entry<String, PinsPanelGeometry> entry : pins.entrySet()) pinsOverrides.add(
+            entry.getKey(),
+            entry.getValue()
+                .toJson());
+        pinsLayout.add("interfaces", pinsOverrides);
+        root.add("pinsLayout", pinsLayout);
         byte[] encoded = new GsonBuilder().setPrettyPrinting()
             .serializeNulls()
             .create()
@@ -408,6 +482,8 @@ public final class PlayerPanelProfiles {
         overrides = new TreeMap<>(profiles);
         reference = nextReference;
         interfaceReferences = nextOrigins;
+        globalPins = nextPins;
+        interfacePins = new TreeMap<>(pins);
         legacy = 0;
     }
 }

@@ -18,6 +18,7 @@ import net.minecraft.nbt.NBTBase;
 import appeng.api.AEApi;
 import appeng.api.config.SecurityPermissions;
 import appeng.api.features.IWirelessTermHandler;
+import appeng.api.features.IWirelessTermRegistry;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.energy.IEnergyGrid;
 import appeng.api.networking.security.BaseActionSource;
@@ -42,14 +43,15 @@ import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.network.AePinsChannel.Snapshot;
 import dev.gilbe.dynamicinventory.network.AePinsChannel.Transfer;
+import dev.gilbe.dynamicinventory.network.AePinsChannel.WirelessStatus;
 
 /** A server session confined to one wireless item and the player's own pins. */
 public final class WirelessPinsFeed {
 
     private final EntityPlayerMP player;
     private final long epoch;
-    private final int slot;
-    private final boolean worn;
+    private int slot;
+    private boolean worn;
     private final ItemStack device;
     private final IWirelessTermHandler handler;
     private final String link;
@@ -65,63 +67,93 @@ public final class WirelessPinsFeed {
     private int expires, nextUpdate;
     private boolean changed = true, closed, background;
 
-    private WirelessPinsFeed(EntityPlayerMP player, long epoch, int slot, boolean worn, ItemStack device,
-        IWirelessTermHandler handler, boolean background) {
+    private static final class Terminal {
+
+        final int slot;
+        final boolean worn;
+        final ItemStack stack;
+        final IWirelessTermHandler handler;
+        final String link;
+
+        Terminal(int slot, boolean worn, ItemStack stack, IWirelessTermHandler handler, String link) {
+            this.slot = slot;
+            this.worn = worn;
+            this.stack = stack;
+            this.handler = handler;
+            this.link = link;
+        }
+    }
+
+    private WirelessPinsFeed(EntityPlayerMP player, long epoch, Terminal terminal, boolean background) {
         this.player = player;
         this.epoch = epoch;
-        this.slot = slot;
-        this.worn = worn;
-        this.device = device;
-        this.handler = handler;
-        link = handler.getEncryptionKey(device);
-        wireless = new WirelessTerminalGuiObject(handler, device, player, player.worldObj, slot, 0, 0);
+        slot = terminal.slot;
+        worn = terminal.worn;
+        device = terminal.stack;
+        handler = terminal.handler;
+        link = terminal.link;
+        wireless = new WirelessTerminalGuiObject(handler, device, player, player.worldObj, inventorySlot(), 0, 0);
         grid = wireless.getGrid();
         renew(background);
     }
 
-    public static WirelessPinsFeed open(EntityPlayerMP player, long epoch, boolean background) {
+    public static WirelessPinsFeed open(EntityPlayerMP player, long epoch, boolean background,
+        Consumer<Snapshot> send) {
+        if (player.isDead) {
+            send.accept(Snapshot.unavailable(epoch, WirelessStatus.RETRYING));
+            return null;
+        }
         var registry = AEApi.instance()
             .registries()
             .wireless();
-        int slot = player.inventory.currentItem;
-        ItemStack stack = player.inventory.getStackInSlot(slot);
-        IWirelessTermHandler handler = handler(registry, stack);
-        boolean worn = false;
-        if (handler == null) {
-            slot = -1;
-            var shape = InventoryLayout.of(player.inventory);
-            for (int i = 0; i < shape.mainSlots(); i++) {
-                int raw = shape.rawIndex(i);
-                if (HotbarBanks.isReserved(player.inventory, raw)) continue;
-                ItemStack candidate = player.inventory.getStackInSlot(raw);
-                IWirelessTermHandler candidateHandler = handler(registry, candidate);
-                if (candidateHandler == null) continue;
-                // Several terminals may reach different grids. Require a held terminal to choose explicitly.
-                if (handler != null) return null;
-                slot = raw;
-                stack = candidate;
-                handler = candidateHandler;
-            }
-            IInventory baubles = BaublesApi.getBaubles(player);
-            if (baubles != null) for (int index = 0; index < baubles.getSizeInventory(); index++) {
-                ItemStack candidate = baubles.getStackInSlot(index);
-                IWirelessTermHandler candidateHandler = handler(registry, candidate);
-                if (candidateHandler == null) continue;
-                if (handler != null) return null;
-                slot = index;
-                stack = candidate;
-                handler = candidateHandler;
-                worn = true;
-            }
+        Terminal held = linkedTerminal(registry, player.inventory, player.inventory.currentItem, false);
+        if (held != null) {
+            WirelessPinsFeed feed = new WirelessPinsFeed(player, epoch, held, background);
+            WirelessStatus failure = feed.networkStatus();
+            if (failure == null) return feed;
+            send.accept(Snapshot.unavailable(epoch, failure));
+            return null;
         }
-        if (handler == null) return null;
-        String link = handler.getEncryptionKey(stack);
-        if (link == null || link.isEmpty()) return null;
-        return new WirelessPinsFeed(player, epoch, slot, worn, stack, handler, background);
+
+        WirelessPinsFeed available = null;
+        WirelessStatus failure = WirelessStatus.NO_LINK;
+        var shape = InventoryLayout.of(player.inventory);
+        IInventory baubles = BaublesApi.getBaubles(player);
+        int equipment = baubles == null ? 0 : baubles.getSizeInventory();
+        for (int i = 0; i < shape.mainSlots() + equipment; i++) {
+            boolean worn = i >= shape.mainSlots();
+            int slot = worn ? i - shape.mainSlots() : shape.rawIndex(i);
+            if (!worn && HotbarBanks.isReserved(player.inventory, slot)) continue;
+            Terminal terminal = linkedTerminal(registry, worn ? baubles : player.inventory, slot, worn);
+            if (terminal == null || available != null && available.link.equals(terminal.link)) continue;
+            WirelessPinsFeed candidate = new WirelessPinsFeed(player, epoch, terminal, background);
+            WirelessStatus status = candidate.networkStatus();
+            if (status != null) {
+                if (failure == WirelessStatus.NO_LINK || status != WirelessStatus.NO_POWER) failure = status;
+                continue;
+            }
+            if (available != null) {
+                send.accept(Snapshot.unavailable(epoch, WirelessStatus.CHOOSE_TERMINAL));
+                return null;
+            }
+            available = candidate;
+        }
+        if (available == null) send.accept(Snapshot.unavailable(epoch, failure));
+        return available;
     }
 
-    private static IWirelessTermHandler handler(appeng.api.features.IWirelessTermRegistry registry, ItemStack stack) {
-        return stack == null ? null : registry.getWirelessTerminalHandler(stack);
+    private static Terminal linkedTerminal(IWirelessTermRegistry registry, IInventory inventory, int slot,
+        boolean worn) {
+        ItemStack stack = inventory.getStackInSlot(slot);
+        if (stack == null) return null;
+        IWirelessTermHandler handler = registry.getWirelessTerminalHandler(stack);
+        if (handler == null) return null;
+        String link = handler.getEncryptionKey(stack);
+        return link == null || link.isEmpty() ? null : new Terminal(slot, worn, stack, handler, link);
+    }
+
+    private int inventorySlot() {
+        return worn ? Platform.baublesSlotsOffset + slot : slot;
     }
 
     public long epoch() {
@@ -140,32 +172,62 @@ public final class WirelessPinsFeed {
         return player.ticksExisted - expires >= 0;
     }
 
-    private boolean allowed() {
-        IInventory inventory = worn ? BaublesApi.getBaubles(player) : player.inventory;
-        if (player.isDead || inventory == null
-            || slot >= inventory.getSizeInventory()
-            || inventory.getStackInSlot(slot) != device
-            || !link.equals(handler.getEncryptionKey(device))
-            || grid == null
-            || (!handler.hasInfinityPower(device) && !handler.hasPower(player, 0.5, device))) return false;
+    private WirelessStatus status() {
+        if (player.isDead || !link.equals(handler.getEncryptionKey(device)) || !findDevice())
+            return WirelessStatus.RETRYING;
         ItemStack held = player.inventory.getCurrentItem();
-        if (held != device && handler(
-            AEApi.instance()
-                .registries()
-                .wireless(),
-            held) != null) return false;
+        if (held != null && held != device
+            && linkedTerminal(
+                AEApi.instance()
+                    .registries()
+                    .wireless(),
+                player.inventory,
+                player.inventory.currentItem,
+                false) != null)
+            return WirelessStatus.RETRYING;
+        return networkStatus();
+    }
+
+    private boolean findDevice() {
+        IInventory baubles = BaublesApi.getBaubles(player);
+        IInventory inventory = worn ? baubles : player.inventory;
+        if (inventory != null && slot < inventory.getSizeInventory()
+            && (worn || !HotbarBanks.isReserved(player.inventory, slot))
+            && inventory.getStackInSlot(slot) == device) return true;
+
+        var shape = InventoryLayout.of(player.inventory);
+        for (int i = 0; i < shape.mainSlots(); i++) {
+            int raw = shape.rawIndex(i);
+            if (player.inventory.getStackInSlot(raw) == device && !HotbarBanks.isReserved(player.inventory, raw)) {
+                slot = raw;
+                worn = false;
+                return true;
+            }
+        }
+        if (baubles != null) for (int i = 0; i < baubles.getSizeInventory(); i++) {
+            if (baubles.getStackInSlot(i) == device) {
+                slot = i;
+                worn = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private WirelessStatus networkStatus() {
+        if (!handler.hasInfinityPower(device) && !handler.hasPower(player, 0.5, device)) return WirelessStatus.NO_POWER;
+        if (grid == null || !wireless.rangeCheck()) return WirelessStatus.NETWORK_UNAVAILABLE;
         var node = wireless.getActionableNode();
-        if (node == null || node.getGrid() != grid || !wireless.rangeCheck()) return false;
         IEnergyGrid energy = grid.getCache(IEnergyGrid.class);
+        if (node == null || node.getGrid() != grid || energy == null || !energy.isNetworkPowered())
+            return WirelessStatus.NETWORK_UNAVAILABLE;
         ISecurityGrid security = grid.getCache(ISecurityGrid.class);
-        return energy != null && energy.isNetworkPowered()
-            && security != null
-            && (security.hasPermission(player, SecurityPermissions.EXTRACT)
-                || security.hasPermission(player, SecurityPermissions.CRAFT));
+        return security != null && (security.hasPermission(player, SecurityPermissions.EXTRACT)
+            || security.hasPermission(player, SecurityPermissions.CRAFT)) ? null : WirelessStatus.NO_ACCESS;
     }
 
     public void edit(int index, boolean remove) {
-        if (published == null || index < 0 || index >= pins.length || !allowed()) return;
+        if (published == null || index < 0 || index >= pins.length || status() != null) return;
         var list = new PinsHolder(device).getHandler(player);
         IAEStack<?> current = list.getPin(index);
         IAEStack<?> visible = published[index];
@@ -187,14 +249,14 @@ public final class WirelessPinsFeed {
 
     @SuppressWarnings("unchecked")
     public void transfer(Container container, int index, Transfer operation, int argument, int[] panel) {
-        if (published == null || !(published[index] instanceof IAEItemStack visible) || !allowed()) return;
+        if (published == null || !(published[index] instanceof IAEItemStack visible) || status() != null) return;
         var list = new PinsHolder(device).getHandler(player);
         if (!(list.getPin(index) instanceof IAEItemStack pin) || !pin.isSameType(visible)) return;
         ISecurityGrid security = grid.getCache(ISecurityGrid.class);
         if (!security.hasPermission(player, PinnedItemTransfer.requiredPermission(player, operation, argument))) return;
         var monitor = (IMEMonitor<IAEItemStack>) wireless.getMEMonitor(pin.getStackType());
         if (operation == Transfer.CRAFT) {
-            int slotIndex = worn ? Platform.baublesSlotsOffset + slot : slot;
+            int slotIndex = inventorySlot();
             var primary = new PrimaryGui(GuiBridge.GUI_ME, device.copy(), null, null);
             primary.setSlotIndex(slotIndex);
             PinnedItemTransfer.openCraftAmount(player, monitor, pin, null, null, slotIndex, primary);
@@ -216,8 +278,9 @@ public final class WirelessPinsFeed {
     public boolean update(Consumer<Snapshot> send) {
         if (player.ticksExisted - nextUpdate < 0) return true;
         nextUpdate = player.ticksExisted + (background ? BACKGROUND_REFRESH_TICKS : 20);
-        if (!allowed()) {
-            send.accept(new Snapshot(epoch, null, 0, 0));
+        WirelessStatus failure = status();
+        if (failure != null) {
+            send.accept(Snapshot.unavailable(epoch, failure));
             return false;
         }
         int previousCrafting = craftingSlots, previousPlayer = playerSlots;

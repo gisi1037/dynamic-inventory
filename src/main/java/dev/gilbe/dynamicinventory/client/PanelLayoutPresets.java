@@ -35,12 +35,15 @@ public final class PanelLayoutPresets {
         final PlayerPanelSet panels;
         final PlayerPanelProfile main;
         final PanelLayoutReference reference;
+        final PinsPanelGeometry pins;
 
-        Preset(String name, PlayerPanelSet panels, PlayerPanelProfile main, PanelLayoutReference reference) {
+        Preset(String name, PlayerPanelSet panels, PlayerPanelProfile main, PanelLayoutReference reference,
+            PinsPanelGeometry pins) {
             this.name = name;
             this.panels = panels;
             this.main = main;
             this.reference = reference;
+            this.pins = pins;
         }
 
         JsonObject toJson() {
@@ -49,6 +52,7 @@ public final class PanelLayoutPresets {
             object.add("main", main.toJson());
             object.add("panels", panels.toJson());
             object.add("reference", reference == null ? null : reference.toJson());
+            object.add("pins", pins == null ? null : pins.toJson());
             return object;
         }
     }
@@ -62,11 +66,11 @@ public final class PanelLayoutPresets {
             if (Files.size(file) > 1048576) throw new IllegalArgumentException("Layout profiles too large");
             JsonObject root = new JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
                 .getAsJsonObject();
+            String version = root.get("schemaVersion")
+                .getAsString();
+            boolean hasPins = "2".equals(version);
             if (root.entrySet()
-                .size() != 2
-                || !"1".equals(
-                    root.get("schemaVersion")
-                        .getAsString()))
+                .size() != 2 || !version.matches("[12]"))
                 throw new IllegalArgumentException("Unknown layout profile schema");
             JsonArray array = root.getAsJsonArray("profiles");
             if (array.size() > 32) throw new IllegalArgumentException("Too many layout profiles");
@@ -74,8 +78,8 @@ public final class PanelLayoutPresets {
             for (JsonElement element : array) {
                 JsonObject object = element.getAsJsonObject();
                 if (object.entrySet()
-                    .size() != 4 || !object.has("reference"))
-                    throw new IllegalArgumentException("Invalid layout profile");
+                    .size() != (hasPins ? 5 : 4) || !object.has("reference")
+                    || object.has("pins") != hasPins) throw new IllegalArgumentException("Invalid layout profile");
                 String name = name(
                     object.get("name")
                         .getAsString());
@@ -84,7 +88,9 @@ public final class PanelLayoutPresets {
                     PlayerPanelSet.fromJson(object.getAsJsonArray("panels")),
                     PlayerPanelProfile.fromJson(object.getAsJsonObject("main")),
                     object.get("reference")
-                        .isJsonNull() ? null : PanelLayoutReference.fromJson(object.getAsJsonObject("reference")));
+                        .isJsonNull() ? null : PanelLayoutReference.fromJson(object.getAsJsonObject("reference")),
+                    hasPins && !object.get("pins")
+                        .isJsonNull() ? PinsPanelGeometry.fromJson(object.getAsJsonObject("pins")) : null);
                 if (loaded.put(name, value) != null) throw new IllegalArgumentException("Duplicate layout profile");
             }
             presets = loaded;
@@ -116,14 +122,14 @@ public final class PanelLayoutPresets {
                 key == null ? entry.global : entry.resolve(key),
                 Collections.emptyMap()));
         Map<String, Preset> next = new TreeMap<>(presets);
-        next.put(name, new Preset(name, new PlayerPanelSet(entries), main, reference));
+        next.put(name, new Preset(name, new PlayerPanelSet(entries), main, reference, PlayerPanelProfiles.pins(key)));
         commit(next);
     }
 
     public static void load(String name, String key) throws IOException {
         Preset preset = presets.get(name);
         if (preset == null) throw new IllegalArgumentException("Unknown layout profile");
-        PlayerPanelProfiles.applyGlobalPanels(preset.panels, key, preset.main, preset.reference);
+        PlayerPanelProfiles.applyGlobalPanels(preset.panels, key, preset.main, preset.reference, preset.pins);
     }
 
     public static void delete(String name) throws IOException {
@@ -144,7 +150,7 @@ public final class PanelLayoutPresets {
     private static void commit(Map<String, Preset> next) throws IOException {
         if (file == null) throw new IllegalStateException("Layout profiles not initialized");
         JsonObject root = new JsonObject();
-        root.addProperty("schemaVersion", 1);
+        root.addProperty("schemaVersion", 2);
         JsonArray array = new JsonArray();
         for (Preset preset : next.values()) array.add(preset.toJson());
         root.add("profiles", array);

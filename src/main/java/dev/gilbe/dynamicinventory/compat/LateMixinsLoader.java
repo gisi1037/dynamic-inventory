@@ -102,11 +102,15 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "appliedenergistics2.AeContainerMixin",
                     "appliedenergistics2.AeOpeningActionsMixin",
                     "appliedenergistics2.AePlayerInventoryAdaptorMixin"));
-            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0) mixins.addAll(
-                Arrays.asList(
-                    "appliedenergistics2.AeInterfacePatternTransferMixin",
-                    "appliedenergistics2.AeSpaceTransferMixin"));
-            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0
+            if (IntegrationProfile.selected()
+                .usesRelease29Adapters())
+                mixins.addAll(
+                    Arrays.asList(
+                        "appliedenergistics2.AeInterfacePatternTransferMixin",
+                        "appliedenergistics2.AePatternInputTransferMixin",
+                        "appliedenergistics2.AeSpaceTransferMixin"));
+            if (IntegrationProfile.selected()
+                .usesRelease29Adapters()
                 && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                     .isClient())
                 mixins.addAll(
@@ -114,7 +118,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                         "appliedenergistics2.AeSeparatePinsRepoMixin",
                         "appliedenergistics2.AeSeparatePinsTerminalMixin",
                         "appliedenergistics2.AeSpaceTransferGuiMixin"));
-            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_0 && loadedMods.contains("MouseTweaks")
+            if (IntegrationProfile.selected()
+                .usesRelease29Adapters() && loadedMods.contains("MouseTweaks")
                 && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                     .isClient())
                 mixins.add("mousetweaks.PinsWheelMixin");
@@ -228,7 +233,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     "bogosorter.BogoPanelSortButtonMixin"));
             if (PackCompatibility.enabled() && loadedMods.contains("craftingtweaks"))
                 mixins.add("craftingtweaks.CraftingTweakButtonMixin");
-            if (loadedMods.contains("modularui2")) mixins.add("modularui2.Mui2InventoryResizeMixin");
+            if (loadedMods.contains("modularui2"))
+                mixins.addAll(Arrays.asList("modularui2.Mui2InventoryResizeMixin", "modularui2.Mui2TextLayoutMixin"));
             if (loadedMods.contains("modularui")) mixins.add("modularui.Mui1InventoryResizeMixin");
         }
         if (loadedMods.contains("NotEnoughItems") && cpw.mods.fml.relauncher.FMLLaunchHandler.side()

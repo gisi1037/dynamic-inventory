@@ -4,12 +4,16 @@ package dev.gilbe.dynamicinventory.compat.ae2;
 public final class AppliedEnergisticsBackground {
 
     public static final String WIRELESS_CRAFTING_GUI = "net.p455w0rd.wirelesscraftingterminal.client.gui.GuiWirelessCraftingTerminal";
+    private static final String INTERFACE_TERMINAL = "appeng.client.gui.implementations.GuiInterfaceTerminal";
+    private static final int INTERFACE_BROWSER_WIDTH = 209;
+    private static final int INTERFACE_INVENTORY_HEIGHT = 98;
+    private static final int INTERFACE_FRAME_BOTTOM = 4;
     private static final String ADVANCED_LEVEL_EMITTER = "appeng.client.gui.implementations.GuiAdvancedLevelEmitter";
 
     private AppliedEnergisticsBackground() {}
 
     public static boolean hasSidePanels(String guiClass) {
-        if (isMonitorable(guiClass)) return true;
+        if (isMonitorable(guiClass) || isInterfaceTerminal(guiClass)) return true;
         return switch (guiClass) {
             case "appeng.client.gui.implementations.GuiInscriber", "appeng.client.gui.implementations.GuiAdvancedInscriber", "appeng.client.gui.implementations.GuiCrystalGrowthChamber", "appeng.client.gui.implementations.GuiMAC", "appeng.client.gui.implementations.GuiIOPort", "appeng.client.gui.implementations.GuiInterface", "appeng.client.gui.implementations.GuiCellWorkbench", "appeng.client.gui.implementations.GuiSecurity", "appeng.client.gui.implementations.GuiStorageBus", "appeng.client.gui.implementations.GuiBusIO", "appeng.client.gui.implementations.GuiLevelEmitter", "com.glodblock.github.client.gui.GuiLevelEmitterProxy" -> true;
             case "appeng.client.gui.implementations.GuiFormationPlane" -> true;
@@ -18,6 +22,7 @@ public final class AppliedEnergisticsBackground {
     }
 
     public static int mainSheetWidth(String guiClass, int nativeWidth) {
+        if (isInterfaceTerminal(guiClass)) return INTERFACE_BROWSER_WIDTH;
         if (WIRELESS_CRAFTING_GUI.equals(guiClass)) return 199;
         if (isMonitorable(guiClass)) return 195;
         if (guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")) return 195;
@@ -28,9 +33,10 @@ public final class AppliedEnergisticsBackground {
     }
 
     /** End of real header artwork, excluding the obsolete stepped native player frame. */
-    public static int headerBottom(String guiClass, int playerTop) {
+    public static int headerBottom(String guiClass, int nativeHeight, int playerTop) {
         return switch (guiClass) {
-            case "appeng.client.gui.implementations.GuiInterfaceTerminal", "com.glodblock.github.client.gui.GuiLevelTerminal", "com.glodblock.github.client.gui.GuiLevelWireless" -> playerTop
+            case INTERFACE_TERMINAL -> nativeHeight - INTERFACE_INVENTORY_HEIGHT;
+            case "com.glodblock.github.client.gui.GuiLevelTerminal", "com.glodblock.github.client.gui.GuiLevelWireless" -> playerTop
                 - 7;
             // Five native rows: scrollbar ends at 122, followed by four pixels of lower cap.
             case "appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal" -> 126;
@@ -39,8 +45,9 @@ public final class AppliedEnergisticsBackground {
     }
 
     /** Detached frames crop four pixels inside their bounds; keep the last pattern slot's bevel inside that area. */
-    public static int detachedHeaderHeight(String guiClass, int playerTop) {
-        int height = headerBottom(guiClass, playerTop) + 2;
+    public static int detachedHeaderHeight(String guiClass, int nativeHeight, int playerTop) {
+        int height = headerBottom(guiClass, nativeHeight, playerTop) + 2;
+        if (isInterfaceTerminal(guiClass)) return height + INTERFACE_FRAME_BOTTOM - 2;
         return guiClass.equals("appeng.client.gui.implementations.GuiInterface")
             ? Math.max(height, minimumContentBottom(guiClass) + 1 + 4)
             : height;
@@ -58,9 +65,13 @@ public final class AppliedEnergisticsBackground {
     }
 
     public static boolean isTerminal(String guiClass) {
-        return isMonitorable(guiClass) || guiClass.equals("appeng.client.gui.implementations.GuiInterfaceTerminal")
+        return isMonitorable(guiClass) || isInterfaceTerminal(guiClass)
             || guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")
             || isLevelTerminal(guiClass);
+    }
+
+    public static boolean isInterfaceTerminal(String guiClass) {
+        return INTERFACE_TERMINAL.equals(guiClass);
     }
 
     public static boolean isLevelTerminal(String guiClass) {
@@ -74,7 +85,8 @@ public final class AppliedEnergisticsBackground {
     }
 
     public static int mainContentRight(String guiClass, int inset) {
-        return isMonitorable(guiClass) ? mainSheetWidth(guiClass, 195) - inset : mainContentRight(inset);
+        return isMonitorable(guiClass) || isInterfaceTerminal(guiClass) ? mainSheetWidth(guiClass, 195) - inset
+            : mainContentRight(inset);
     }
 
     /** Share the texture edge with the frame's unfilled area, avoiding a transparent seam. */
@@ -99,6 +111,15 @@ public final class AppliedEnergisticsBackground {
 
     public static int[] clip(String guiClass, int left, int top, int nativeWidth, int nativeHeight, int playerTop,
         int inset, int x, int y, int u, int v, int width, int height) {
+        if (isInterfaceTerminal(guiClass)) {
+            // AE2 1104 includes the toolbox in xSize, but draws the browser at a fixed width.
+            // The original inventory footer and sidebar artwork have separate replacement frames.
+            if (x >= left + INTERFACE_BROWSER_WIDTH || x == left && u == 0 && v == 158)
+                return new int[] { x, y, u, v, 0, 0 };
+            if (x == left && y == top && u == 0 && v == 0 && width == INTERFACE_BROWSER_WIDTH && inset > 0)
+                return new int[] { x + inset, y + inset, u + inset, v + inset, width - inset * 2, height - inset };
+            return null;
+        }
         if (guiClass.equals(ADVANCED_LEVEL_EMITTER) && x == left
             && y == top
             && u == 0
