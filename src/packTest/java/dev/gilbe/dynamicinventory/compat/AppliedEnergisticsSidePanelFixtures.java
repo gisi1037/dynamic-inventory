@@ -20,6 +20,7 @@ import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Placement;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.client.InventoryViewSettings;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
+import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsSidePanels;
 
 /** Exercise real side-slot placement without a client, world, or OpenGL draw. */
@@ -34,7 +35,29 @@ public final class AppliedEnergisticsSidePanelFixtures {
             checkToolbox(size, true);
         }
         checkPatternResult();
+        checkThaumicEnergisticsBackgrounds();
         System.out.println("PASS AE2 toolbox: native margins, 3x3/5x5, resizing, live upgrades and unchanged slot IDs");
+    }
+
+    private static void checkThaumicEnergisticsBackgrounds() {
+        String assembler = ThaumicEnergisticsCompatibility.ASSEMBLER;
+        check(
+            AppliedEnergisticsBackground.mainSheetWidth(assembler, 283) == 234,
+            "Assembler main frame excludes the advanced toolbox");
+        int[] split = AppliedEnergisticsBackground.clip(assembler, 10, 20, 283, 233, 111, 4, 10, 20, 0, 0, 176, 233);
+        check(Arrays.equals(split, new int[] { 14, 24, 4, 4, 172, 107 }), "Assembler retains the seam at x=176");
+        int[] regular = AppliedEnergisticsBackground.clip(assembler, 10, 20, 247, 197, 111, 4, 10, 20, 0, 0, 247, 197);
+        check(
+            Arrays.equals(regular, new int[] { 14, 24, 4, 4, 226, 107 }),
+            "Assembler crops the regular toolbox sheet");
+
+        String terminal = ThaumicEnergisticsCompatibility.ARCANE_TERMINAL;
+        check(AppliedEnergisticsBackground.isTerminal(terminal), "Arcane Crafting Terminal uses the AE2 viewport");
+        int[] footer = AppliedEnergisticsBackground.clip(terminal, 10, 20, 230, 298, 211, 4, 10, 145, 0, 71, 195, 173);
+        check(
+            Arrays.equals(footer, new int[] { 14, 145, 4, 71, 187, 86 }),
+            "Arcane crafting footer keeps the aspect area and removes the old player grid");
+        System.out.println("PASS Thaumic Energistics assembler and arcane terminal background cropping");
     }
 
     private static void checkSavedPlacement() throws Exception {

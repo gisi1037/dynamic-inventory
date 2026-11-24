@@ -91,6 +91,7 @@ public final class AeNativePanelControls extends Gui {
     private final Map<String, Integer> scroll = new LinkedHashMap<>();
     private List<Rect> obstacles = Collections.emptyList();
     private Rect viewport;
+    private int gap = 1;
     private Frame captured;
     private Placement initial, preview;
     private boolean resizing, releaseOwned;
@@ -106,9 +107,10 @@ public final class AeNativePanelControls extends Gui {
         return placed.get(id);
     }
 
-    void layout(Rect area, List<Frame> requested, List<Rect> fixed) {
+    void layout(Rect area, List<Frame> requested, List<Rect> fixed, int gap) {
         viewport = area;
         obstacles = fixed;
+        this.gap = gap;
         frames.clear();
         placed.clear();
         List<Rect> occupied = new ArrayList<>(fixed);
@@ -126,12 +128,12 @@ public final class AeNativePanelControls extends Gui {
                 int rows = frame.tool() ? limitRows(frame, custom ? saved[3] : frame.rows) : 0;
                 Rect wanted = frame
                     .size(custom ? saved[0] : frame.suggested.x, custom ? saved[1] : frame.suggested.y, columns, rows);
-                Rect bounds = fit(wanted, area, occupied);
+                Rect bounds = fit(wanted, area, occupied, gap);
                 if (bounds == null && frame.tool()) {
                     // Retain access to every tool slot through scrolling on a tight viewport.
                     while (bounds == null && rows > 1) {
                         wanted = frame.size(wanted.x, wanted.y, columns, --rows);
-                        bounds = fit(wanted, area, occupied);
+                        bounds = fit(wanted, area, occupied, gap);
                     }
                 }
                 if (bounds == null) bounds = clamp(wanted, area);
@@ -168,10 +170,14 @@ public final class AeNativePanelControls extends Gui {
     }
 
     static Rect fit(Rect desired, Rect viewport, List<Rect> occupied) {
+        return fit(desired, viewport, occupied, 1);
+    }
+
+    private static Rect fit(Rect desired, Rect viewport, List<Rect> occupied, int gap) {
         if (desired.width > viewport.width || desired.height > viewport.height) return null;
         Rect clamped = clamp(desired, viewport);
         for (Rect obstacle : occupied)
-            if (clamped.intersects(obstacle)) return InventoryPanelLayout.snapDrag(clamped, viewport, occupied);
+            if (clamped.intersects(obstacle)) return InventoryPanelLayout.snapDrag(clamped, viewport, occupied, gap);
         return clamped;
     }
 
@@ -259,7 +265,7 @@ public final class AeNativePanelControls extends Gui {
             bounds = clamp(captured.size(start.x, start.y, columns, rows), viewport);
         } else {
             Rect wanted = new Rect(start.x + dx, start.y + dy, start.width, start.height);
-            bounds = InventoryPanelLayout.alignDrag(wanted, viewport, obstaclesFor(captured.id), 3).bounds;
+            bounds = InventoryPanelLayout.alignDrag(wanted, viewport, obstaclesFor(captured.id), 3, gap).bounds;
         }
         preview = placement(captured, bounds, columns, rows);
     }
@@ -276,7 +282,7 @@ public final class AeNativePanelControls extends Gui {
 
     private void finish(int x, int y) {
         move(x, y);
-        Rect fitted = fit(preview.bounds, viewport, obstaclesFor(captured.id));
+        Rect fitted = fit(preview.bounds, viewport, obstaclesFor(captured.id), gap);
         if (fitted == null) return;
         int[] saved = { fitted.x, fitted.y, preview.columns, preview.rows };
         preferences.put(captured.id, saved);

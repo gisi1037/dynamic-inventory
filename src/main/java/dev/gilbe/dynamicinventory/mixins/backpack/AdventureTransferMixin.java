@@ -34,6 +34,6 @@ public abstract class AdventureTransferMixin extends Container {
         ContainerInventoryRegion region = ContainerInventoryRegion.of(this);
         if (region == null) return;
         int[] ids = region.destinations(start, end, reverse);
-        if (ids != null) cir.setReturnValue(PlayerInventoryTransfers.merge(this, stack, ids));
+        if (ids != null) cir.setReturnValue(PlayerInventoryTransfers.mergeToPlayer(this, stack, ids));
     }
 }

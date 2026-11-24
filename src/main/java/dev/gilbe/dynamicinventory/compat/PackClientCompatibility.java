@@ -150,7 +150,7 @@ public final class PackClientCompatibility {
                 if (gui instanceof PlayerInventoryScreen screen && screen.layoutSettingsOpen())
                     visibility.showNEI = false;
                 if (dev.gilbe.dynamicinventory.client.PanelSettingsOverlay.isOpen(gui)) visibility.showNEI = false;
-                // Keep bookmark visibility. The scoped bounds hook retains an unobstructed native grid.
+                // The per-cell overlap mask handles bookmarks and item results.
                 return visibility;
             }
         });

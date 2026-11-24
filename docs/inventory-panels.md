@@ -1,5 +1,13 @@
 # Inventory panels
 
+**Slot locks.** Alt+Shift+left-click a player inventory slot to lock or unlock it.
+A gold padlock marks the slot. Locks follow the slot across layouts and game sessions
+and block transfers, sorting, hotbar swaps, and manual drops. Empty slots can also be
+locked to reserve them. Equipped items still work normally, including durability,
+consumable use, and the world's death rules. To use a different mouse button with
+Alt+Shift, set `slotLock.mouseButton` in `config/dynamicinventory-client.cfg`
+(`0` for left, `1` for right, or `2` for middle).
+
 Attached inventory stays the default. Separate panels are enabled for the main
 player inventory and all eleven vanilla container families: chests, crafting,
 furnaces, dispensers/droppers, hoppers, brewing, enchanting, beacons, anvils,
@@ -69,10 +77,10 @@ position. The saved position is a separate client presentation preference, so
 moving this section does not create a custom inventory-panel override or translate
 the inventory panels. Reattaching returns the combined inventory to a fitting
 default position; detaching restores the saved character-section position.
-Hold **Shift** during a corner resize to snap to the nearest complete rows and
+Hold **Alt** during a corner resize to snap to the nearest complete rows and
 columns, including the space for Main's wrapped hotbar. The opposite corner
 stays fixed, and neighboring frames and screen edges still limit the size.
-Release Shift to return to smooth resizing; it can be toggled during the gesture.
+Release Alt to return to smooth resizing. You can toggle it during the gesture.
 An incomplete final storage row in Main is centered beneath the full rows,
 including when scrolled into view. Side-panel grids keep their row alignment.
 In the player inventory's top-right grid-icon menu, **Last row: Centered / Left** changes this
@@ -132,7 +140,7 @@ Schema 5 migrates older shared lists into complete layouts for their known
 interfaces. An attached global default starts with Main only. The original file
 is retained as an exact schema-version backup on the first save.
 
-Hold **Shift** to reveal the compact **W −/+** and **H −/+** toolbar beside a
+Hold **Alt** to reveal the compact **W −/+** and **H −/+** toolbar beside a
 side panel. Hover to preview the storage slots borrowed from or returned to Main.
 The raised buttons use the active resource pack's native Minecraft widget texture.
 Adding a column preserves each existing row; growth fills a partial final row as
@@ -158,9 +166,10 @@ In the player inventory, Shift-clicking a detached subpanel, including Mouse Twe
 slots, including when the hotbar is full. The server validates the current window,
 capacity revision and ownership of every destination before moving any items.
 The source and other subpanels are excluded. Shift-clicking Main storage targets
-its hotbar first, then the opposite half of Main if items remain. The halves split
-at a row boundary, including hidden rows. Shift-clicking the hotbar targets only
-Main's assigned storage.
+its hotbar first, then the opposite half of Main if items remain. Transfers
+toward the bottom start with the lowest row, including a partial or hidden row.
+Transfers toward the top start with the first row. Shift-clicking the hotbar
+targets only Main's assigned storage.
 A full destination leaves the source in place instead of spilling into satellites.
 When a container or machine is open, all panels bypass these rules and use that
 host's native Shift-click transfers, including filters, outputs and network actions.

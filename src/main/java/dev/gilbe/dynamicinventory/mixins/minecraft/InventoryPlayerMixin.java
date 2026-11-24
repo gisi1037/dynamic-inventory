@@ -20,6 +20,7 @@ import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
 import dev.gilbe.dynamicinventory.inventory.ExpandedInventoryAccess;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 import dev.gilbe.dynamicinventory.persistence.InventoryCodec;
 
 /** Expanded backing storage. Vanilla array-length-based access, pickup and ticking remain in use. */
@@ -37,6 +38,36 @@ public class InventoryPlayerMixin implements ExpandedInventoryAccess {
 
     @Unique
     private boolean dynamicinventory$capacityOverride;
+
+    @Inject(method = "decrStackSize", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$denyExtraction(int raw, int amount, CallbackInfoReturnable<ItemStack> result) {
+        if (InventorySlotLocks.locked((InventoryPlayer) (Object) this, raw)) result.setReturnValue(null);
+    }
+
+    @Inject(method = "getStackInSlotOnClosing", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$denyClosingExtraction(int raw, CallbackInfoReturnable<ItemStack> result) {
+        if (InventorySlotLocks.locked((InventoryPlayer) (Object) this, raw)) result.setReturnValue(null);
+    }
+
+    @Inject(method = "isItemValidForSlot", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$denyInsertion(int raw, ItemStack item, CallbackInfoReturnable<Boolean> result) {
+        if (InventorySlotLocks.locked((InventoryPlayer) (Object) this, raw)) result.setReturnValue(false);
+    }
+
+    @com.llamalad7.mixinextras.injector.ModifyExpressionValue(
+        method = "consumeInventoryItem",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/entity/player/InventoryPlayer;func_146029_c(Lnet/minecraft/item/Item;)I"))
+    private int dynamicinventory$consumableSlot(int raw, net.minecraft.item.Item item) {
+        InventoryPlayer inventory = (InventoryPlayer) (Object) this;
+        if (raw < 0 || !InventorySlotLocks.locked(inventory, raw)) return raw;
+        for (int i = raw + 1; i < mainInventory.length; i++) {
+            ItemStack candidate = mainInventory[i];
+            if (candidate != null && candidate.getItem() == item && !InventorySlotLocks.locked(inventory, i)) return i;
+        }
+        return -1;
+    }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void dynamicinventory$mainCapacity(CallbackInfo ci) {

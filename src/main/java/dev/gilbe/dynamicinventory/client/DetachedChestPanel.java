@@ -73,14 +73,17 @@ public final class DetachedChestPanel extends Gui {
 
         final String id, name;
         final List<Integer> members;
+        final List<Integer> cells;
         PlayerPanelProfile profile;
         InventoryPanelLayout layout;
         int scroll;
 
-        Panel(PlayerPanelSet.Entry entry, List<Integer> members, PlayerPanelProfile profile) {
+        Panel(PlayerPanelSet.Entry entry, List<Integer> cells, PlayerPanelProfile profile) {
             id = entry.id;
             name = entry.name;
-            this.members = members;
+            this.cells = cells;
+            members = new ArrayList<>();
+            for (int cell : cells) if (cell != PlayerPanelSet.UNAVAILABLE_SLOT) members.add(cell);
             this.profile = profile;
         }
 
@@ -89,7 +92,7 @@ public final class DetachedChestPanel extends Gui {
         }
 
         int maxScroll() {
-            return layout == null ? 0 : layout.maxScroll(members.size());
+            return layout == null ? 0 : layout.maxScroll(cells.size());
         }
     }
 
@@ -216,6 +219,14 @@ public final class DetachedChestPanel extends Gui {
         return preference().frameStyle < 0 ? style : preference().frameStyle;
     }
 
+    public boolean seamless() {
+        return detached() && main().profile.frameStyle == NativePanelFrame.SEAMLESS;
+    }
+
+    private int panelGap(Panel panel) {
+        return seamless() || panel.profile.frameStyle == NativePanelFrame.SEAMLESS ? 0 : 1;
+    }
+
     public int capacity() {
         return slotIds.length - 9
             - dev.gilbe.dynamicinventory.inventory.HotbarBanks.reserved(Minecraft.getMinecraft().thePlayer.inventory);
@@ -236,7 +247,7 @@ public final class DetachedChestPanel extends Gui {
             || Minecraft.getMinecraft().thePlayer.inventory.getItemStack() != null) return false;
         boolean detached = detached();
         var excluded = excluded();
-        int columns = detached ? main().layout.columns : player.storageColumns();
+        int columns = detached ? columns() : player.storageColumns();
         if (!detached && columns == 9 && excluded.isEmpty()) return false;
         int logical = -1;
         for (int i = 0; i < slotIds.length; i++) if (slotId(i) == sourceId) logical = i;
@@ -382,10 +393,11 @@ public final class DetachedChestPanel extends Gui {
         java.util.Map<String, Panel> previous = new java.util.HashMap<>();
         for (Panel panel : panels) previous.put(panel.id, panel);
         panels.clear();
+        var excluded = excluded();
         for (PlayerPanelSet.Entry entry : set.entries) panels.add(
             new Panel(
                 entry,
-                set.members(entry.id, slotIds.length - 9, excluded()),
+                set.displayCells(entry, slotIds.length - 9, excluded),
                 entry.id.equals(PlayerPanelSet.MAIN) ? mainProfile : entry.resolve(key)));
         refit();
         for (Panel panel : panels) {
@@ -577,7 +589,7 @@ public final class DetachedChestPanel extends Gui {
         if (main().profile.detached && !main().profile.visible) obstacles.add(recoveryControl());
         usable = true;
         for (Panel panel : panels) {
-            if (!panel.profile.visible || !panel.main() && panel.members.isEmpty()) {
+            if (!panel.profile.visible || !panel.main() && panel.cells.isEmpty()) {
                 panel.layout = null;
                 continue;
             }
@@ -586,8 +598,14 @@ public final class DetachedChestPanel extends Gui {
                     : PlayerPanelProfiles.requestedBounds(key, panel.profile, profileMachine(), viewport);
             Rect fittingViewport = previewBounds ? viewport
                 : PlayerPanelProfiles.fittingViewport(key, panel.profile, profileMachine(), viewport);
-            panel.layout = InventoryPanelLayout
-                .fit(requested, fittingViewport, obstacles, panel.members.size(), margin(panel), panel.main());
+            panel.layout = InventoryPanelLayout.fit(
+                requested,
+                fittingViewport,
+                obstacles,
+                panel.cells.size(),
+                margin(panel),
+                panel.main(),
+                panelGap(panel));
             if (panel.layout == null) {
                 usable = false;
                 break;
@@ -603,10 +621,12 @@ public final class DetachedChestPanel extends Gui {
         if (main().profile.detached && !main().profile.visible) obstacles.add(recoveryControl());
         for (Panel panel : panels) if (panel != moved && panel.layout != null) obstacles.add(panel.layout.bounds);
         int margin = margin(moved);
+        int gap = panelGap(moved);
         Rect safe;
         guideX = guideY = Integer.MIN_VALUE;
         if (grip == 0) {
-            InventoryPanelLayout.Alignment aligned = InventoryPanelLayout.alignDrag(requested, viewport, obstacles, 3);
+            InventoryPanelLayout.Alignment aligned = InventoryPanelLayout
+                .alignDrag(requested, viewport, obstacles, 3, gap);
             safe = aligned.bounds;
             guideX = aligned.guideX;
             guideY = aligned.guideY;
@@ -619,17 +639,33 @@ public final class DetachedChestPanel extends Gui {
                 obstacles,
                 margin,
                 moved.main(),
-                moved.members.size());
+                moved.cells.size(),
+                gap);
             if (safe == null) return;
-        } else safe = InventoryPanelLayout.constrainGesture(
-            moved.layout.bounds,
-            requested,
-            viewport,
-            obstacles,
-            18 + margin * 2,
-            InventoryPanelLayout.minimumHeight(requested.width, margin, moved.main()));
+        } else {
+            int minimumWidth = 18 + margin * 2;
+            int minimumHeight = InventoryPanelLayout.minimumHeight(requested.width, margin, moved.main());
+            Rect aligned = InventoryPanelLayout.alignResize(
+                dragStart,
+                requested,
+                grip,
+                viewport,
+                obstacles,
+                minimumWidth,
+                minimumHeight,
+                InventoryPanelLayout.maximumWidth(moved.main()),
+                InventoryPanelLayout.MAX_HEIGHT,
+                gap);
+            int alignedMinimum = InventoryPanelLayout.minimumHeight(aligned.width, margin, moved.main());
+            if (aligned.height < alignedMinimum) {
+                aligned = requested;
+                alignedMinimum = minimumHeight;
+            }
+            safe = InventoryPanelLayout
+                .constrainGesture(moved.layout.bounds, aligned, viewport, obstacles, minimumWidth, alignedMinimum, gap);
+        }
         InventoryPanelLayout fit = InventoryPanelLayout
-            .fit(safe, safe, java.util.Collections.emptyList(), moved.members.size(), margin, moved.main());
+            .fit(safe, safe, java.util.Collections.emptyList(), moved.cells.size(), margin, moved.main());
         if (fit != null) moved.layout = fit;
         revision++;
     }
@@ -639,7 +675,7 @@ public final class DetachedChestPanel extends Gui {
         List<Rect> obstacles = new ArrayList<>(fixed);
         if (!mainVisible()) obstacles.add(recoveryControl());
         for (Panel panel : panels) if (panel != captured && panel.layout != null) obstacles.add(panel.layout.bounds);
-        Rect safe = InventoryPanelLayout.snapDrag(captured.layout.bounds, viewport, obstacles);
+        Rect safe = InventoryPanelLayout.snapDrag(captured.layout.bounds, viewport, obstacles, panelGap(captured));
         if (safe == null) {
             captured.layout = gestureLayout;
             captured.profile = gestureStart;
@@ -649,7 +685,7 @@ public final class DetachedChestPanel extends Gui {
                 safe,
                 safe,
                 java.util.Collections.emptyList(),
-                captured.members.size(),
+                captured.cells.size(),
                 margin(captured),
                 captured.main());
             captured.profile = captured.profile.atBounds(safe, viewport);
@@ -730,12 +766,13 @@ public final class DetachedChestPanel extends Gui {
                 before.height + (row ? delta * 18 : 0));
             try {
                 if (plan.bounds.width < 18 + margin(panel) * 2 || plan.bounds.height < 36 + margin(panel)
-                    || plan.bounds.width > 340
-                    || plan.bounds.height > 262) throw new IllegalArgumentException("No room for that panel size");
+                    || plan.bounds.width > InventoryPanelLayout.maximumWidth(panel.main())
+                    || plan.bounds.height > InventoryPanelLayout.MAX_HEIGHT)
+                    throw new IllegalArgumentException("No room for that panel size");
                 List<Rect> obstacles = new ArrayList<>(fixed);
                 for (Panel other : panels)
                     if (other != panel && other.layout != null) obstacles.add(other.layout.bounds);
-                Rect fitted = InventoryPanelLayout.snapDrag(plan.bounds, viewport, obstacles);
+                Rect fitted = InventoryPanelLayout.snapDrag(plan.bounds, viewport, obstacles, panelGap(panel));
                 if (fitted == null || Math.abs(fitted.x - plan.bounds.x) > 19
                     || Math.abs(fitted.y - plan.bounds.y) > 19)
                     throw new IllegalArgumentException("No room for that panel size");
@@ -861,15 +898,15 @@ public final class DetachedChestPanel extends Gui {
             if (panel.layout == null) continue;
             InventoryPanelLayout layout = panel.layout;
             if (panel.main()) for (int i = 0; i < 9; i++) place(i, layout.hotbarSlotX(i), layout.hotbarSlotY(i));
-            for (int i = 0; i < panel.members.size(); i++) {
+            for (int i = 0; i < panel.cells.size(); i++) {
+                int storage = panel.cells.get(i);
+                if (storage == PlayerPanelSet.UNAVAILABLE_SLOT) continue;
                 int row = i / layout.columns - panel.scroll;
                 int inset = panel.main() && InventoryViewSettings.centerLastRow
-                    ? InventoryPanelLayout.rowOffset(i, panel.members.size(), layout.columns)
+                    ? InventoryPanelLayout.rowOffset(i, panel.cells.size(), layout.columns)
                     : 0;
-                if (row >= 0 && row < layout.rows) place(
-                    panel.members.get(i) + 9,
-                    layout.gridX + inset + i % layout.columns * 18,
-                    layout.gridY + row * 18);
+                if (row >= 0 && row < layout.rows)
+                    place(storage + 9, layout.gridX + inset + i % layout.columns * 18, layout.gridY + row * 18);
             }
         }
     }
@@ -915,7 +952,16 @@ public final class DetachedChestPanel extends Gui {
     public void background(Runnable nativeDraw, int nativeWidth, int nativeHeight, int nativeLeft, int cropBottom,
         boolean virtualViewport) {
         position();
-        NativePanelFrame.draw(machine.x, machine.y, machine.width, machine.height, style, border, crop, corners, null);
+        NativePanelFrame.draw(
+            machine.x,
+            machine.y,
+            machine.width,
+            machine.height,
+            seamless() ? NativePanelFrame.SEAMLESS : style,
+            border,
+            crop,
+            corners,
+            null);
         int w = access.dynamicinventory$width(), h = access.dynamicinventory$height();
         int x = access.dynamicinventory$left(), y = access.dynamicinventory$top();
         int screenW = gui.width, screenH = gui.height;
@@ -956,7 +1002,8 @@ public final class DetachedChestPanel extends Gui {
     }
 
     public void drawPanels(boolean drawSlotBackgrounds, Consumer<Rect> inheritedFrame) {
-        position();
+        // Framework widgets already projected their slots (including reserved hotbars) for this frame.
+        if (drawSlotBackgrounds) position();
         Minecraft mc = Minecraft.getMinecraft();
         GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT);
         try {
@@ -964,13 +1011,13 @@ public final class DetachedChestPanel extends Gui {
                 if (panel.layout == null) continue;
                 Rect bounds = panel.layout.bounds;
                 PlayerPanelProfile profile = panel.profile;
-                if (inheritedFrame != null && profile.frameStyle < 0) inheritedFrame.accept(bounds);
+                if (inheritedFrame != null && profile.frameStyle < 0 && !seamless()) inheritedFrame.accept(bounds);
                 else NativePanelFrame.draw(
                     bounds.x,
                     bounds.y,
                     bounds.width,
                     bounds.height,
-                    profile.frameStyle < 0 ? style : profile.frameStyle,
+                    seamless() ? NativePanelFrame.SEAMLESS : profile.frameStyle < 0 ? style : profile.frameStyle,
                     profile.frameStyle < 0 ? border : profile.borderWidth,
                     profile.frameStyle < 0 ? crop : profile.frameCrop,
                     profile.frameStyle < 0 ? corners : profile.cornerCrop,
@@ -980,14 +1027,16 @@ public final class DetachedChestPanel extends Gui {
                 GL11.glColor4f(1, 1, 1, 1);
                 GL11.glEnable(GL11.GL_BLEND);
                 GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-                List<Slot> visible = new ArrayList<>();
-                if (panel.main()) for (int i = 0; i < 9; i++) visible.add(gui.inventorySlots.getSlot(slotIds[i]));
-                for (int member : panel.members) {
-                    Slot slot = gui.inventorySlots.getSlot(slotId(member + 9));
-                    if (slot.xDisplayPosition != -10000) visible.add(slot);
-                }
-                if (drawSlotBackgrounds)
+                if (drawSlotBackgrounds) {
+                    List<Slot> visible = new ArrayList<>();
+                    if (panel.main()) for (int i = 0; i < 9; i++) visible.add(gui.inventorySlots.getSlot(slotIds[i]));
+                    for (int member : panel.members) {
+                        Slot slot = gui.inventorySlots.getSlot(slotId(member + 9));
+                        if (slot.xDisplayPosition != -10000) visible.add(slot);
+                    }
                     ResourceSlotGrid.draw(visible, access.dynamicinventory$left(), access.dynamicinventory$top());
+                }
+                drawUnavailableSlots(panel);
                 if (panel.maxScroll() > 0) {
                     Rect track = panel.layout.scrollbar();
                     int thumb = Math
@@ -1012,6 +1061,33 @@ public final class DetachedChestPanel extends Gui {
             playerBounds().right() - access.dynamicinventory$left() - 46,
             playerBounds().y - access.dynamicinventory$top() + 2,
             mainVisible());
+    }
+
+    private static void drawUnavailableSlots(Panel panel) {
+        if (panel.cells.size() == panel.members.size()) return;
+        InventoryPanelLayout layout = panel.layout;
+        InventoryGuiTheme theme = InventoryGuiTheme.get();
+        int first = panel.scroll * layout.columns;
+        int end = Math.min(panel.cells.size(), first + layout.rows * layout.columns);
+        for (int i = first; i < end; i++) {
+            if (panel.cells.get(i) != PlayerPanelSet.UNAVAILABLE_SLOT) continue;
+            int x = layout.gridX + i % layout.columns * InventoryPanelLayout.CELL - 1;
+            int y = layout.gridY + (i / layout.columns - panel.scroll) * InventoryPanelLayout.CELL - 1;
+            drawRect(x, y, x + 18, y + 18, theme.panelShadow);
+            drawRect(x + 1, y + 1, x + 17, y + 17, theme.panelFill);
+            drawRect(x + 1, y + 1, x + 17, y + 17, 0x38000000);
+        }
+    }
+
+    private static boolean overUnavailableSlot(Panel panel, int mouseX, int mouseY) {
+        if (panel.layout == null || panel.cells.size() == panel.members.size()) return false;
+        InventoryPanelLayout layout = panel.layout;
+        int x = mouseX - layout.gridX + 1, y = mouseY - layout.gridY + 1;
+        if (x < 0 || x >= layout.columns * InventoryPanelLayout.CELL
+            || y < 0
+            || y >= layout.rows * InventoryPanelLayout.CELL) return false;
+        int index = (panel.scroll + y / InventoryPanelLayout.CELL) * layout.columns + x / InventoryPanelLayout.CELL;
+        return index < panel.cells.size() && panel.cells.get(index) == PlayerPanelSet.UNAVAILABLE_SLOT;
     }
 
     public void drawControl() {
@@ -1042,7 +1118,9 @@ public final class DetachedChestPanel extends Gui {
                     .draw(control.x - 2, control.y - 2, control.width + 4, control.height + 4, style, 1, 0, 1, null);
                 PanelChrome.icon(control, control.contains(mx, my), inherited);
                 if (detached() && panel.layout != null) {
-                    PanelChrome.grips(bounds, PanelChrome.corner(bounds, mx, my));
+                    int corner = PanelChrome.corner(bounds, mx, my);
+                    if (panelGap(panel) != 0) PanelChrome.grips(bounds, corner);
+                    else if (corner != 0) PanelChrome.grip(bounds, corner, true);
                     int pinsOffset = panel.main() && PackCompatibility.aePinnedPanel() ? 13 : 0;
                     int labelWidth = Math.max(0, bounds.width - (panel.main() ? 74 : 32) - pinsOffset);
                     mc.fontRenderer.drawString(
@@ -1070,6 +1148,18 @@ public final class DetachedChestPanel extends Gui {
                 }
             }
             drawResizeControls(mx, my);
+            if (detached() && captured == null
+                && !PanelSettingsOverlay.isOpen(gui)
+                && panels.stream()
+                    .anyMatch(panel -> overUnavailableSlot(panel, mx, my))) {
+                String tooltip = net.minecraft.client.resources.I18n.format("dynamicinventory.panel.unavailable_slot");
+                tooltip = mc.fontRenderer.trimStringToWidth(tooltip, Math.max(20, gui.width - 8));
+                int width = mc.fontRenderer.getStringWidth(tooltip) + 8;
+                int x = Math.max(0, Math.min(gui.width - width, mx + 8));
+                int y = Math.max(0, Math.min(gui.height - 13, my - 16));
+                drawRect(x, y, x + width, y + 13, 0xf0100010);
+                mc.fontRenderer.drawStringWithShadow(tooltip, x + 4, y + 2, 0xffffff);
+            }
         } finally {
             GL11.glPopAttrib();
         }
@@ -1282,25 +1372,29 @@ public final class DetachedChestPanel extends Gui {
         int dx = x - startX, dy = y - startY;
         int left = dragStart.x, top = dragStart.y, right = dragStart.right(), bottom = dragStart.bottom();
         int minimumWidth = 18 + margin(panel) * 2;
+        int maximumWidth = InventoryPanelLayout.maximumWidth(panel.main());
+        int maximumHeight = InventoryPanelLayout.MAX_HEIGHT;
         if (grip == 0) {
             left += dx;
             right += dx;
             top += dy;
             bottom += dy;
         } else {
-            if ((grip & 1) != 0) left = Math.max(right - 340, Math.min(right - minimumWidth, left + dx));
-            if ((grip & 2) != 0) right = Math.min(left + 340, Math.max(left + minimumWidth, right + dx));
+            if ((grip & 1) != 0) left = Math.max(right - maximumWidth, Math.min(right - minimumWidth, left + dx));
+            if ((grip & 2) != 0) right = Math.min(left + maximumWidth, Math.max(left + minimumWidth, right + dx));
             int minimumHeight = InventoryPanelLayout.minimumHeight(right - left, margin(panel), panel.main());
             if (minimumHeight > viewport.height) return;
             if (bottom - top < minimumHeight) {
                 if ((grip & 4) != 0) top = bottom - minimumHeight;
                 else bottom = top + minimumHeight;
             }
-            if ((grip & 4) != 0) top = Math.max(bottom - 262, Math.min(bottom - minimumHeight, top + dy));
-            if ((grip & 8) != 0) bottom = Math.min(top + 262, Math.max(top + minimumHeight, bottom + dy));
+            if ((grip & 4) != 0) top = Math.max(bottom - maximumHeight, Math.min(bottom - minimumHeight, top + dy));
+            if ((grip & 8) != 0) bottom = Math.min(top + maximumHeight, Math.max(top + minimumHeight, bottom + dy));
         }
         int anchor = panel.scroll * panel.layout.columns;
-        refitGesture(panel, new Rect(left, top, Math.min(340, right - left), Math.min(262, bottom - top)));
+        refitGesture(
+            panel,
+            new Rect(left, top, Math.min(maximumWidth, right - left), Math.min(maximumHeight, bottom - top)));
         panel.profile = panel.profile.atBounds(panel.layout.bounds, viewport);
         panel.scroll = Math.min(panel.maxScroll(), anchor / panel.layout.columns);
         position();

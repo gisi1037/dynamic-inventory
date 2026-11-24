@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.4 — 2026-11-23
+
+Dynamic Inventory for **GT New Horizons 2.9.1** on Minecraft 1.7.10.
+Install `dynamicinventory-0.8.4.jar` on both client and server.
+
+- The Galacticraft equipment tab follows the global breakout layout and supports per-interface overrides. Its navigation tabs and equipment hitboxes stay aligned in breakout mode.
+- Panel layouts survive respawning. Breakout panels support larger dimensions, resize snapping and a seamless frame style. AE2 Pins supports matching frame settings and resizing from all four corners.
+- Alt+Shift+left-click locks or unlocks player inventory slots against transfers, sorting and manual drops.
+- Transfers check the open inventory before sending matching items to AE2 Pins. Incoming items prioritize the active hotbar and then the top of Main.
+- Added inventory support for Forestry interfaces, Ender IO machines, Thaumcraft Research Tables, the Railcraft Trading Station and Thaumic Energistics.
+- Fixed overlapping ModularUI2 text, cover popup placement and persistence, AE2 Interface Terminal renaming, and the missing Cosmetic Armor button.
+
 ## 0.8.3 — 2026-11-22
 
 Replaces 0.8.2 for **GT New Horizons 2.9.1** on Minecraft 1.7.10.

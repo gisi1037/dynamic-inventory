@@ -4,14 +4,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiPredicate;
 
 import net.minecraft.entity.player.InventoryPlayer;
 
 import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 import com.cleanroommc.modularui.utils.item.SlotItemHandler;
 
+import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 /** A single validated server sort; never changes Bogo's cached inventory groups or pin policy. */
 public final class PanelSortScope {
@@ -53,18 +56,33 @@ public final class PanelSortScope {
 
     /** Native sort buttons and hotkeys must protect stored rows even outside a panel sort scope. */
     public static boolean reserved(SlotAccessor slot) {
+        return matchesPlayerSlot(
+            slot,
+            (inventory, raw) -> InventorySlotLocks.locked(inventory, raw) || HotbarBanks.isReserved(inventory, raw));
+    }
+
+    /** Retain the native shortcut's order and pin/lock exclusions. Only restrict player destinations. */
+    public static List<SlotAccessor> automaticTargets(List<SlotAccessor> slots) {
+        List<SlotAccessor> result = new ArrayList<>();
+        for (SlotAccessor slot : slots)
+            if (!matchesPlayerSlot(slot, (inventory, raw) -> !AutomaticInventoryRouting.transfer(inventory, raw)))
+                result.add(slot);
+        return result.size() == slots.size() ? slots : result;
+    }
+
+    private static boolean matchesPlayerSlot(SlotAccessor slot, BiPredicate<InventoryPlayer, Integer> test) {
         if (slot instanceof com.gtnewhorizons.modularui.common.internal.wrapper.BaseSlot legacy && legacy
             .getItemHandler() instanceof dev.gilbe.dynamicinventory.compat.mui1.Mui1PlayerInventory inventory) {
             InventoryPlayer player = inventory.getInventoryPlayer();
-            return HotbarBanks.isReserved(
+            return test.test(
                 player,
                 InventoryLayout.of(player)
                     .rawIndex(slot.callGetSlotIndex()));
         }
         if (slot instanceof SlotItemHandler handler
             && handler.getItemHandler() instanceof com.cleanroommc.modularui.utils.item.PlayerMainInvWrapper inventory)
-            return HotbarBanks.isReserved(inventory.getInventoryPlayer(), slot.callGetSlotIndex());
+            return test.test(inventory.getInventoryPlayer(), slot.callGetSlotIndex());
         return slot.getInventory() instanceof InventoryPlayer inventory
-            && HotbarBanks.isReserved(inventory, slot.callGetSlotIndex());
+            && test.test(inventory, slot.callGetSlotIndex());
     }
 }

@@ -1,5 +1,7 @@
 package dev.gilbe.dynamicinventory.compat.ae2;
 
+import dev.gilbe.dynamicinventory.compat.ThaumicEnergisticsCompatibility;
+
 /** AE2 draws its main sheet, upgrade strip and toolbox separately, unlike a single vanilla sheet. */
 public final class AppliedEnergisticsBackground {
 
@@ -8,12 +10,14 @@ public final class AppliedEnergisticsBackground {
     private static final int INTERFACE_BROWSER_WIDTH = 209;
     private static final int INTERFACE_INVENTORY_HEIGHT = 98;
     private static final int INTERFACE_FRAME_BOTTOM = 4;
+    private static final int ARCANE_ASSEMBLER_WIDTH = 234;
     private static final String ADVANCED_LEVEL_EMITTER = "appeng.client.gui.implementations.GuiAdvancedLevelEmitter";
 
     private AppliedEnergisticsBackground() {}
 
     public static boolean hasSidePanels(String guiClass) {
-        if (isMonitorable(guiClass) || isInterfaceTerminal(guiClass)) return true;
+        if (isMonitorable(guiClass) || isInterfaceTerminal(guiClass)
+            || ThaumicEnergisticsCompatibility.ASSEMBLER.equals(guiClass)) return true;
         return switch (guiClass) {
             case "appeng.client.gui.implementations.GuiInscriber", "appeng.client.gui.implementations.GuiAdvancedInscriber", "appeng.client.gui.implementations.GuiCrystalGrowthChamber", "appeng.client.gui.implementations.GuiMAC", "appeng.client.gui.implementations.GuiIOPort", "appeng.client.gui.implementations.GuiInterface", "appeng.client.gui.implementations.GuiCellWorkbench", "appeng.client.gui.implementations.GuiSecurity", "appeng.client.gui.implementations.GuiStorageBus", "appeng.client.gui.implementations.GuiBusIO", "appeng.client.gui.implementations.GuiLevelEmitter", "com.glodblock.github.client.gui.GuiLevelEmitterProxy" -> true;
             case "appeng.client.gui.implementations.GuiFormationPlane" -> true;
@@ -23,6 +27,7 @@ public final class AppliedEnergisticsBackground {
 
     public static int mainSheetWidth(String guiClass, int nativeWidth) {
         if (isInterfaceTerminal(guiClass)) return INTERFACE_BROWSER_WIDTH;
+        if (ThaumicEnergisticsCompatibility.ASSEMBLER.equals(guiClass)) return ARCANE_ASSEMBLER_WIDTH;
         if (WIRELESS_CRAFTING_GUI.equals(guiClass)) return 199;
         if (isMonitorable(guiClass)) return 195;
         if (guiClass.equals("appeng.client.gui.implementations.GuiCraftingDiagnosticTerminal")) return 195;
@@ -59,7 +64,7 @@ public final class AppliedEnergisticsBackground {
 
     public static boolean isMonitorable(String guiClass) {
         return switch (guiClass) {
-            case "appeng.client.gui.implementations.GuiMEMonitorable", "appeng.client.gui.implementations.GuiCraftingTerm", "appeng.client.gui.implementations.GuiPatternTerm", "appeng.client.gui.implementations.GuiPatternTermEx", "appeng.client.gui.implementations.GuiMEPortableCell", "appeng.client.gui.implementations.GuiSecurity", WIRELESS_CRAFTING_GUI -> true;
+            case "appeng.client.gui.implementations.GuiMEMonitorable", "appeng.client.gui.implementations.GuiCraftingTerm", "appeng.client.gui.implementations.GuiPatternTerm", "appeng.client.gui.implementations.GuiPatternTermEx", "appeng.client.gui.implementations.GuiMEPortableCell", "appeng.client.gui.implementations.GuiSecurity", WIRELESS_CRAFTING_GUI, ThaumicEnergisticsCompatibility.ARCANE_TERMINAL -> true;
             default -> false;
         };
     }
@@ -81,10 +86,14 @@ public final class AppliedEnergisticsBackground {
 
     public static boolean isAeGui(String guiClass) {
         return WIRELESS_CRAFTING_GUI.equals(guiClass) || guiClass.startsWith("appeng.client.gui.implementations.Gui")
-            || guiClass.startsWith("com.glodblock.github.client.gui.Gui");
+            || guiClass.startsWith("com.glodblock.github.client.gui.Gui")
+            || ThaumicEnergisticsCompatibility.ARCANE_TERMINAL.equals(guiClass)
+            || ThaumicEnergisticsCompatibility.DISTILLATION_ENCODER.equals(guiClass)
+            || ThaumicEnergisticsCompatibility.ASSEMBLER.equals(guiClass);
     }
 
     public static int mainContentRight(String guiClass, int inset) {
+        if (ThaumicEnergisticsCompatibility.ASSEMBLER.equals(guiClass)) return ARCANE_ASSEMBLER_WIDTH - inset;
         return isMonitorable(guiClass) || isInterfaceTerminal(guiClass) ? mainSheetWidth(guiClass, 195) - inset
             : mainContentRight(inset);
     }
@@ -111,6 +120,14 @@ public final class AppliedEnergisticsBackground {
 
     public static int[] clip(String guiClass, int left, int top, int nativeWidth, int nativeHeight, int playerTop,
         int inset, int x, int y, int u, int v, int width, int height) {
+        if (ThaumicEnergisticsCompatibility.ASSEMBLER.equals(guiClass)) {
+            // The 176px left sheet meets the separate armor strip flush. Keep that seam while
+            // removing the old player inventory and the regular tool grid baked into the wide sheet.
+            if (x == left && y == top && u == 0 && v == 0 && height == nativeHeight)
+                return new int[] { x + inset, y + inset, u + inset, v + inset,
+                    Math.min(width, ARCANE_ASSEMBLER_WIDTH - inset) - inset, playerTop - inset };
+            return null;
+        }
         if (isInterfaceTerminal(guiClass)) {
             // AE2 1104 includes the toolbox in xSize, but draws the browser at a fixed width.
             // The original inventory footer and sidebar artwork have separate replacement frames.

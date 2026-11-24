@@ -16,7 +16,8 @@ import dev.gilbe.dynamicinventory.compat.ForestryCompatibility;
 /** Gate every reviewed overriding sync owner, before it advances custom packet caches. */
 @Pseudo
 @Mixin(
-    targets = { "forestry.core.gui.ContainerTile", "forestry.core.gui.ContainerLiquidTanks",
+    targets = { "forestry.core.gui.ContainerTile", "forestry.core.gui.ContainerEntity",
+        "forestry.core.gui.ContainerItemInventory", "forestry.core.gui.ContainerLiquidTanks",
         "forestry.core.gui.ContainerLiquidTanksSocketed", "forestry.apiculture.gui.ContainerAlveary",
         "forestry.apiculture.gui.ContainerBeeHousing", "forestry.energy.gui.ContainerEngineBiogas",
         "forestry.energy.gui.ContainerEngineElectric", "forestry.energy.gui.ContainerEnginePeat",

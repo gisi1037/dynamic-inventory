@@ -19,6 +19,10 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
 import codechicken.lib.vec.Rectangle4i;
+import dev.gilbe.dynamicinventory.client.AePinnedPanel;
+import dev.gilbe.dynamicinventory.client.HotbarBankPanel;
+import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
+import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 
 /** Existing NEI masks still own pagination and input; floating obstacles require a complete scan. */
 @Pseudo
@@ -29,6 +33,8 @@ public abstract class NeiPanelOverlapMixin {
     private GuiContainer dynamicinventory$screen;
     @Unique
     private long dynamicinventory$generation;
+    @Unique
+    private Rect dynamicinventory$pins, dynamicinventory$hotbars;
 
     @Shadow
     protected abstract void updateGuiOverlapSlots(GuiContainer gui);
@@ -42,12 +48,34 @@ public abstract class NeiPanelOverlapMixin {
         return panel == null ? 0 : panel.revision();
     }
 
+    @Unique
+    private static Rect dynamicinventory$pins(GuiScreen gui) {
+        return PackCompatibility.aePinnedPanel() ? AePinnedPanel.occupied(gui) : null;
+    }
+
+    @Unique
+    private static Rect dynamicinventory$hotbars(GuiScreen gui) {
+        return gui instanceof GuiContainer container ? HotbarBankPanel.bounds(container) : null;
+    }
+
+    @Unique
+    private static boolean dynamicinventory$needsFullScan(GuiScreen gui) {
+        return dynamicinventory$revision(gui) != 0 || dynamicinventory$pins(gui) != null
+            || dynamicinventory$hotbars(gui) != null;
+    }
+
+    @Unique
+    private static boolean dynamicinventory$sameBounds(Rect a, Rect b) {
+        return a == b
+            || a != null && b != null && a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+    }
+
     @WrapOperation(
         method = { "updateGuiOverlapSlots", "checkGuiOverlap" },
         at = @At(value = "INVOKE", target = "Lcodechicken/nei/NEIClientConfig;optimizeGuiOverlapComputation()Z"),
         require = 0)
     private boolean dynamicinventory$scanInterior(Operation<Boolean> original) {
-        return dynamicinventory$revision(Minecraft.getMinecraft().currentScreen) == 0 && original.call();
+        return !dynamicinventory$needsFullScan(Minecraft.getMinecraft().currentScreen) && original.call();
     }
 
     @WrapOperation(
@@ -59,7 +87,7 @@ public abstract class NeiPanelOverlapMixin {
     private int dynamicinventory$scanFloatingPanels(@Coerce Object scanner, Predicate<Rectangle4i> hidden, int left,
         int top, int step, int rows, int columns, boolean scanRight, boolean scanLeft, boolean[] mask,
         Operation<Integer> original) {
-        if (dynamicinventory$revision(Minecraft.getMinecraft().currentScreen) == 0)
+        if (!dynamicinventory$needsFullScan(Minecraft.getMinecraft().currentScreen))
             return original.call(scanner, hidden, left, top, step, rows, columns, scanRight, scanLeft, mask);
         Rectangle4i cell = new Rectangle4i(left, top, step, step);
         int excluded = 0;
@@ -76,11 +104,16 @@ public abstract class NeiPanelOverlapMixin {
     @Inject(method = "refresh", at = @At("HEAD"))
     private void dynamicinventory$invalidate(GuiContainer gui, CallbackInfo ci) {
         long generation = dynamicinventory$revision(gui);
-        if (generation != dynamicinventory$generation || generation != 0 && gui != dynamicinventory$screen) {
+        Rect pins = dynamicinventory$pins(gui), hotbars = dynamicinventory$hotbars(gui);
+        if (generation != dynamicinventory$generation || generation != 0 && gui != dynamicinventory$screen
+            || !dynamicinventory$sameBounds(dynamicinventory$pins, pins)
+            || !dynamicinventory$sameBounds(dynamicinventory$hotbars, hotbars)) {
             updateGuiOverlapSlots(gui);
             onGridChanged();
         }
         dynamicinventory$generation = generation;
         dynamicinventory$screen = gui;
+        dynamicinventory$pins = pins;
+        dynamicinventory$hotbars = hotbars;
     }
 }

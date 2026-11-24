@@ -13,10 +13,13 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+
 /** Named presentation groups over stable ordinary storage indices. Never contains stacks or container IDs. */
 public final class PlayerPanelSet {
 
     public static final String MAIN = "main";
+    static final int UNAVAILABLE_SLOT = -1;
     public static final PlayerPanelSet DEFAULT = new PlayerPanelSet(
         Collections.singletonList(
             new Entry(MAIN, "Main", Collections.emptyList(), PlayerPanelProfile.DEFAULT, Collections.emptyMap())));
@@ -66,6 +69,15 @@ public final class PlayerPanelSet {
         List<Integer> main = new ArrayList<>();
         for (int i = 0; i < capacity; i++) if (!reserved.contains(i)) main.add(i);
         return main;
+    }
+
+    /** Keep temporarily unavailable storage in its authored cell without creating an interactive slot. */
+    List<Integer> displayCells(Entry entry, int capacity, Set<Integer> excluded) {
+        if (MAIN.equals(entry.id)) return members(entry.id, capacity, excluded);
+        List<Integer> cells = new ArrayList<>();
+        for (int slot : entry.slots) if (slot < InventoryShape.MAX_STORAGE && !excluded.contains(slot))
+            cells.add(slot < capacity ? slot : UNAVAILABLE_SLOT);
+        return cells;
     }
 
     public PlayerPanelSet replace(Entry value) {

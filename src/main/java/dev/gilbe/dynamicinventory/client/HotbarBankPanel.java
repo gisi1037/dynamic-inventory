@@ -92,11 +92,12 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
         Minecraft mc = Minecraft.getMinecraft();
         int count = HotbarBanks.count(mc.thePlayer);
         if (dragStart != null) {
-            bounds = new Rect(
+            Rect requested = new Rect(
                 dragStart.x + Mouse.getX() * gui.width / mc.displayWidth - startX,
                 dragStart.y + gui.height - Mouse.getY() * gui.height / mc.displayHeight - 1 - startY,
                 dragStart.width,
                 dragStart.height);
+            bounds = InventoryPanelLayout.alignDrag(requested, viewport(gui), obstacles(gui), 3, gap(gui)).bounds;
         } else {
             Rect viewport = viewport(gui);
             ContainerPanelAccess access = (ContainerPanelAccess) gui;
@@ -115,10 +116,11 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
             // Try the saved width first, then wrap or widen as space permits.
             for (int attempt = 0; attempt < 9 && fitted == null; attempt++) {
                 int candidate = attempt < preferredColumns ? preferredColumns - attempt : attempt + 1;
-                fitted = fit(viewport, occupied, preferredX, preferredY, candidate, preferredRows);
+                fitted = fit(viewport, occupied, preferredX, preferredY, candidate, preferredRows, gap(gui));
             }
             if (fitted == null) {
                 bounds = null;
+                placeSlots(gui);
                 if (!fitRefused) mc.thePlayer.addChatMessage(
                     new net.minecraft.util.ChatComponentText(
                         "Move or resize an inventory panel to make room for the hotbar editor."));
@@ -136,18 +138,24 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
         return new Rect(0, 8, gui.width, Math.max(0, gui.height - 16));
     }
 
+    private static int gap(GuiContainer gui) {
+        DetachedChestPanel host = DetachedChestPanel.of(gui);
+        return host != null && host.seamless() ? 0 : 1;
+    }
+
     private static int stride(int columns) {
         return (9 + columns - 1) / columns;
     }
 
-    private static Rect fit(Rect viewport, List<Rect> occupied, int x, int y, int columns, int preferredRows) {
+    private static Rect fit(Rect viewport, List<Rect> occupied, int x, int y, int columns, int preferredRows, int gap) {
         int bandHeight = stride(columns) * CELL;
         int maxRows = Math.min(preferredRows, (viewport.height - FRAME_HEIGHT) / bandHeight);
         for (int visible = maxRows; visible >= 1; visible--) {
             Rect fitted = InventoryPanelLayout.snapDrag(
                 new Rect(x, y, columns * CELL + FRAME_WIDTH, visible * bandHeight + FRAME_HEIGHT),
                 viewport,
-                occupied);
+                occupied,
+                gap);
             if (fitted != null) return fitted;
         }
         return null;
@@ -166,7 +174,11 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
         Rect requested = new Rect(origin.x + x - startX, origin.y + y - startY, origin.width, origin.height);
         bounds = origin;
         if (requested.x != origin.x || requested.y != origin.y) {
-            Rect fitted = InventoryPanelLayout.snapDrag(requested, viewport(gui), obstacles(gui));
+            Rect viewport = viewport(gui);
+            List<Rect> occupied = obstacles(gui);
+            int gap = gap(gui);
+            Rect aligned = InventoryPanelLayout.alignDrag(requested, viewport, occupied, 3, gap).bounds;
+            Rect fitted = InventoryPanelLayout.snapDrag(aligned, viewport, occupied, gap);
             if (fitted != null) bounds = fitted;
         }
         if (bounds.x != origin.x || bounds.y != origin.y) {
@@ -212,7 +224,7 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
             int index = HotbarBanks.bankIndex(mc.thePlayer.inventory, raw);
             int row = index / 9 - scroll;
             slot.xDisplayPosition = slot.yDisplayPosition = -10000;
-            if (row < 0 || row >= rows) continue;
+            if (bounds == null || row < 0 || row >= rows) continue;
             slot.xDisplayPosition = bounds.x + 25 + index % 9 % columns * 18 - access.dynamicinventory$left();
             slot.yDisplayPosition = bounds.y + 18
                 + (row * rowStride + index % 9 / columns) * 18
@@ -234,13 +246,25 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
         try {
             GL11.glDisable(GL11.GL_LIGHTING);
             GL11.glDisable(GL11.GL_DEPTH_TEST);
-            if (frame != null) frame.accept(bounds);
-            else NativePanelFrame.draw(bounds.x, bounds.y, bounds.width, bounds.height, 2, 2, 0, 2, null);
+            DetachedChestPanel host = DetachedChestPanel.of(gui);
+            boolean seamless = host != null && host.seamless();
+            if (frame != null && !seamless) frame.accept(bounds);
+            else NativePanelFrame.draw(
+                bounds.x,
+                bounds.y,
+                bounds.width,
+                bounds.height,
+                seamless ? NativePanelFrame.SEAMLESS : 2,
+                2,
+                0,
+                2,
+                null);
             if (bounds.width >= 80) mc.fontRenderer.drawString("Hotbars", bounds.x + 7, bounds.y + 5, labelColor);
             mc.fontRenderer.drawString("X", bounds.right() - 13, bounds.y + 5, labelColor);
             int mouseX = Mouse.getX() * gui.width / mc.displayWidth;
             int mouseY = gui.height - Mouse.getY() * gui.height / mc.displayHeight - 1;
-            PanelChrome.grip(bounds, 10, resizeStart != null || PanelChrome.corner(bounds, mouseX, mouseY) == 10);
+            boolean hoveringResize = resizeStart != null || PanelChrome.corner(bounds, mouseX, mouseY) == 10;
+            if (!seamless || hoveringResize) PanelChrome.grip(bounds, 10, hoveringResize);
             if (drawSlotBackgrounds) ResourceSlotGrid.draw(
                 placeSlots(gui),
                 ((ContainerPanelAccess) gui).dynamicinventory$left(),
@@ -285,8 +309,11 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
         }
         if (y < rect.y + 16) {
             panel.releaseOwned = true;
-            if (x >= rect.right() - 18) InventoryViewSettings.setHotbarPanelVisible(false);
-            else if (Minecraft.getMinecraft().thePlayer.inventory.getItemStack() == null) {
+            if (x >= rect.right() - 18) {
+                InventoryViewSettings.setHotbarPanelVisible(false);
+                panel.bounds = null;
+                panel.placeSlots(gui);
+            } else if (Minecraft.getMinecraft().thePlayer.inventory.getItemStack() == null) {
                 panel.dragStart = rect;
                 panel.startX = x;
                 panel.startY = y;

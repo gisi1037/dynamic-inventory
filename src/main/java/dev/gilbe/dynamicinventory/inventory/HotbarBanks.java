@@ -60,16 +60,40 @@ public final class HotbarBanks {
         Snapshot cached = SNAPSHOTS.get(player);
         if (cached != null && cached.source == saved && cached.capacity == capacity && cached.legacy == legacy)
             return cached.active;
-        java.util.Set<Integer> seen = new java.util.HashSet<>();
         int[] active = saved == null
             ? java.util.stream.IntStream.range(0, Math.max(0, Math.min(capacity / 9, legacy)) * 9)
                 .toArray()
-            : java.util.Arrays.stream(saved)
-                .filter(i -> i >= 0 && i < capacity && seen.add(i))
-                .toArray();
-        active = java.util.Arrays.copyOf(active, active.length / 9 * 9);
+            : completeRows(saved, capacity);
         SNAPSHOTS.put(player, new Snapshot(saved, active, capacity, legacy));
         return active;
+    }
+
+    private static int[] completeRows(int[] saved, int capacity) {
+        int[] result = new int[Math.min(saved.length, capacity)];
+        java.util.BitSet assigned = new java.util.BitSet(capacity);
+        java.util.BitSet row = new java.util.BitSet(capacity);
+        int length = 0;
+        for (int offset = 0; offset + 9 <= saved.length; offset += 9) {
+            row.clear();
+            for (int i = offset; i < offset + 9; i++) {
+                int slot = saved[i];
+                if (slot < 0 || slot >= capacity || assigned.get(slot) || row.get(slot)) break;
+                row.set(slot);
+            }
+            if (row.cardinality() != 9) continue;
+            System.arraycopy(saved, offset, result, length, 9);
+            assigned.or(row);
+            length += 9;
+        }
+        return java.util.Arrays.copyOf(result, length);
+    }
+
+    /** The persisted rows include complete assignments that are temporarily outside a smaller inventory. */
+    private static int[] configuredSlots(EntityPlayer player) {
+        NBTTagCompound tag = data(player);
+        if (tag.hasKey("slots", 11)) return completeRows(tag.getIntArray("slots"), InventoryShape.MAX_STORAGE);
+        return java.util.stream.IntStream.range(0, Math.max(0, Math.min(MAX_BANKS, tag.getInteger("count"))) * 9)
+            .toArray();
     }
 
     public static java.util.Set<Integer> excluded(InventoryPlayer inventory) {
@@ -123,7 +147,24 @@ public final class HotbarBanks {
             throw new IllegalArgumentException("Not enough storage for that many hotbars");
         for (int slot : proposed) if (slot < 0 || slot >= capacity || !unique.add(slot))
             throw new IllegalArgumentException("Invalid reserved storage slot");
-        receive(player, proposed);
+        // The editor submits usable rows. Keep dormant rows in their original positions unless a
+        // newly assigned visible row explicitly uses one of their cells.
+        int[] configured = configuredSlots(player);
+        java.util.stream.IntStream.Builder rows = java.util.stream.IntStream.builder();
+        int next = 0;
+        for (int offset = 0; offset < configured.length; offset += 9) {
+            int end = offset + 9;
+            if (java.util.Arrays.stream(configured, offset, end)
+                .anyMatch(slot -> slot >= capacity)) {
+                if (java.util.Arrays.stream(configured, offset, end)
+                    .noneMatch(unique::contains)) for (int i = offset; i < end; i++) rows.add(configured[i]);
+            } else if (next < proposed.length) for (int i = 0; i < 9; i++) rows.add(proposed[next++]);
+        }
+        while (next < proposed.length) rows.add(proposed[next++]);
+        receive(
+            player,
+            rows.build()
+                .toArray());
         data(player).setInteger("next", 0);
         player.inventory.markDirty();
     }
@@ -155,6 +196,8 @@ public final class HotbarBanks {
         ItemStack[] stacks = player.inventory.mainInventory;
         for (int i = 0; i < 9; i++) {
             int bank = shape.rawIndex(9 + reserved[selected * 9 + i]);
+            if (InventorySlotLocks.locked(player.inventory, i) || InventorySlotLocks.locked(player.inventory, bank))
+                continue;
             ItemStack previous = stacks[i];
             stacks[i] = stacks[bank];
             stacks[bank] = previous;

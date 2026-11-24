@@ -16,7 +16,7 @@ public final class InventoryTransfers {
 
     private InventoryTransfers() {}
 
-    /** Sends a native machine stack to storage first, then the hotbar, including offscreen slots. */
+    /** Sends a native machine stack to the active hotbar, then Main storage, including offscreen slots. */
     public static InventoryTransferPolicy toPlayerInventory() {
         return new InventoryTransferPolicy() {
 
@@ -26,8 +26,8 @@ public final class InventoryTransfers {
                 if (binding == null) return null;
                 int[] storage = binding.getStorageSlotIds();
                 int[] hotbar = binding.getHotbarSlotIds();
-                int[] destinations = java.util.Arrays.copyOf(storage, storage.length + hotbar.length);
-                System.arraycopy(hotbar, 0, destinations, storage.length, hotbar.length);
+                int[] destinations = java.util.Arrays.copyOf(hotbar, hotbar.length + storage.length);
+                System.arraycopy(storage, 0, destinations, hotbar.length, storage.length);
                 return transferTo(container, player, sourceId, binding, destinations);
             }
         };
@@ -112,11 +112,9 @@ public final class InventoryTransfers {
         for (int id : safe) {
             if (id < 0 || id >= container.inventorySlots.size() || id == sourceId) return null;
         }
-        return PlayerInventoryTransfers.transferTo(
-            container,
-            player,
-            sourceId,
-            dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, safe));
+        int[] routed = dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, safe);
+        return PlayerInventoryTransfers
+            .transferTo(container, player, sourceId, routed, PlayerInventoryTransfers.hotbarPrefix(container, routed));
     }
 
     private static boolean validSource(Container container, EntityPlayer player, int sourceId) {

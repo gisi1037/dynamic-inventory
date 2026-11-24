@@ -17,6 +17,7 @@ import appeng.api.networking.energy.IEnergySource;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.security.ISecurityGrid;
 import appeng.api.networking.security.PlayerSource;
+import appeng.api.parts.ICraftingTerminal;
 import appeng.api.storage.IMEMonitor;
 import appeng.api.storage.ITerminalTypeFilterProvider;
 import appeng.api.storage.data.IAEItemStack;
@@ -26,6 +27,7 @@ import appeng.container.implementations.ContainerCraftAmount;
 import appeng.container.implementations.ContainerMEMonitorable;
 import appeng.container.slot.AppEngSlot;
 import appeng.core.sync.GuiBridge;
+import appeng.items.contents.PortableCellViewer;
 import appeng.util.Platform;
 import appeng.util.inv.AdaptorIInventory;
 import appeng.util.inv.AdaptorPlayerInventory;
@@ -43,9 +45,8 @@ public final class PinnedItemTransfer {
     private PinnedItemTransfer() {}
 
     public static void fromTerminal(EntityPlayerMP player, ContainerMEMonitorable terminal, int index,
-        Transfer operation, int argument) {
-        if (!terminal.isPowered() || !(terminal.getActionSource() instanceof PlayerSource source) || source.via == null)
-            return;
+        Transfer operation, int argument, byte[] expected) {
+        if (!terminal.isPowered() || !(terminal.getActionSource() instanceof PlayerSource source)) return;
         IAEItemStack pin;
         if (operation == Transfer.DEPOSIT_TERMINAL_ALL) {
             if (argument >= terminal.inventorySlots.size()) return;
@@ -53,38 +54,37 @@ public final class PinnedItemTransfer {
             if (playerIndex(player, slot) < 0 || !slot.canTakeStack(player)) return;
             pin = AEItemStack.create(slot.getStack());
         } else pin = terminal.getPin(index) instanceof IAEItemStack item ? item : null;
-        if (pin == null) return;
+        if (!PinIdentity.matches(expected, pin)) return;
         if (terminal.getTarget() instanceof ITerminalTypeFilterProvider filter && !filter.getTypeFilter(player)
             .getBoolean(pin.getStackType())) return;
-        var node = source.via.getActionableNode();
-        if (node == null || node.getGrid() == null) return;
-        ISecurityGrid security = node.getGrid()
-            .getCache(ISecurityGrid.class);
-        if (security == null || !security.hasPermission(player, requiredPermission(player, operation, argument)))
-            return;
+        var monitor = terminal.getItemMonitor();
+        operation = resolveClick(operation, player.inventory.getItemStack(), monitor, pin);
+        if (source.via == null) {
+            // A Portable Cell owns its own powered inventory and has no ME grid or Security Terminal.
+            if (operation != Transfer.DEPOSIT_TERMINAL_ALL || !(terminal.getTarget() instanceof PortableCellViewer))
+                return;
+        } else {
+            var node = source.via.getActionableNode();
+            if (node == null || node.getGrid() == null) return;
+            ISecurityGrid security = node.getGrid()
+                .getCache(ISecurityGrid.class);
+            if (security == null || !security.hasPermission(player, requiredPermission(player, operation, argument)))
+                return;
+        }
         if (operation == Transfer.CRAFT) {
             var context = terminal.getOpenContext();
             if (context != null) openCraftAmount(
                 player,
-                terminal.getItemMonitor(),
+                monitor,
                 pin,
                 context.getTile(),
                 context.getSide(),
                 terminal.getTargetSlotIndex(),
-                terminal.createPrimaryGui());
+                terminal.createPrimaryGui(),
+                null);
             return;
         }
-        apply(
-            player,
-            terminal,
-            pin,
-            operation,
-            argument,
-            terminal.getPowerSource(),
-            terminal.getItemMonitor(),
-            source,
-            null,
-            null);
+        apply(player, terminal, pin, operation, argument, terminal.getPowerSource(), monitor, source, null, null);
     }
 
     public static void moveNativePanel(EntityPlayerMP player, AEBaseContainer container, int[] slots) {
@@ -112,6 +112,15 @@ public final class PinnedItemTransfer {
             case STACK, ALL, CRAFT, SCROLL_WITHDRAW_SLOT -> false;
         };
         return insert ? SecurityPermissions.INJECT : SecurityPermissions.EXTRACT;
+    }
+
+    static Transfer resolveClick(Transfer action, ItemStack cursor, IMEMonitor<IAEItemStack> monitor,
+        IAEItemStack pin) {
+        if (monitor == null || cursor != null || (action != Transfer.PICKUP && action != Transfer.SPLIT)) return action;
+        // The cached pin may have shown stock that was just withdrawn or missed by a background poll.
+        var live = monitor.getStorageList()
+            .findPrecise(pin);
+        return live != null && live.isCraftable() && live.getStackSize() <= 0 ? Transfer.CRAFT : action;
     }
 
     static boolean apply(EntityPlayerMP player, Container container, IAEItemStack pin, Transfer operation, int argument,
@@ -191,16 +200,23 @@ public final class PinnedItemTransfer {
     }
 
     static void openCraftAmount(EntityPlayerMP player, IMEMonitor<IAEItemStack> monitor, IAEItemStack pin,
-        TileEntity tile, ForgeDirection side, int slotIndex, PrimaryGui primary) {
+        TileEntity tile, ForgeDirection side, int slotIndex, PrimaryGui primary, ItemStack wirelessDevice) {
         if (monitor == null || player.inventory.getItemStack() != null) return;
         var craftable = monitor.getStorageList()
             .findPrecise(pin);
         if (craftable == null || !craftable.isCraftable()) return;
         Platform.openGUI(player, tile, side, GuiBridge.GUI_CRAFTING_AMOUNT, slotIndex);
         if (player.openContainer instanceof ContainerCraftAmount amount) {
+            if (wirelessDevice != null) {
+                GuiBridge bridge = amount.getTarget() instanceof ICraftingTerminal ? GuiBridge.GUI_CRAFTING_TERMINAL
+                    : GuiBridge.GUI_ME;
+                primary = new PrimaryGui(bridge, wirelessDevice.copy(), null, ForgeDirection.UNKNOWN);
+                primary.setSlotIndex(slotIndex);
+            }
             if (primary != null) amount.setPrimaryGui(primary);
             amount.setItemToCraft(craftable.copy());
             amount.setInitialCraftAmount(1);
+            amount.detectAndSendChanges();
         }
     }
 
@@ -233,7 +249,8 @@ public final class PinnedItemTransfer {
         int id = AePinsChannel.scrollSlot(argument);
         if (id >= container.inventorySlots.size()) return false;
         Slot slot = container.getSlot(id);
-        if (playerIndex(player, slot) < 0) return false;
+        if (playerIndex(player, slot) < 0
+            || dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.locked(slot, player)) return false;
         ItemStack existing = slot.getStack();
         int amount = Math.min(AePinsChannel.scrollAmount(argument), scrollPullRoom(slot, existing, pin));
         if (amount <= 0) return false;
@@ -317,7 +334,8 @@ public final class PinnedItemTransfer {
 
     private static int returnFromSlot(EntityPlayerMP player, Slot slot, IAEItemStack pin, int amount,
         IEnergySource power, IMEMonitor<IAEItemStack> monitor, BaseActionSource source, ItemStack protectedItem) {
-        if (playerIndex(player, slot) < 0 || !slot.canTakeStack(player)) return 0;
+        if (playerIndex(player, slot) < 0 || !slot.canTakeStack(player)
+            || dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.locked(slot, player)) return 0;
         ItemStack stack = slot.getStack();
         if (stack == null || stack == protectedItem || !pin.isSameType(stack)) return 0;
         int accepted = insert(stack, Math.min(amount, stack.stackSize), power, monitor, source);

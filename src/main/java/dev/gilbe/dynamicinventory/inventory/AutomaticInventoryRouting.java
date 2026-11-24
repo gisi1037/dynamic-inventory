@@ -1,8 +1,12 @@
 package dev.gilbe.dynamicinventory.inventory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.ToIntFunction;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
@@ -82,7 +86,8 @@ public final class AutomaticInventoryRouting {
     private static boolean allowed(InventoryPlayer inventory, int raw) {
         int logical = InventoryLayout.of(inventory)
             .ordinaryIndex(raw);
-        if (logical < 0 || HotbarBanks.isReserved(inventory, raw)) return false;
+        if (logical < 0 || InventorySlotLocks.locked(inventory, raw) || HotbarBanks.isReserved(inventory, raw))
+            return false;
         if (logical < 9) return true; // The active hotbar belongs to Main.
         EntityPlayer player = inventory.player;
         if (player == null) return true;
@@ -131,15 +136,41 @@ public final class AutomaticInventoryRouting {
     public static int[] nativeRange(Container container, int start, int end, boolean reverse) {
         if (start < 0 || start >= end || end > container.inventorySlots.size()) return null;
         int[] ids = new int[end - start];
+        boolean coversHotbar = false, coversStorage = false;
         for (int i = 0; i < ids.length; i++) {
             int id = reverse ? end - 1 - i : start + i;
             Slot slot = container.getSlot(id);
-            if (!(slot.inventory instanceof InventoryPlayer inventory) || InventoryLayout.of(inventory)
-                .ordinaryIndex(slot.getSlotIndex()) < 0) return null;
+            if (!(slot.inventory instanceof InventoryPlayer inventory)) return null;
+            int logical = InventoryLayout.of(inventory)
+                .ordinaryIndex(slot.getSlotIndex());
+            if (logical < 0) return null;
+            coversHotbar |= logical < InventoryShape.HOTBAR_SLOTS;
+            coversStorage |= logical >= InventoryShape.HOTBAR_SLOTS;
             ids[i] = id;
         }
         int[] allowed = filter(container, ids);
+        if (coversHotbar && coversStorage || coversHotbar && ids.length == InventoryShape.HOTBAR_SLOTS) {
+            return Arrays.stream(allowed)
+                .boxed()
+                .sorted(
+                    Comparator.comparingInt(
+                        id -> container.getSlot(id)
+                            .getSlotIndex()))
+                .mapToInt(Integer::intValue)
+                .toArray();
+        }
         return allowed.length == ids.length ? null : allowed;
+    }
+
+    /** Reorder the player cells in place, preserving native positions for other destination groups. */
+    public static <S> void orderPlayerSlots(List<S> slots, ToIntFunction<S> logicalIndex) {
+        List<S> playerSlots = new ArrayList<>();
+        for (S slot : slots) if (logicalIndex.applyAsInt(slot) >= 0) playerSlots.add(slot);
+        playerSlots.sort(Comparator.comparingInt(logicalIndex));
+        int next = 0;
+        for (int i = 0; i < slots.size(); i++) {
+            if (logicalIndex.applyAsInt(slots.get(i)) >= 0) slots.set(i, playerSlots.get(next++));
+        }
     }
 
     /** Keep original ordering and all native machine destinations; filter only automatic player insertions. */

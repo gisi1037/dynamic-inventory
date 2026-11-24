@@ -115,6 +115,10 @@ tasks.register("writeFixtureClientLaunch") {
             } + ["-Xms512m", "-Xmx2g"],
             classpath: launch.classpath.asPath, mainClass: launch.mainClass.get(),
             gameArgs: launch.calculateArgs()]
+        if (sourceSets.findByName("packTest") != null) {
+            // Standalone fixtures exercise optional mods that are compile-only for a normal launch.
+            data.packTestClasspath = sourceSets.packTest.compileClasspath.asPath
+        }
         def destination = file(".setup/" + inventoryProfile + "-offline-client-launch.json")
         destination.parentFile.mkdirs()
         destination.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(data)) + "\n"

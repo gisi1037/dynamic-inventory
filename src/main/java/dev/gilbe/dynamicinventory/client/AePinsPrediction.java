@@ -201,7 +201,8 @@ public final class AePinsPrediction {
     }
 
     private int moveCursor(IAEItemStack item, Transfer action, int steps, long available, int max) {
-        if (cursor != null && !item.isSameType(cursor)) return 0;
+        boolean different = cursor != null && !item.isSameType(cursor);
+        if (different && !(action == Transfer.SCROLL_CURSOR && steps > 0)) return 0;
         if (action == Transfer.SCROLL_CURSOR ? steps > 0 : cursor != null) {
             if (cursor == null) return 0;
             int amount = Math.min(
@@ -209,7 +210,8 @@ public final class AePinsPrediction {
                 action == Transfer.SCROLL_CURSOR ? steps : action == Transfer.SPLIT ? 1 : cursor.stackSize);
             cursor.stackSize -= amount;
             if (cursor.stackSize == 0) cursor = null;
-            return amount;
+            // Shift-wheel can insert a different held item. Only its cursor count changes here.
+            return different ? 0 : amount;
         }
         int room = max - (cursor == null ? 0 : cursor.stackSize);
         int amount = (int) Math.min(available, action == Transfer.SCROLL_CURSOR ? Math.min(room, -steps) : room);

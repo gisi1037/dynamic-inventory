@@ -20,6 +20,7 @@ import dev.gilbe.dynamicinventory.client.AttachedChestLayout;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
 import dev.gilbe.dynamicinventory.client.InventoryGuiTheme;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
+import dev.gilbe.dynamicinventory.client.NativePanelFrame;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatches;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
@@ -178,19 +179,21 @@ public abstract class CraftingStationGuiMixin implements AttachedChestAccess {
     public void dynamicinventory$drawFrame(int left, int top, int width, int height) {
         int oldX = border.xPos, oldY = border.yPos, oldWidth = border.width, oldHeight = border.height;
         try {
-            net.minecraft.client.gui.Gui.drawRect(
-                left + border.w,
-                top + border.h,
-                left + width - border.w,
-                top + height - border.h,
-                InventoryGuiTheme.get().panelFill);
-            net.minecraft.client.Minecraft.getMinecraft()
-                .getTextureManager()
-                .bindTexture(dynamicinventory$frameTexture);
-            org.lwjgl.opengl.GL11.glColor4f(1, 1, 1, 1);
             border.setPosition(left, top);
             border.setSize(width, height);
-            border.draw();
+            NativePanelFrame.drawInherited(left, top, width, height, () -> {
+                net.minecraft.client.gui.Gui.drawRect(
+                    left + border.w,
+                    top + border.h,
+                    left + width - border.w,
+                    top + height - border.h,
+                    InventoryGuiTheme.get().panelFill);
+                net.minecraft.client.Minecraft.getMinecraft()
+                    .getTextureManager()
+                    .bindTexture(dynamicinventory$frameTexture);
+                org.lwjgl.opengl.GL11.glColor4f(1, 1, 1, 1);
+                border.draw();
+            });
         } finally {
             // Rendering must never leak temporary bounds into native layout or input code.
             border.setPosition(oldX, oldY);

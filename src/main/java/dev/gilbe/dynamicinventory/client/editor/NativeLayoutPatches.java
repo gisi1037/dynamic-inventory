@@ -262,24 +262,16 @@ public final class NativeLayoutPatches {
             JsonObject root = new JsonParser().parse(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
                 .getAsJsonObject();
             JsonObject target = root.getAsJsonObject("target");
-            if (root.entrySet()
-                .size() != 3
-                || !root.get("schemaVersion")
-                    .getAsString()
-                    .matches("[1-9]")
-                || !root.has("layout")
-                || !root.get("layout")
-                    .isJsonObject()
-                || target == null
-                || !target.has("containerClass")
-                || !target.has("adapterId")
-                || !target.get("containerClass")
-                    .getAsString()
-                    .matches("[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+")
-                || !target.get("adapterId")
-                    .getAsString()
-                    .startsWith("dynamicinventory:"))
-                return null;
+            // Validate identifiers against the public registration contract, including third-party namespaces.
+            InventoryUiAdapter.builder(
+                target.get("adapterId")
+                    .getAsString(),
+                target.get("containerClass")
+                    .getAsString())
+                .gui(
+                    target.get("guiClass")
+                        .getAsString());
+            decode(root, target);
             return target;
         } catch (RuntimeException invalid) {
             return null;

@@ -73,7 +73,57 @@ public final class NativeBatchFixtures {
             }
             check(count == 38, "29 Ender IO and 9 Extra Utilities container families");
         }
+        if (args.length == 5) {
+            ForestryCompatibility.registerInventoryAdapters();
+            RailcraftCompatibility.registerInventoryAdapters();
+            ThaumcraftCompatibility.registerInventoryAdapters();
+            try (ZipFile forestry = new ZipFile(args[2]);
+                ZipFile railcraft = new ZipFile(args[3]);
+                ZipFile thaumcraft = new ZipFile(args[4])) {
+                int forestryHosts = 0;
+                for (InventoryUiAdapter adapter : InventoryUi.getRegisteredAdapters()) {
+                    String id = adapter.getId();
+                    if (id.startsWith("dynamicinventory:forestry/")) {
+                        verifyHost(forestry, gate, adapter);
+                        forestryHosts++;
+                        if (id.endsWith("/alyzer")) {
+                            for (String screen : new String[] { "forestry.arboriculture.gui.GuiTreealyzer",
+                                "forestry.lepidopterology.gui.GuiFlutterlyzer" }) {
+                                check(
+                                    ForestryCompatibility.alternateScreen(adapter, screen)
+                                        && forestry.getEntry(screen.replace('.', '/') + ".class") != null,
+                                    "Exact alternate analyzer screen");
+                            }
+                        }
+                        if (id.endsWith("/backpack")) check(
+                            adapter.hasCustomAdditionalSlots()
+                                && ForestryCompatibility.alternateScreen(adapter, "forestry.storage.gui.GuiBackpackT2"),
+                            "Native owner factory and tier two screen");
+                    } else if (id.equals("dynamicinventory:railcraft/trading-station"))
+                        verifyHost(railcraft, gate, adapter);
+                    else if (id.equals("dynamicinventory:thaumcraft/research-table"))
+                        verifyHost(thaumcraft, gate, adapter);
+                }
+                check(forestryHosts == 35, "All 35 inventory-bearing Forestry container families");
+            }
+            System.out.println("PASS Forestry, Railcraft Trading Station and Thaumcraft Research Table stock hosts");
+        }
         System.out.println("PASS actual installed host names, exact panel gates and expanded bag/filter owner locks");
+    }
+
+    private static void verifyHost(ZipFile installed, Method gate, InventoryUiAdapter adapter) throws Exception {
+        check(
+            installed.getEntry(
+                adapter.getContainerClassName()
+                    .replace('.', '/') + ".class")
+                != null
+                && installed.getEntry(
+                    adapter.getGuiClassName()
+                        .replace('.', '/') + ".class")
+                    != null,
+            "Real container and GUI " + adapter.getId());
+        check((Boolean) gate.invoke(null, adapter, adapter.getContainerClassName()), "Admit " + adapter.getId());
+        check(!(Boolean) gate.invoke(null, adapter, "example.UnrelatedContainer"), "Reject unrelated hosts");
     }
 
     private static void check(boolean condition, String message) {

@@ -9,7 +9,10 @@ final class OptionalInventoryAdapters {
     private OptionalInventoryAdapters() {}
 
     static boolean reviewedVersion(String modId) {
-        return matches(modId, IntegrationProfile.reviewedVersion(modId));
+        return matches(
+            modId,
+            IntegrationProfile.reviewedVersion(modId),
+            IntegrationProfile.alternateReviewedVersion(modId));
     }
 
     /** Preserve a user-enabled adapter on the named fixture versions, skipping unknown builds. */
@@ -17,19 +20,23 @@ final class OptionalInventoryAdapters {
         return matches(
             modId,
             IntegrationProfile.selected()
-                .version(project));
+                .version(project),
+            null);
     }
 
-    private static boolean matches(String modId, String version) {
+    private static boolean matches(String modId, String version, String alternate) {
         if (!Loader.isModLoaded(modId)) return false;
         String loaded = Loader.instance()
             .getIndexedModList()
             .get(modId)
             .getVersion();
-        if (version.equals(loaded)) return true;
+        if (version.equals(loaded) || alternate != null && alternate.equals(loaded)) return true;
         // Skip only this integration. Do not guess that the same slot/transfer contract survived an update.
-        DynamicInventory.LOG
-            .warn("Skipping inventory adapters for {} {}: reviewed version is {}", modId, loaded, version);
+        DynamicInventory.LOG.warn(
+            "Skipping inventory adapters for {} {}: reviewed versions are {}",
+            modId,
+            loaded,
+            alternate == null ? version : version + ", " + alternate);
         return false;
     }
 }

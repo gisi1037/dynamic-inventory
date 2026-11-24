@@ -24,6 +24,7 @@ public final class PlayerPanelProfiles {
     private static Map<String, PlayerPanelProfile> overrides = new TreeMap<>();
     private static Path file;
     private static int legacy;
+    private static boolean unreadable;
     private static PlayerPanelSet panels = PlayerPanelSet.DEFAULT;
     private static Map<String, PlayerPanelSet> interfacePanels = new TreeMap<>();
     private static PanelLayoutReference reference;
@@ -41,6 +42,7 @@ public final class PlayerPanelProfiles {
         panels = PlayerPanelSet.DEFAULT;
         interfacePanels.clear();
         legacy = 0;
+        unreadable = false;
         reference = null;
         interfaceReferences.clear();
         globalPins = InventoryViewSettings.legacyPinsGeometry;
@@ -123,6 +125,7 @@ public final class PlayerPanelProfiles {
                     .size() != 2 || !pinsLayout.has("interfaces"))
                     throw new IllegalArgumentException("Invalid AE2 Pins layouts");
                 loadedPins = PinsPanelGeometry.fromJson(pinsLayout.getAsJsonObject("global"));
+                if (!loadedPins.hasBounds()) throw new IllegalArgumentException("Missing global Pins bounds");
                 for (Map.Entry<String, JsonElement> entry : pinsLayout.getAsJsonObject("interfaces")
                     .entrySet()) {
                     validateKey(entry.getKey());
@@ -143,6 +146,7 @@ public final class PlayerPanelProfiles {
             interfacePins = loadedInterfacePins;
             legacy = hasPins ? 0 : Integer.parseInt(version);
         } catch (IOException | RuntimeException invalid) {
+            unreadable = true;
             DynamicInventory.LOG.warn("Ignoring invalid player panel profiles {}", file, invalid);
         }
     }
@@ -176,7 +180,47 @@ public final class PlayerPanelProfiles {
     }
 
     public static InventoryPanelLayout.Rect requestedPinsBounds(String key, InventoryPanelLayout.Rect machine) {
-        return pins(key).requested(machine, key != null && interfacePins.containsKey(key));
+        PinsPanelGeometry local = key == null ? null : interfacePins.get(key);
+        return local != null && local.hasBounds() ? local.requested(machine, true)
+            : globalPins.requested(machine, false);
+    }
+
+    public static PlayerPanelProfile pinsAppearance(String key) {
+        PlayerPanelProfile selected = pins(key).appearance();
+        if (selected == null) selected = globalPins.appearance();
+        return selected == null ? PinsPanelGeometry.DEFAULT_APPEARANCE : selected;
+    }
+
+    static PinsPanelGeometry pinsSnapshot(String key) {
+        PinsPanelGeometry selected = pins(key);
+        return (selected.hasBounds() ? selected : globalPins).withAppearance(pinsAppearance(key));
+    }
+
+    static void savePinsBounds(String key, InventoryPanelLayout.Rect bounds, PanelLayoutReference reference)
+        throws IOException {
+        PinsPanelGeometry local = interfacePins.get(key);
+        savePins(
+            key,
+            new PinsPanelGeometry(bounds, reference).withAppearance(local == null ? null : local.appearance()));
+    }
+
+    static void savePinsAppearance(String key, PlayerPanelProfile appearance, boolean promote) throws IOException {
+        validateKey(key);
+        Map<String, PinsPanelGeometry> next = new TreeMap<>(interfacePins);
+        PinsPanelGeometry local = next.get(key);
+        PlayerPanelProfile override = promote ? null : appearance;
+        if (local != null && local.hasBounds()) next.put(key, local.withAppearance(override));
+        else if (override == null) next.remove(key);
+        else next.put(key, PinsPanelGeometry.appearanceOnly(override));
+        commit(
+            global,
+            overrides,
+            panels,
+            interfacePanels,
+            reference,
+            interfaceReferences,
+            promote ? globalPins.withAppearance(appearance) : globalPins,
+            next);
     }
 
     public static void savePins(String key, PinsPanelGeometry geometry) throws IOException {
@@ -214,6 +258,8 @@ public final class PlayerPanelProfiles {
 
     /** Older layouts learn their current authored viewport once, without changing allocations or appearance. */
     public static void establishReference(String key, PanelLayoutReference origin) throws IOException {
+        // Opening an inventory must leave an unsupported or damaged preferences file untouched.
+        if (unreadable) return;
         if (hasOverride(key)) {
             if (interfaceReferences.containsKey(key)) return;
             Map<String, PanelLayoutReference> next = new TreeMap<>(interfaceReferences);
@@ -330,7 +376,7 @@ public final class PlayerPanelProfiles {
 
     public static void applyGlobalPanels(PlayerPanelSet set, String key, PlayerPanelProfile main,
         PanelLayoutReference origin) throws IOException {
-        applyGlobalPanels(set, key, main, origin, pins(key));
+        applyGlobalPanels(set, key, main, origin, pinsSnapshot(key));
     }
 
     static void applyGlobalPanels(PlayerPanelSet set, String key, PlayerPanelProfile main, PanelLayoutReference origin,
@@ -349,7 +395,7 @@ public final class PlayerPanelProfiles {
             sets,
             origin,
             interfaceReferences,
-            newPins == null ? globalPins : newPins,
+            newPins == null || !newPins.hasBounds() ? globalPins : newPins,
             pins);
     }
 
@@ -461,6 +507,9 @@ public final class PlayerPanelProfiles {
             .getBytes(StandardCharsets.UTF_8);
         if (encoded.length > 1048576) throw new IOException("Panel preferences exceed the supported file size");
         Files.createDirectories(file.getParent());
+        if (unreadable && Files.isRegularFile(file)) {
+            Files.copy(file, file.resolveSibling("player-panels.unreadable-" + java.util.UUID.randomUUID() + ".json"));
+        }
         if (legacy != 0 && Files.isRegularFile(file)) {
             Path backup = file.resolveSibling("player-panels.schema" + legacy + "-backup.json");
             if (!Files.exists(backup)) Files.copy(file, backup);
@@ -485,5 +534,6 @@ public final class PlayerPanelProfiles {
         globalPins = nextPins;
         interfacePins = new TreeMap<>(pins);
         legacy = 0;
+        unreadable = false;
     }
 }

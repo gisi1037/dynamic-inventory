@@ -76,6 +76,7 @@ public abstract class ContainerRegionMixin implements ExpandedContainerAccess {
         int[] ids = dynamicinventory$region == null ? null : dynamicinventory$region.destinations(start, end, reverse);
         if (ids == null) ids = dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting
             .nativeRange(container, start, end, reverse);
-        if (ids != null) cir.setReturnValue(PlayerInventoryTransfers.merge((Container) (Object) this, stack, ids));
+        if (ids != null)
+            cir.setReturnValue(PlayerInventoryTransfers.mergeToPlayer((Container) (Object) this, stack, ids));
     }
 }

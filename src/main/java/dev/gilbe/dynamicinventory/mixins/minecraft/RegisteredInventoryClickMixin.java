@@ -20,6 +20,8 @@ public abstract class RegisteredInventoryClickMixin {
     private ItemStack dynamicinventory$registeredShiftClick(int slotId, int button, int mode, EntityPlayer player,
         Operation<ItemStack> original) {
         Container container = (Container) (Object) this;
+        if (dev.gilbe.dynamicinventory.inventory.InventorySlotLocks
+            .blocksClick(container, player, slotId, button, mode)) return null;
         dev.gilbe.dynamicinventory.api.PlayerInventoryBinding binding = InventoryUi.getBinding(container);
         // A binding belongs to one capacity revision. Never fall through to native
         // shift/click logic using its stale IDs after that inventory has changed.

@@ -13,7 +13,7 @@ import dev.gilbe.dynamicinventory.compat.extrautils.ExtraUtilitiesItemAccess;
     remap = false)
 public abstract class ItemOwnerMixin implements ExtraUtilitiesItemAccess {
 
-    @Shadow
+    @Shadow(remap = false)
     private int currentFilter;
 
     @Override

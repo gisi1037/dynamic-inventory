@@ -18,6 +18,7 @@ import dev.gilbe.dynamicinventory.client.AePinnedPanel;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
 import dev.gilbe.dynamicinventory.client.DetachedChestPanel;
 import dev.gilbe.dynamicinventory.client.NativeInventoryPanel;
+import dev.gilbe.dynamicinventory.client.SlotLockControls;
 import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 
 @Mixin(GuiContainer.class)
@@ -37,6 +38,11 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
 
     @Shadow
     private net.minecraft.inventory.Slot theSlot;
+
+    @Shadow
+    private net.minecraft.inventory.Slot getSlotAtPosition(int x, int y) {
+        throw new AssertionError();
+    }
 
     @Override
     public boolean dynamicinventory$draggingItems() {
@@ -160,6 +166,11 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$bar(int x, int y, int button, CallbackInfo ci) {
+        SlotLockControls.beginClick();
+        if (SlotLockControls.isToggle(button) && SlotLockControls.toggle(getSlotAtPosition(x, y), button)) {
+            ci.cancel();
+            return;
+        }
         if (dynamicinventory$panel != null && dynamicinventory$panel.pointerAePanels(x, y, button, true)) {
             ci.cancel();
             return;
@@ -175,6 +186,11 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
             return;
         }
         if (dynamicinventory$panel != null && dynamicinventory$panel.scrollbar(x, y)) ci.cancel();
+    }
+
+    @Inject(method = "func_146977_a", at = @At("RETURN"))
+    private void dynamicinventory$lockMark(net.minecraft.inventory.Slot slot, CallbackInfo ci) {
+        if (slot.func_111238_b()) SlotLockControls.draw(slot, slot.xDisplayPosition, slot.yDisplayPosition);
     }
 
     @Inject(method = "handleMouseClick", at = @At("HEAD"), cancellable = true)
@@ -205,6 +221,10 @@ public abstract class GuiContainerRegionMixin extends GuiScreen implements Conta
 
     @Inject(method = "mouseMovedOrUp", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$release(int x, int y, int button, CallbackInfo ci) {
+        if (SlotLockControls.finishToggle(this, button)) {
+            ci.cancel();
+            return;
+        }
         if (dynamicinventory$panel != null && dynamicinventory$panel.pointerAePanels(x, y, button, false)) {
             ci.cancel();
             return;

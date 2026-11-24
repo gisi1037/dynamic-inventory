@@ -122,7 +122,9 @@ public final class PanelLayoutPresets {
                 key == null ? entry.global : entry.resolve(key),
                 Collections.emptyMap()));
         Map<String, Preset> next = new TreeMap<>(presets);
-        next.put(name, new Preset(name, new PlayerPanelSet(entries), main, reference, PlayerPanelProfiles.pins(key)));
+        next.put(
+            name,
+            new Preset(name, new PlayerPanelSet(entries), main, reference, PlayerPanelProfiles.pinsSnapshot(key)));
         commit(next);
     }
 

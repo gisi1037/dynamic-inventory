@@ -1,7 +1,8 @@
 # Ender IO
 
-**Loaded ID:** `EnderIO`. **Reviewed artifacts:** Ender IO `2.10.51` and EnderCore
-`0.5.15`, from the shared GTNH 2.9.0 instance. **Status:** 29 exact inventory
+**Loaded ID:** `EnderIO`. **Reviewed versions:** Ender IO `2.10.51` on GTNH 2.9.0,
+`2.10.55` on GTNH 2.9.1, and the exact travel-prediction build installed in both
+shared instances. All use EnderCore `0.5.15`. **Status:** 29 exact inventory
 container families plus the alternate TelePad travel GUI implemented; visual and
 installed gameplay review pending. Owner: `EnderIoCompatibility`; bridges live in
 `mixins/enderio`. Other versions skip these registrations and Mixins.
@@ -13,6 +14,10 @@ Attractor, Aversion/Inhibitor/Weather obelisks, Transceiver, Inventory Panel,
 Travel Anchor, travel authorization, TelePad, conduit configuration and Dark Steel
 Anvil. Ordinary machine variants sharing the same exact container/GUI pair reuse
 one adapter. No package-wide or subclass registration is enabled.
+
+Soul Binder, Slice and Splice, and Powered Spawner use their native machine
+artwork above the expanded player inventory. The Powered Spawner retains its
+separate spawning and capture layouts.
 
 EnderCore's overridden merge method translates complete ordinary-player ranges
 through the canonical binding. Its base transfer derives ownership from that

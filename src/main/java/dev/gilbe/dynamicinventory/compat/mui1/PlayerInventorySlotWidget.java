@@ -6,6 +6,8 @@ import net.minecraft.network.PacketBuffer;
 
 import com.gtnewhorizons.modularui.common.widget.SlotWidget;
 
+import dev.gilbe.dynamicinventory.client.SlotLockControls;
+
 /** Uses a separate visibility packet so scrolling cannot overwrite explicit slot restrictions. */
 public final class PlayerInventorySlotWidget extends SlotWidget {
 
@@ -27,6 +29,18 @@ public final class PlayerInventorySlotWidget extends SlotWidget {
 
     public boolean isInteractionEnabled() {
         return super.isEnabled();
+    }
+
+    @Override
+    public ClickResult onClick(int button, boolean doubleClick) {
+        if (isClient() && SlotLockControls.toggle(playerSlot, button)) return ClickResult.ACCEPT;
+        return super.onClick(button, doubleClick);
+    }
+
+    @Override
+    public void draw(float partialTicks) {
+        super.draw(partialTicks);
+        SlotLockControls.draw(playerSlot, 1, 1);
     }
 
     @Override

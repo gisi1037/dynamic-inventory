@@ -3,6 +3,7 @@ package dev.gilbe.dynamicinventory.mixins.enderio;
 import java.awt.Point;
 import java.util.List;
 
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
 
@@ -11,7 +12,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import dev.gilbe.dynamicinventory.api.InventoryUi;
@@ -25,6 +28,15 @@ public abstract class ConduitContainerMixin extends Container {
     @Shadow
     @Final
     private List<Point> slotLocations;
+
+    // Only the first 36 in this method classifies the source. The remaining constants
+    // delimit Ender IO's own slots, whose upgrade limits and pickup callbacks it owns.
+    @ModifyConstant(
+        method = { "transferStackInSlot", "func_82846_b" },
+        constant = @Constant(intValue = 36, ordinal = 0))
+    private int dynamicinventory$playerSourceBoundary(int nativeEnd, EntityPlayer player, int sourceId) {
+        return InventoryUi.handlesAdditionalTransfer(this, sourceId) ? sourceId + 1 : nativeEnd;
+    }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void dynamicinventory$origins(CallbackInfo ci) {

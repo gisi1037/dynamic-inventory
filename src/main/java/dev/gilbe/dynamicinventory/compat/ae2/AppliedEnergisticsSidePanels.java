@@ -20,6 +20,7 @@ import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Frame;
 import dev.gilbe.dynamicinventory.client.AeNativePanelControls.Placement;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.client.NativePanelFrame;
+import dev.gilbe.dynamicinventory.compat.ThaumicEnergisticsCompatibility;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 
 /** Client-only placement of the reviewed AE2 upgrade/toolbox inventories beside the main frame. */
@@ -51,6 +52,9 @@ public final class AppliedEnergisticsSidePanels extends Gui {
             gui.getClass()
                 .getName()))
             return null;
+        boolean arcaneAssembler = ThaumicEnergisticsCompatibility.ASSEMBLER.equals(
+            gui.getClass()
+                .getName());
         Map<IInventory, Panel> groups = new IdentityHashMap<>();
         boolean linking = AppliedEnergisticsBackground.isSecurity(
             gui.getClass()
@@ -60,8 +64,13 @@ public final class AppliedEnergisticsSidePanels extends Gui {
                 .getName(),
             177);
         for (Slot slot : gui.inventorySlots.inventorySlots) {
-            if (slot.slotNumber >= region.nativeSlotCount || region.logical(slot.slotNumber) >= 0
-                || slot.xDisplayPosition < sideLeft) continue;
+            if (slot.slotNumber >= region.nativeSlotCount || region.logical(slot.slotNumber) >= 0) continue;
+            // The assembler's armor, core and machine upgrades share its main sheet. Only its
+            // borrowed network tool gets a new frame, which also clears the old player section.
+            if (arcaneAssembler ? !slot.getClass()
+                .getName()
+                .equals("thaumicenergistics.common.container.slot.SlotNetworkTool") : slot.xDisplayPosition < sideLeft)
+                continue;
             // AE2 creates one backing inventory for upgrades and another for the borrowed toolbox.
             // Group by that actual owner, never by slot IDs or the player's current inventory size.
             groups.computeIfAbsent(slot.inventory, ignored -> new Panel(linking))
@@ -69,10 +78,11 @@ public final class AppliedEnergisticsSidePanels extends Gui {
         }
         for (Map.Entry<IInventory, Panel> entry : groups.entrySet()) {
             Panel panel = entry.getValue();
-            panel.toolbox = entry.getKey()
+            panel.toolbox = arcaneAssembler || entry.getKey()
                 .getClass()
                 .getName()
                 .equals("appeng.items.contents.NetworkToolViewer");
+            if (arcaneAssembler) panel.slots.sort(Comparator.comparingInt(Slot::getSlotIndex));
             panel.id = panel.toolbox ? "toolbox" : "side" + panel.slots.get(0).slotNumber;
         }
         return groups.isEmpty() ? null

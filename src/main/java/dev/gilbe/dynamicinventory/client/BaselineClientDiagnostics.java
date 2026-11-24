@@ -41,7 +41,7 @@ public class BaselineClientDiagnostics {
         boolean down = GameSettings.isKeyDown(captureKey);
         boolean auditDown = GameSettings.isKeyDown(auditKey);
         if (client.thePlayer != null) {
-            if (client.thePlayer != lastPlayer) capture(client, "client-join", false);
+            if (client.thePlayer != lastPlayer) BaselineDiagnostics.onJoin(client.thePlayer, screenName(client));
             if (down && !wasDown) capture(client, "client-hotkey", true);
             if (auditDown && !auditWasDown && client.currentScreen instanceof GuiContainer) {
                 try {
@@ -62,9 +62,12 @@ public class BaselineClientDiagnostics {
 
     public static void capture(Minecraft client, String reason, boolean notify) {
         if (client.thePlayer == null) return;
-        String screen = client.currentScreen == null ? "none (in-game)"
+        BaselineDiagnostics.capture(client.thePlayer, screenName(client), reason, notify);
+    }
+
+    private static String screenName(Minecraft client) {
+        return client.currentScreen == null ? "none (in-game)"
             : client.currentScreen.getClass()
                 .getName();
-        BaselineDiagnostics.capture(client.thePlayer, screen, reason, notify);
     }
 }

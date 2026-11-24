@@ -8,7 +8,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.gtnewhorizons.modularui.api.drawable.IDrawable;
-import com.gtnewhorizons.modularui.common.internal.wrapper.BaseSlot;
 import com.gtnewhorizons.modularui.common.widget.SlotGroup;
 import com.gtnewhorizons.modularui.common.widget.SlotWidget;
 
@@ -46,7 +45,7 @@ public abstract class Mui1PlayerWidgetsMixin {
         }
         group.addChild(viewport);
         for (int i = 0; i < 9; i++) {
-            SlotWidget slot = new SlotWidget(new BaseSlot(inventory, i).setShiftClickPriority(20));
+            SlotWidget slot = new SlotWidget(new PlayerInventorySlot(inventory, i).setShiftClickPriority(20));
             slot.setPos(i * 18, 58);
             if (background != null) slot.setBackground(background);
             group.addSlot(slot);

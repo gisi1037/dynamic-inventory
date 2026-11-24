@@ -21,6 +21,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         // Subpackages organize integrations; these guards still control whether
         // their mixins load. Moving a class must never change its side/mod guard.
         List<String> mixins = new ArrayList<>();
+        if (loadedMods.contains("cosmeticarmorreworked") && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+            .isClient()) mixins.add("cosmeticarmor.InventoryControlsMixin");
         if (PackCompatibility.enabled() && loadedMods.contains("adventurebackpack")
             && OptionalInventoryAdapters.reviewedVersion("adventurebackpack")) {
             mixins.add("backpack.AdventureTransferMixin");
@@ -35,7 +37,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         }
         if (PackCompatibility.enabled() && loadedMods.contains("Thaumcraft")
             && OptionalInventoryAdapters.reviewedVersion("Thaumcraft")) {
-            mixins.add("thaumcraft.WorkbenchTransferMixin");
+            mixins.addAll(Arrays.asList("thaumcraft.WorkbenchTransferMixin", "thaumcraft.ResearchTableTransferMixin"));
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient())
                 mixins.addAll(
@@ -44,6 +46,9 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                         "thaumcraft.ResearchOverlayMixin",
                         "thaumcraft.FocalOverlayMixin"));
         }
+        if (PackCompatibility.enabled() && loadedMods.contains("Railcraft")
+            && OptionalInventoryAdapters.reviewedVersion("Railcraft"))
+            mixins.add("railcraft.TradeStationTransferMixin");
         if (PackCompatibility.enabled() && loadedMods.contains("EnderIO")
             && loadedMods.contains("endercore")
             && OptionalInventoryAdapters.reviewedVersion("EnderIO")
@@ -78,19 +83,23 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         if (loadedMods.contains("NotEnoughItems")
             && OptionalInventoryAdapters.profileVersion("NotEnoughItems", "NotEnoughItems")
             && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
-                .isClient())
+                .isClient()) {
             mixins.addAll(
                 Arrays.asList(
                     "nei.NeiPanelOverlapMixin",
-                    "nei.NeiBookmarkBoundsMixin",
                     "nei.NeiPanelSpawningMixin",
                     "nei.NeiPlayerSectionOriginMixin",
                     "nei.NeiPinnedRecipeMixin"));
+            if (!IntegrationProfile.selected()
+                .usesRelease29Adapters()) mixins.add("nei.NeiBookmarkBoundsMixin");
+        }
         if (PackCompatibility.enabled() && loadedMods.contains("Forestry")
             && OptionalInventoryAdapters.reviewedVersion("Forestry")) {
             mixins.addAll(
                 Arrays.asList(
                     "forestry.ForestrySlotUtilMixin",
+                    "forestry.ForestryItemSlotsMixin",
+                    "forestry.ForestryGuiItemLocationMixin",
                     "forestry.ForestrySyncMixin",
                     "forestry.ForestryOpeningActionsMixin"));
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
@@ -98,6 +107,9 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         }
         if (PackCompatibility.enabled() && loadedMods.contains("appliedenergistics2")
             && OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial")) {
+            if (loadedMods.contains(ThaumicEnergisticsCompatibility.MOD_ID)
+                && ThaumicEnergisticsCompatibility.supportedVersion())
+                mixins.add("thaumicenergistics.PlayerStorageTransferMixin");
             mixins.addAll(
                 Arrays.asList(
                     "appliedenergistics2.AeContainerMixin",
@@ -118,6 +130,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                     Arrays.asList(
                         "appliedenergistics2.AeSeparatePinsRepoMixin",
                         "appliedenergistics2.AeSeparatePinsTerminalMixin",
+                        "appliedenergistics2.AeRemoteRenamerGuiMixin",
                         "appliedenergistics2.AeSpaceTransferGuiMixin"));
             if (IntegrationProfile.selected()
                 .usesRelease29Adapters() && loadedMods.contains("MouseTweaks")
@@ -213,6 +226,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                 "modularui2.Mui2PlayerBindingMixin",
                 "modularui2.Mui2PlayerWidgetsMixin",
                 "modularui2.Mui2PlayerSlotTypeMixin",
+                "modularui2.Mui2SlotLockMixin",
                 "modularui2.Mui2PlayerLookupMixin"));
         if (loadedMods.contains("gregtech") && loadedMods.contains("modularui2"))
             mixins.add("gregtech.RadioHatchGuiMixin");
@@ -220,6 +234,8 @@ public final class LateMixinsLoader implements ILateMixinLoader {
             mixins.addAll(Arrays.asList("modularui.Mui1PlayerWidgetsMixin", "modularui.Mui1PlayerTransferMixin"));
         if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
             .isClient()) {
+            if (IntegrationProfile.selected() == IntegrationProfile.RELEASE_2_9_1 && loadedMods.contains("gregtech")
+                && loadedMods.contains("modularui2")) mixins.add("gregtech.StandaloneCoverPanelMixin");
             if (PackCompatibility.enabled() && loadedMods.contains("etfuturum")) {
                 PackCompatibility.require("etfuturum", "EtFuturum");
                 mixins.add("etfuturum.EtFuturumEnchantmentGuiMixin");
@@ -237,6 +253,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
             if (loadedMods.contains("modularui2")) mixins.addAll(
                 Arrays.asList(
                     "modularui2.Mui2InventoryResizeMixin",
+                    "modularui2.Mui2SlotLockWidgetMixin",
                     "modularui2.Mui2TextLayoutMixin",
                     "modularui2.Mui2PanelHoverAccess"));
             if (loadedMods.contains("modularui")) mixins.add("modularui.Mui1InventoryResizeMixin");

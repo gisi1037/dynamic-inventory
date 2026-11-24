@@ -239,9 +239,10 @@ public final class NativeInventoryPanel extends Gui {
         boolean enderIo = gui.getClass()
             .getName()
             .startsWith("crazypants.enderio.");
-        boolean parksNativeSlots = enderIo || gui.getClass()
-            .getName()
-            .equals("com.darkona.adventurebackpack.client.gui.GuiAdvBackpack");
+        boolean parksNativeSlots = enderIo || screenClass.equals("forestry.core.gui.GuiNaturalistInventory")
+            || gui.getClass()
+                .getName()
+                .equals("com.darkona.adventurebackpack.client.gui.GuiAdvBackpack");
         int nativeLeft = 0, nativeRight = AppliedEnergisticsBackground.mainSheetWidth(
             gui.getClass()
                 .getName(),
@@ -438,13 +439,20 @@ public final class NativeInventoryPanel extends Gui {
         access.dynamicinventory$bounds(totalWidth, totalHeight, left, attachedTop);
         position();
         if (dev.gilbe.dynamicinventory.compat.NativePanelHosts.supports(gui.inventorySlots, gui.getClass())) {
-            List<InventoryPanelLayout.Rect> auxiliary = java.util.Collections.emptyList();
-            if (aeSidePanels != null) auxiliary = aeSidePanels.bounds(left, attachedTop);
-            if (gui instanceof ConduitLayout conduitLayout) auxiliary = java.util.Collections.singletonList(
-                conduitLayout.dynamicinventory$tabBounds(left + headerX, attachedTop + headerY, nativeWidth));
+            Rect machine = defaultMachine(left, attachedTop);
+            List<Rect> auxiliary = new ArrayList<>();
+            if (aeSidePanels != null) auxiliary.addAll(aeSidePanels.bounds(left, attachedTop));
+            if (gui instanceof ConduitLayout conduitLayout) auxiliary
+                .add(conduitLayout.dynamicinventory$tabBounds(left + headerX, attachedTop + headerY, nativeWidth));
+            if (tabPadding > 0) auxiliary.add(
+                new Rect(
+                    machine.x,
+                    machine.y - InventoryTabsCompatibility.TAB_HEIGHT,
+                    machine.width,
+                    InventoryTabsCompatibility.TAB_HEIGHT));
             floating = new DetachedChestPanel(
                 gui,
-                defaultMachine(left, attachedTop),
+                machine,
                 new InventoryPanelLayout.Rect(left + playerX, attachedTop + playerY, panelWidth, panelHeight),
                 frameStyle,
                 borderWidth,
@@ -668,11 +676,11 @@ public final class NativeInventoryPanel extends Gui {
     }
 
     public int headerOffsetX() {
-        return detachedAe() ? nativeHeaderLeft() - access.dynamicinventory$left() : headerX;
+        return floating != null && floating.detached() ? nativeHeaderLeft() - access.dynamicinventory$left() : headerX;
     }
 
     public int headerOffsetY() {
-        return detachedAe() ? nativeHeaderTop() - access.dynamicinventory$top() : headerY;
+        return floating != null && floating.detached() ? nativeHeaderTop() - access.dynamicinventory$top() : headerY;
     }
 
     public int craftingOffsetX() {
@@ -738,16 +746,6 @@ public final class NativeInventoryPanel extends Gui {
         if (inset == 0 && clippedHeight == height) return null;
         return new int[] { x + inset, y + topInset, u + inset, v + topInset, width - inset * 2,
             clippedHeight - topInset };
-    }
-
-    private void drawMergedFrame(int left, int top, int width, int height) {
-        InventoryGuiTheme theme = InventoryGuiTheme.get();
-        int right = left + width, bottom = top + height;
-        drawRect(left + 2, top + 2, right - 2, bottom - 2, theme.panelFill);
-        drawRect(left, top, right, top + 2, theme.panelHighlight);
-        drawRect(left, top + 2, left + 2, bottom - 2, theme.panelHighlight);
-        drawRect(left, bottom - 2, right, bottom, theme.panelShadow);
-        drawRect(right - 2, top + 2, right, bottom - 2, theme.panelShadow);
     }
 
     private int storageCount() {
@@ -818,7 +816,11 @@ public final class NativeInventoryPanel extends Gui {
         List<AeNativePanelControls.Frame> frames = new ArrayList<>();
         frames.add(new AeNativePanelControls.Frame(AeNativePanelControls.MAIN, anchor));
         if (aeSidePanels != null) aeSidePanels.detachedFrames(frames, left, top);
-        aeNativeControls.layout(new Rect(0, 8, gui.width, Math.max(0, gui.height - 36)), frames, fixed);
+        aeNativeControls.layout(
+            new Rect(0, 8, gui.width, Math.max(0, gui.height - 36)),
+            frames,
+            fixed,
+            floating.seamless() ? 0 : 1);
         if (aeSidePanels != null) {
             aeSidePanels.placeDetached(aeNativeControls);
             sideBounds = aeSidePanels.bounds(left, top);
@@ -923,10 +925,11 @@ public final class NativeInventoryPanel extends Gui {
                     .getName(),
                 nativeHeight,
                 nativeStorageTop));
+        boolean detachedTabs = tabPadding > 0 && floating != null && floating.detached();
         InventoryTabsCompatibility.positionTabs(
             access.dynamicinventory$buttons(),
-            access.dynamicinventory$left(),
-            access.dynamicinventory$top() + tabPadding);
+            detachedTabs ? floating.machineBounds().x : access.dynamicinventory$left(),
+            detachedTabs ? floating.machineBounds().y : access.dynamicinventory$top() + tabPadding);
         int tweak = 0;
         int[] craftingOrigin = null;
         for (Slot slot : machineSlots) if (slot.getClass()
@@ -980,7 +983,7 @@ public final class NativeInventoryPanel extends Gui {
             if (aeSidePanels != null) aeSidePanels.draw(
                 access.dynamicinventory$left(),
                 access.dynamicinventory$top(),
-                frameStyle,
+                floating.seamless() ? NativePanelFrame.SEAMLESS : frameStyle,
                 borderWidth,
                 frameCrop,
                 cornerCrop);
@@ -1056,7 +1059,7 @@ public final class NativeInventoryPanel extends Gui {
                             storageGeometry == null ? clipTop
                                 : Math.max(clipTop, top + headerY + storageGeometry.backgroundTop),
                             clipRight, nativeBottom });
-            } else drawMergedFrame(left, top + tabPadding, fullWidth, fullHeight - tabPadding);
+            } else NativePanelFrame.draw(left, top + tabPadding, fullWidth, fullHeight - tabPadding, 1, null);
             int browserBottom = gui instanceof dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBrowserAccess browser
                 ? browser.dynamicinventory$browserBottom()
                 : Integer.MAX_VALUE;
@@ -1247,11 +1250,7 @@ public final class NativeInventoryPanel extends Gui {
         int x = access.dynamicinventory$left(), y = access.dynamicinventory$top();
         GL11.glPushMatrix();
         NativeInventoryPanel previousForeground = drawingForeground;
-        int hx = detachedAe() ? headerOffsetX()
-            : floating != null && floating.detached()
-                ? floating.machineBounds().x - x - (storageGeometry == null ? 0 : storageGeometry.left)
-                : headerX;
-        int hy = floating != null && floating.detached() ? floating.machineBounds().y - y : headerY;
+        int hx = headerOffsetX(), hy = headerOffsetY();
         try {
             drawingForeground = this;
             GL11.glTranslatef(hx, hy, 0);

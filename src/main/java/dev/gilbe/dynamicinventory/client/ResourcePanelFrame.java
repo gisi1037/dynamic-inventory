@@ -21,17 +21,16 @@ final class ResourcePanelFrame {
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
         GL11.glColor4f(1, 1, 1, 1);
-        int edge = Math.min(4, Math.min(width, height) / 2);
+        PanelCorners corners = new PanelCorners(x, y, width, height, 4);
+        int edge = corners.width;
         // Use blank frame inset pixels; (8,8) belongs to the native armor slot.
         patch(x + edge, y + edge, width - edge * 2, height - edge * 2, 4, 4, 2, 2);
         patch(x + edge, y, width - edge * 2, edge, 8, 0, 4, 4);
         patch(x + edge, y + height - edge, width - edge * 2, edge, 8, 162, 4, 4);
-        patch(x, y + edge, edge, height - edge * 2, 0, 8, 4, 4);
-        patch(x + width - edge, y + edge, edge, height - edge * 2, 172, 8, 4, 4);
-        patch(x, y, edge, edge, 0, 0, 4, 4);
-        patch(x + width - edge, y, edge, edge, 172, 0, 4, 4);
-        patch(x, y + height - edge, edge, edge, 0, 162, 4, 4);
-        patch(x + width - edge, y + height - edge, edge, edge, 172, 162, 4, 4);
+        int sideHeight = height - corners.topHeight - corners.bottomHeight;
+        patch(x, y + edge, edge, sideHeight, 0, 8, 4, 4);
+        patch(x + width - edge, y + edge, edge, sideHeight, 172, 8, 4, 4);
+        NativePanelFrame.drawCorners(corners, InventoryGuiTheme.get());
     }
 
     private static void patch(int x, int y, int width, int height, int u, int v, int sw, int sh) {

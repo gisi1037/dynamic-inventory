@@ -1,21 +1,23 @@
 # Forestry
 
-**Loaded ID:** `Forestry`. **Reviewed version:** `4.11.39`.
-**Status:** stationary-machine integration; player visual review completed by Gilbert
-on 2026-11-02. Broader gameplay/server qualification remains separate.
+**Loaded ID:** `Forestry`. **Reviewed versions:** `4.11.40` for GTNH 2.9.0
+(with `4.11.39` also accepted) and `4.11.41` for GTNH 2.9.1.
+Gilbert completed visual review of the original stationary machines on 2026-11-02.
+The additional hosts and detached layouts still need in-game visual review.
 Java owner: `ForestryCompatibility`. Mixins: `mixins/forestry/`.
 
-The integration registers 21 exact native container/GUI pairs. It does not enable
-the whole `ContainerForestry` hierarchy. Missing Forestry or another version skips
-both the declarations and their mixins. Binnie's Mods remains a separate integration.
+The integration registers 35 exact inventory containers and 38 container/GUI pairs.
+Missing Forestry or an unreviewed version skips its declarations and mixins.
 
 | Family | Screens |
 | --- | --- |
-| Core | Analyzer |
-| Apiculture | Bee housing (apiary/bee house), alveary, hygroregulator, sieve, swarmer |
+| Core | Analyzer, Escritoire, Naturalist Chest, Soldering Iron |
+| Apiculture | Bee housing (apiary/bee house), alveary, hygroregulator, sieve, swarmer, bee-house and apiary minecarts, Habitat Locator, Imprinter, Beealyzer |
 | Energy | Biogas engine, electrical engine, peat engine, generator |
 | Factory | Bottler, carpenter, centrifuge, fabricator, fermenter, moistener, rain tank, squeezer, still, worktable |
 | Farming | Multifarm |
+| Item storage and genetics | Backpacks (both tiers), Naturalist Backpack, Treealyzer, Flutterlyzer |
+| Food and mail | Infuser, Letter, Mailbox, Stamp Collector, Trade Station |
 
 These screens use nine player columns, native texture crop 4, the common frame
 style/editor, and the Machines Vertical/Scroll preference. Native machine slots
@@ -31,15 +33,10 @@ Native synchronization and custom-channel GUI actions wait for opening agreement
 Widget origins and ledger hit testing follow the native section; ledger drawing
 escapes the sheet crop so side tabs remain visible.
 
-## Deliberately deferred
-
-- Backpacks, naturalist backpacks/storage, and handheld tools: held-item locks,
-  hidden pages, and Forestry's six-bit item-slot addressing need separate review.
-- Bee-house minecarts: entity-host lifecycle.
-- Escritoire and postal screens: minigame/paging, custom selections, and item-backed
-  letters need their own review.
-- Backpack automatic pickup and other non-GUI inventory consumers are not certified
-  by these machine adapters.
+Item-backed screens preserve Forestry's owner-slot lock and can address the full
+expanded inventory. The paged Naturalist screens keep Forestry's page controls
+and hidden slots. Catalogue, account setup, and handbook screens have no player
+inventory to expand. Binnie's Mods has its own containers.
 
 ## Focused checks
 

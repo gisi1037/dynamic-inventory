@@ -24,6 +24,15 @@ import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 public class ClientProxy extends CommonProxy {
 
     @Override
+    public void receiveInventoryLocks(net.minecraft.network.INetHandler connection, int[] locks) {
+        Minecraft mc = Minecraft.getMinecraft();
+        mc.func_152344_a(() -> {
+            if (mc.getNetHandler() == connection && mc.thePlayer != null)
+                dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.receive(mc.thePlayer, locks);
+        });
+    }
+
+    @Override
     public void receiveHotbarSlots(int[] slots) {
         dev.gilbe.dynamicinventory.client.HotbarControls.receive(slots);
     }

@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 /** AE2's extraction simulation and insertion must see the same complete ordinary player inventory. */
 @Mixin(targets = "appeng.util.inv.AdaptorPlayerInventory", remap = false)
@@ -61,6 +62,12 @@ public abstract class AePlayerInventoryAdaptorMixin {
             logical = logical < shape.storageSlots() ? logical + 9 : logical - shape.storageSlots();
         // Equipment (including Backhand's raw slot 36) is never an ordinary transfer destination.
         return shape.rawIndex(logical);
+    }
+
+    @Inject(method = "getStackInSlot", remap = true, at = @At("RETURN"), cancellable = true)
+    private void dynamicinventory$hideFromIngredientSearch(int raw, CallbackInfoReturnable<ItemStack> result) {
+        if (dynamicinventory$player != null && InventorySlotLocks.locked(dynamicinventory$player, raw))
+            result.setReturnValue(null);
     }
 
     @Inject(method = "isItemValidForSlot", remap = true, at = @At("RETURN"), cancellable = true)

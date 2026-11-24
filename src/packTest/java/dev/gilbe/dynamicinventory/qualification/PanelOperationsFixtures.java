@@ -1,7 +1,9 @@
 package dev.gilbe.dynamicinventory.qualification;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import net.minecraft.entity.player.EntityPlayer;
@@ -13,9 +15,14 @@ import net.minecraft.item.ItemStack;
 
 import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 
+import cpw.mods.fml.common.DummyModContainer;
+import cpw.mods.fml.common.LoadController;
+import cpw.mods.fml.common.Loader;
+import cpw.mods.fml.common.ModMetadata;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
 import dev.gilbe.dynamicinventory.compat.AppliedEnergisticsCompatibility;
+import dev.gilbe.dynamicinventory.compat.IntegrationProfile;
 import dev.gilbe.dynamicinventory.compat.PanelSortScope;
 import dev.gilbe.dynamicinventory.container.PlayerInventoryTransfers;
 
@@ -24,8 +31,8 @@ public final class PanelOperationsFixtures {
 
     private PanelOperationsFixtures() {}
 
-    public static void main(String[] args) {
-        AppliedEnergisticsCompatibility.registerInventoryAdapters();
+    public static void main(String[] args) throws Exception {
+        registerAeAdapters();
         for (String tool : new String[] { "NetworkTool", "AdvancedNetworkTool" }) {
             InventoryUiAdapter adapter = InventoryUi.getRegisteredAdapters()
                 .stream()
@@ -106,6 +113,34 @@ public final class PanelOperationsFixtures {
             "No loss when full");
         System.out.println(
             "PASS Network Tool exact registrations, isolated sorting, hotbar priority, full-hotbar Main fallback and item preservation");
+    }
+
+    private static void registerAeAdapters() throws Exception {
+        // The standalone JVM runs before Forge creates the Loader and discovers optional mods.
+        var allocator = (sun.misc.Unsafe) field(sun.misc.Unsafe.class, "theUnsafe").get(null);
+        var loader = (Loader) allocator.allocateInstance(Loader.class);
+        var metadata = new ModMetadata();
+        metadata.modId = "ae2wct";
+        metadata.version = IntegrationProfile.reviewedVersion(metadata.modId);
+        field(Loader.class, "namedMods")
+            .set(loader, Collections.singletonMap(metadata.modId, new DummyModContainer(metadata)));
+        var controller = (LoadController) allocator.allocateInstance(LoadController.class);
+        field(LoadController.class, "modStates").set(controller, com.google.common.collect.ArrayListMultimap.create());
+        field(Loader.class, "modController").set(loader, controller);
+        Field instance = field(Loader.class, "instance");
+        Object previous = instance.get(null);
+        instance.set(null, loader);
+        try {
+            AppliedEnergisticsCompatibility.registerInventoryAdapters();
+        } finally {
+            instance.set(null, previous);
+        }
+    }
+
+    private static Field field(Class<?> type, String name) throws Exception {
+        Field result = type.getDeclaredField(name);
+        result.setAccessible(true);
+        return result;
     }
 
     private static List<Integer> ids(List<SlotAccessor> slots) {

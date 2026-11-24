@@ -8,6 +8,7 @@ import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
 import dev.gilbe.dynamicinventory.client.InventoryViewSettings.TerminalKind;
 import dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch;
+import dev.gilbe.dynamicinventory.compat.ThaumicEnergisticsCompatibility;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsBackground;
 
 /** Resolve saved panel preferences during native terminal initialization, before the decorator exists. */
@@ -16,12 +17,13 @@ public final class TerminalPanelSpace {
     private TerminalPanelSpace() {}
 
     public static int rows(GuiContainer gui, NativeLayoutPatch patch, int available, int fixed, TerminalStyle style) {
-        boolean crafting = gui instanceof GuiCraftingTerm || AppliedEnergisticsBackground.WIRELESS_CRAFTING_GUI.equals(
-            gui.getClass()
-                .getName());
-        TerminalKind kind = AppliedEnergisticsBackground.isInterfaceTerminal(
-            gui.getClass()
-                .getName()) ? TerminalKind.INTERFACE : crafting ? TerminalKind.CRAFTING : TerminalKind.NORMAL;
+        String screen = gui.getClass()
+            .getName();
+        boolean crafting = gui instanceof GuiCraftingTerm
+            || AppliedEnergisticsBackground.WIRELESS_CRAFTING_GUI.equals(screen)
+            || ThaumicEnergisticsCompatibility.ARCANE_TERMINAL.equals(screen);
+        TerminalKind kind = AppliedEnergisticsBackground.isInterfaceTerminal(screen) ? TerminalKind.INTERFACE
+            : crafting ? TerminalKind.CRAFTING : TerminalKind.NORMAL;
         int requestedRows = InventoryViewSettings.terminalRows(kind, switch (style) {
             case SMALL -> 0;
             case TALL -> 1;

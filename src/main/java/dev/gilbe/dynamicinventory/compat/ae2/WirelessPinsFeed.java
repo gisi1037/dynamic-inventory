@@ -14,12 +14,15 @@ import net.minecraft.inventory.Container;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
+import net.minecraftforge.common.util.ForgeDirection;
 
 import appeng.api.AEApi;
 import appeng.api.config.SecurityPermissions;
+import appeng.api.features.ILocatableRegistry;
 import appeng.api.features.IWirelessTermHandler;
 import appeng.api.features.IWirelessTermRegistry;
 import appeng.api.networking.IGrid;
+import appeng.api.networking.IGridHost;
 import appeng.api.networking.energy.IEnergyGrid;
 import appeng.api.networking.security.BaseActionSource;
 import appeng.api.networking.security.ISecurityGrid;
@@ -31,12 +34,12 @@ import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IAEStackType;
 import appeng.api.storage.data.IItemList;
-import appeng.container.PrimaryGui;
-import appeng.core.sync.GuiBridge;
 import appeng.helpers.WirelessTerminalGuiObject;
 import appeng.items.contents.PinList;
+import appeng.items.contents.PinsHandler;
 import appeng.items.contents.PinsHolder;
 import appeng.util.Platform;
+import appeng.util.TerminalSettings;
 import appeng.util.item.AEItemStack;
 import baubles.api.BaublesApi;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
@@ -55,15 +58,21 @@ public final class WirelessPinsFeed {
     private final ItemStack device;
     private final IWirelessTermHandler handler;
     private final String link;
+    private final ILocatableRegistry stations = AEApi.instance()
+        .registries()
+        .locatable();
     private final WirelessTerminalGuiObject wireless;
     private final IGrid grid;
+    private final TerminalSettings settings = new TerminalSettings();
     private final Set<IMEMonitor<?>> monitors = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<IAEStack<?>> identities = new HashSet<>();
     private final IMEMonitorHandlerReceiver<IAEStack<?>> listener = new Listener();
     private IAEStack<?>[] pins = new IAEStack<?>[PinList.TOTAL_SLOTS];
     private IAEStack<?>[] published;
     private int craftingSlots, playerSlots;
-    private NBTBase savedPins;
+    private int publishedCrafting = -1, publishedPlayer = -1;
+    private PinsHandler pinList;
+    private NBTBase savedPins, savedSettings;
     private int expires, nextUpdate;
     private boolean changed = true, closed, background;
 
@@ -216,7 +225,7 @@ public final class WirelessPinsFeed {
 
     private WirelessStatus networkStatus() {
         if (!handler.hasInfinityPower(device) && !handler.hasPower(player, 0.5, device)) return WirelessStatus.NO_POWER;
-        if (grid == null || !wireless.rangeCheck()) return WirelessStatus.NETWORK_UNAVAILABLE;
+        if (grid == null || linkedGrid() != grid || !wireless.rangeCheck()) return WirelessStatus.NETWORK_UNAVAILABLE;
         var node = wireless.getActionableNode();
         IEnergyGrid energy = grid.getCache(IEnergyGrid.class);
         if (node == null || node.getGrid() != grid || energy == null || !energy.isNetworkPowered())
@@ -226,21 +235,46 @@ public final class WirelessPinsFeed {
             || security.hasPermission(player, SecurityPermissions.CRAFT)) ? null : WirelessStatus.NO_ACCESS;
     }
 
-    public void edit(int index, boolean remove) {
-        if (published == null || index < 0 || index >= pins.length || status() != null) return;
-        var list = new PinsHolder(device).getHandler(player);
-        IAEStack<?> current = list.getPin(index);
+    private IGrid linkedGrid() {
+        // AE2's wireless GUI resolves the security station only at construction. The access point
+        // can remain on the old, powered grid after the station disappears or changes networks.
+        try {
+            var station = stations.getLocatableBy(Long.parseLong(link));
+            if (station instanceof IGridHost host) {
+                var node = host.getGridNode(ForgeDirection.UNKNOWN);
+                return node == null ? null : node.getGrid();
+            }
+        } catch (NumberFormatException ignored) {
+            // AE2 uses a numeric locatable ID for a wireless link.
+        }
+        return null;
+    }
+
+    private boolean availableForAction() {
+        if (status() == null) return true;
+        nextUpdate = player.ticksExisted;
+        return false;
+    }
+
+    public void edit(int index, boolean remove, byte[] expected) {
+        if (published == null || index < 0 || index >= pins.length || !availableForAction()) return;
+        refreshPins();
+        IAEStack<?> current = pinList.getPin(index);
         IAEStack<?> visible = published[index];
         ItemStack cursor = player.inventory.getItemStack();
         if (remove) {
-            if (cursor != null || current == null || visible == null || !current.isSameType(visible)) return;
-            list.setPin(index, null);
+            if (cursor != null || !PinIdentity.matches(expected, current)
+                || visible == null
+                || !current.isSameType(visible)) return;
+            pinList.setPin(index, null);
         } else {
             if (index < PinList.PLAYER_OFFSET || current != null
                 || visible != null
                 || cursor == null
                 || cursor.stackSize <= 0) return;
-            list.setPin(index, AEItemStack.create(cursor));
+            var item = AEItemStack.create(cursor);
+            if (!PinIdentity.matches(expected, item)) return;
+            pinList.setPin(index, item);
         }
         IInventory inventory = worn ? BaublesApi.getBaubles(player) : player.inventory;
         inventory.markDirty();
@@ -248,18 +282,23 @@ public final class WirelessPinsFeed {
     }
 
     @SuppressWarnings("unchecked")
-    public void transfer(Container container, int index, Transfer operation, int argument, int[] panel) {
-        if (published == null || !(published[index] instanceof IAEItemStack visible) || status() != null) return;
-        var list = new PinsHolder(device).getHandler(player);
-        if (!(list.getPin(index) instanceof IAEItemStack pin) || !pin.isSameType(visible)) return;
+    public void transfer(Container container, int index, Transfer operation, int argument, int[] panel,
+        byte[] expected) {
+        if (published == null || index < 0
+            || index >= pins.length
+            || !(published[index] instanceof IAEItemStack visible)
+            || !availableForAction()) return;
+        refreshPins();
+        if (!(pinList.getPin(index) instanceof IAEItemStack pin) || !pin.isSameType(visible)
+            || !PinIdentity.matches(expected, pin)
+            || !typeEnabled(pin.getStackType())) return;
+        var monitor = (IMEMonitor<IAEItemStack>) wireless.getMEMonitor(pin.getStackType());
+        operation = PinnedItemTransfer.resolveClick(operation, player.inventory.getItemStack(), monitor, pin);
         ISecurityGrid security = grid.getCache(ISecurityGrid.class);
         if (!security.hasPermission(player, PinnedItemTransfer.requiredPermission(player, operation, argument))) return;
-        var monitor = (IMEMonitor<IAEItemStack>) wireless.getMEMonitor(pin.getStackType());
         if (operation == Transfer.CRAFT) {
             int slotIndex = inventorySlot();
-            var primary = new PrimaryGui(GuiBridge.GUI_ME, device.copy(), null, null);
-            primary.setSlotIndex(slotIndex);
-            PinnedItemTransfer.openCraftAmount(player, monitor, pin, null, null, slotIndex, primary);
+            PinnedItemTransfer.openCraftAmount(player, monitor, pin, null, null, slotIndex, null, device);
             return;
         }
         if (PinnedItemTransfer.apply(
@@ -283,13 +322,14 @@ public final class WirelessPinsFeed {
             send.accept(Snapshot.unavailable(epoch, failure));
             return false;
         }
-        int previousCrafting = craftingSlots, previousPlayer = playerSlots;
         refreshPins();
         if (!changed) return true;
         changed = false;
         IAEStack<?>[] next = snapshot();
-        if (!sameSnapshot(published, next) || craftingSlots != previousCrafting || playerSlots != previousPlayer) {
+        if (!sameSnapshot(published, next) || craftingSlots != publishedCrafting || playerSlots != publishedPlayer) {
             published = next;
+            publishedCrafting = craftingSlots;
+            publishedPlayer = playerSlots;
             send.accept(new Snapshot(epoch, next, craftingSlots, playerSlots));
         }
         return true;
@@ -299,17 +339,17 @@ public final class WirelessPinsFeed {
         NBTBase current = device.getTagCompound() == null ? null
             : device.getTagCompound()
                 .getTag("pins");
-        if (java.util.Objects.equals(current, savedPins)) return;
+        if (pinList != null && java.util.Objects.equals(current, savedPins)) return;
         savedPins = current == null ? null : current.copy();
-        var list = new PinsHolder(device).getHandler(player);
-        craftingSlots = list.getCraftingPinsRows()
+        pinList = new PinsHolder(device).getHandler(player);
+        craftingSlots = pinList.getCraftingPinsRows()
             .getSlotCount();
-        playerSlots = list.getPlayerPinsRows()
+        playerSlots = pinList.getPlayerPinsRows()
             .getSlotCount();
         Set<IMEMonitor<?>> sources = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
         identities.clear();
         for (int i = 0; i < pins.length; i++) {
-            IAEStack<?> pin = list.getPin(i);
+            IAEStack<?> pin = pinList.getPin(i);
             pins[i] = pin;
             if (pin == null) continue;
             identities.add(pin);
@@ -321,6 +361,17 @@ public final class WirelessPinsFeed {
         monitors.clear();
         monitors.addAll(sources);
         changed = true;
+    }
+
+    private boolean typeEnabled(IAEStackType<?> type) {
+        var tag = device.getTagCompound();
+        NBTBase current = tag == null ? null : tag.getTag("terminalSettings");
+        if (!java.util.Objects.equals(current, savedSettings)) {
+            settings.readFromNBT(tag);
+            savedSettings = current == null ? null : current.copy();
+        }
+        return settings.getFilters(player)
+            .isEnabled(type);
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })

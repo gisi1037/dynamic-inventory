@@ -48,7 +48,7 @@ public final class AePinnedPanel extends Gui {
     private static final AePinnedPanel PANEL = new AePinnedPanel();
     private static final AtomicReference<AePinsChannel.Snapshot> INCOMING = new AtomicReference<>();
     private static final int FOREGROUND_RENEW_TICKS = 40;
-    private static final int PADDING = 8, HEADER = 20, CELL = 18, SCROLLBAR = 5;
+    private static final int HEADER = 20, CELL = 18, SCROLLBAR = 5;
     private static final boolean LWJGL3 = Loader.isModLoaded("lwjgl3ify");
 
     private boolean enabled, remote, foreground;
@@ -56,7 +56,9 @@ public final class AePinnedPanel extends Gui {
     private int renewIn, scroll, columnScroll, pressX, pressY;
     private int lastX, lastY;
     private int guideX = Integer.MIN_VALUE, guideY = Integer.MIN_VALUE;
-    private boolean resizing;
+    private int resizeCorner;
+    private int frameStyle = 2, frameCrop, padding = 8;
+    private PlayerPanelProfile appearance = PinsPanelGeometry.DEFAULT_APPEARANCE;
     private Rect gesture, lastBounds;
     private GuiScreen gestureScreen;
     private GuiScreen paintedScreen;
@@ -66,6 +68,7 @@ public final class AePinnedPanel extends Gui {
     private Rect retainedBounds;
     private PinsPanelGeometry retainedGeometry;
     private Object connection;
+    private net.minecraft.entity.player.EntityPlayer sessionPlayer;
     private AePinsChannel.Snapshot snapshot;
     private final AePinsPrediction prediction = new AePinsPrediction();
     private GuiContainer shiftClickScreen;
@@ -97,7 +100,7 @@ public final class AePinnedPanel extends Gui {
         if (hasCustomGrid() || !separates(gui)) return;
         Rect area = occupied(gui);
         List<Entry> entries = PANEL.entries(gui);
-        if (area != null && !entries.isEmpty()) InventoryViewSettings.setPinsGrid(editableGrid(area, entries));
+        if (area != null && !entries.isEmpty()) InventoryViewSettings.setPinsGrid(PANEL.editableGrid(area, entries));
     }
 
     public static void receive(AePinsChannel.Snapshot reply) {
@@ -153,9 +156,13 @@ public final class AePinnedPanel extends Gui {
         if (scrollingScreen != gui) scrollingScreen = null;
         if (pressedScreen != gui) pressedScreen = null;
         Object activeConnection = client.getNetHandler();
-        if (activeConnection != connection) {
+        if (activeConnection != connection || client.thePlayer != sessionPlayer) {
+            if (activeConnection != connection) enabled = false;
             connection = activeConnection;
-            enabled = remote = foreground = false;
+            sessionPlayer = client.thePlayer;
+            remote = foreground = false;
+            renewIn = 0;
+            clearShiftClick();
             clearGesture();
             optionsScreen = scrollingScreen = pressedScreen = null;
             paintedScreen = null;
@@ -222,20 +229,33 @@ public final class AePinnedPanel extends Gui {
         int width = Math.max(
             font.getStringWidth(I18n.format("dynamicinventory.ae2pins.source.open")),
             font.getStringWidth(I18n.format("dynamicinventory.ae2pins.source.wireless"))) + 18;
+        width = Math.max(width, font.getStringWidth(I18n.format("dynamicinventory.ae2pins.appearance")) + 18);
         Rect button = button(host);
         return new Rect(
             Math.max(2, Math.min(gui.width - width - 2, button.x)),
-            Math.max(2, Math.min(gui.height - 42, button.bottom() + 2)),
+            Math.max(2, Math.min(gui.height - 62, button.bottom() + 2)),
             width,
-            40);
+            60);
     }
 
-    private static Rect optionsControl(Rect menu) {
-        return new Rect(menu.x + 4, menu.y + 18, menu.width - 8, 18);
+    private static Rect optionsControl(Rect menu, int row) {
+        return new Rect(menu.x + 4, menu.y + 18 + 20 * row, menu.width - 8, 18);
     }
 
-    private static Rect headerWidget(Rect panel, int index) {
-        return new Rect(panel.right() - 18 - index * 15, panel.y + 4, 13, 12);
+    private Rect headerWidget(Rect panel, int index) {
+        return new Rect(panel.right() - 21 - frameCrop - index * 15, panel.y + 4 + frameCrop, 13, 12);
+    }
+
+    private int header() {
+        return HEADER + frameCrop;
+    }
+
+    private int minimumHeight() {
+        return Math.max(PinsPanelGeometry.MIN_HEIGHT, header() + CELL + 4 + frameCrop);
+    }
+
+    private int gap() {
+        return frameStyle == NativePanelFrame.SEAMLESS ? 0 : 1;
     }
 
     private static Rect viewport(GuiScreen gui) {
@@ -254,11 +274,17 @@ public final class AePinnedPanel extends Gui {
     }
 
     private Rect bounds(GuiScreen gui, DetachedChestPanel host) {
+        appearance = PlayerPanelProfiles.pinsAppearance(host.key());
+        frameStyle = host.seamless() ? NativePanelFrame.SEAMLESS
+            : appearance.frameStyle < 0 ? host.inheritedFrameStyle() : appearance.frameStyle;
+        frameCrop = frameStyle == NativePanelFrame.SEAMLESS ? 0 : appearance.frameCrop;
+        int bevel = frameStyle == 0 ? 4 : frameStyle == NativePanelFrame.SEAMLESS ? 0 : appearance.borderWidth;
+        padding = Math.max(appearance.minimumMargin, bevel + frameCrop + 4);
         if (gesture != null && gestureScreen == gui && lastBounds != null) return lastBounds;
         Rect viewport = viewport(gui);
         Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), host.pinsLayoutAnchor());
         int width = Math.min(preferred.width, viewport.width);
-        int height = Math.min(preferred.height, viewport.height);
+        int height = Math.min(Math.max(minimumHeight(), preferred.height), viewport.height);
         List<Rect> occupied = obstacles(gui, host);
         Rect retained = retainedBounds;
         if (paintedScreen == gui && retained != null
@@ -269,16 +295,21 @@ public final class AePinnedPanel extends Gui {
                 .noneMatch(retained::intersects))
             return retained;
         Rect desired = new Rect(preferred.x, preferred.y, width, height);
-        Rect fitted = InventoryPanelLayout.snapDrag(desired, viewport, occupied);
+        Rect fitted = InventoryPanelLayout.snapDrag(desired, viewport, occupied, gap());
         if (fitted != null) return fitted;
-        Rect free = InventoryPanelLayout.freeRegion(viewport, occupied, 72, 43);
+        Rect free = InventoryPanelLayout.freeRegion(viewport, occupied, 72, minimumHeight());
         if (free != null) return new Rect(free.x, free.y, Math.min(width, free.width), Math.min(height, free.height));
         // At very small scales retain access to the pins as an overlay, with input owned by this panel.
-        return InventoryPanelLayout.snapDrag(desired, viewport, java.util.Collections.emptyList());
+        return InventoryPanelLayout.snapDrag(desired, viewport, java.util.Collections.emptyList(), gap());
     }
 
     public static Rect occupied(GuiScreen gui) {
         return PANEL.enabled && gui == PANEL.paintedScreen ? PANEL.paintedBounds : null;
+    }
+
+    /** Resolve the pins footprint before the first draw, when no painted bounds are available yet. */
+    public static Rect layoutBounds(GuiScreen gui, DetachedChestPanel host) {
+        return PANEL.enabled && !PanelSettingsOverlay.isOpen(gui) ? PANEL.bounds(gui, host) : null;
     }
 
     static void retainPositionAfterNativeDrag(GuiContainer gui) {
@@ -315,7 +346,7 @@ public final class AePinnedPanel extends Gui {
 
     private void paintOptions(GuiScreen gui, DetachedChestPanel host, int x, int y) {
         GL11.glDisable(GL11.GL_DEPTH_TEST);
-        Rect menu = optionsBounds(gui, host), control = optionsControl(menu);
+        Rect menu = optionsBounds(gui, host), control = optionsControl(menu, 0);
         var font = Minecraft.getMinecraft().fontRenderer;
         int text = InventoryGuiTheme.get().label;
         NativePanelFrame.draw(menu.x, menu.y, menu.width, menu.height, 2, null);
@@ -323,6 +354,9 @@ public final class AePinnedPanel extends Gui {
         PanelChrome.raisedButton(control, true, control.contains(x, y));
         String source = InventoryViewSettings.pinsWirelessOnly ? "wireless" : "open";
         font.drawString(I18n.format("dynamicinventory.ae2pins.source." + source), control.x + 4, control.y + 5, text);
+        Rect style = optionsControl(menu, 1);
+        PanelChrome.raisedButton(style, true, style.contains(x, y));
+        font.drawString(I18n.format("dynamicinventory.ae2pins.appearance"), style.x + 4, style.y + 5, text);
     }
 
     private void paint(GuiScreen gui, DetachedChestPanel host, int x, int y) {
@@ -349,19 +383,31 @@ public final class AePinnedPanel extends Gui {
         paintedScreen = gui;
         paintedBounds = area;
         if (area == null) return;
-        if (gesture != null && gestureScreen == gui && !resizing) {
+        if (gesture != null && gestureScreen == gui && resizeCorner == 0) {
             int color = 0x55000000 | InventoryGuiTheme.get().panelHighlight & 0xffffff;
             Rect viewport = viewport(gui);
             if (guideX != Integer.MIN_VALUE) drawRect(guideX, viewport.y, guideX + 1, viewport.bottom(), color);
             if (guideY != Integer.MIN_VALUE) drawRect(viewport.x, guideY, viewport.right(), guideY + 1, color);
         }
-        NativePanelFrame.draw(area.x, area.y, area.width, area.height, 2, null);
+        NativePanelFrame.draw(
+            area.x,
+            area.y,
+            area.width,
+            area.height,
+            frameStyle,
+            appearance.borderWidth,
+            frameCrop,
+            appearance.cornerCrop,
+            null);
         Rect returnWidget = headerWidget(area, 0);
+        int titleX = area.x + 6 + frameCrop;
         String title = client.fontRenderer
-            .trimStringToWidth(I18n.format("dynamicinventory.ae2pins.title"), Math.max(0, returnWidget.x - area.x - 8));
-        client.fontRenderer.drawString(title, area.x + 6, area.y + 7, text);
+            .trimStringToWidth(I18n.format("dynamicinventory.ae2pins.title"), Math.max(0, returnWidget.x - titleX - 2));
+        client.fontRenderer.drawString(title, titleX, area.y + 7 + frameCrop, text);
         drawReturnWidget(gui, returnWidget, x, y, text);
-        PanelChrome.grip(area, 10, PanelChrome.corner(area, x, y) == 10 || gesture != null && resizing);
+        int hoveredCorner = resizeCorner != 0 ? resizeCorner : PanelChrome.corner(area, x, y);
+        if (gap() != 0) PanelChrome.grips(area, hoveredCorner);
+        else if (hoveredCorner != 0) PanelChrome.grip(area, hoveredCorner, true);
         List<Entry> entries = entries(gui);
         int columns = gridColumns(area), visibleColumns = Math.min(columns(area), columns), rows = rows(area);
         scroll = Math.min(scroll, maxScroll(entries.size(), columns, rows));
@@ -371,9 +417,9 @@ public final class AePinnedPanel extends Gui {
                 : snapshot == null ? "dynamicinventory.ae2pins.loading" : snapshot.statusKey();
             client.fontRenderer.drawSplitString(
                 I18n.format(status),
-                area.x + PADDING,
-                area.y + HEADER + 2,
-                area.width - PADDING * 2,
+                area.x + padding,
+                area.y + header() + 2,
+                Math.max(1, area.width - padding * 2),
                 text);
             return;
         }
@@ -401,12 +447,16 @@ public final class AePinnedPanel extends Gui {
             int index = (scroll + row) * columns + columnScroll + col;
             if (index >= entries.size()) break;
             Entry entry = entries.get(index);
-            int left = area.x + PADDING + col * CELL, top = area.y + HEADER + row * CELL;
+            int left = area.x + padding + col * CELL, top = area.y + header() + row * CELL;
             drawRect(left, top, left + CELL - 1, top + CELL - 1, InventoryGuiTheme.get().panelShadow);
             if (entry.stack != null) {
                 var display = prediction.renderPin(gui, entry.stack);
+                GL11.glColor4f(1, 1, 1, 1);
                 display.drawInGui(client, left + 1, top + 1);
                 display.drawOverlayInGui(client, left + 1, top + 1, true, true, true, true);
+                // AE2 leaves item lighting and depth testing enabled for its terminal renderer.
+                GL11.glDisable(GL11.GL_LIGHTING);
+                GL11.glDisable(GL11.GL_DEPTH_TEST);
             }
             if (new Rect(left, top, CELL, CELL).contains(x, y)
                 && (optionsScreen != gui || !optionsBounds(gui, host).contains(x, y))) hovered = entry;
@@ -473,7 +523,7 @@ public final class AePinnedPanel extends Gui {
         }
     }
 
-    private static AePinsGrid editableGrid(Rect area, List<Entry> entries) {
+    private AePinsGrid editableGrid(Rect area, List<Entry> entries) {
         return AePinsGrid.of(
             gridColumns(area),
             entries.stream()
@@ -487,11 +537,13 @@ public final class AePinnedPanel extends Gui {
         if (next == null) return;
         InventoryViewSettings.setPinsGrid(next);
         if (!add) return;
-        int w = column && next.columns > columns(area) ? Math.min(450, area.width + CELL) : area.width;
-        int h = !column && next.slots.length / next.columns > rows(area) ? Math.min(450, area.height + CELL)
+        int w = column && next.columns > columns(area) ? Math.min(PinsPanelGeometry.MAX_WIDTH, area.width + CELL)
+            : area.width;
+        int h = !column && next.slots.length / next.columns > rows(area)
+            ? Math.min(InventoryPanelLayout.MAX_HEIGHT, area.height + CELL)
             : area.height;
         Rect requested = new Rect(area.x, area.y, w, h);
-        Rect fitted = InventoryPanelLayout.snapDrag(requested, viewport(gui), obstacles(gui, host));
+        Rect fitted = InventoryPanelLayout.snapDrag(requested, viewport(gui), obstacles(gui, host), gap());
         if (fitted != null && fitted.x == area.x && fitted.y == area.y && (w != area.width || h != area.height))
             saveGeometry(gui, host, requested, true);
     }
@@ -502,11 +554,10 @@ public final class AePinnedPanel extends Gui {
         int width = resize ? Math.max(72, bounds.width) : preferred.width;
         int height = resize ? Math.max(43, bounds.height) : preferred.height;
         try {
-            PlayerPanelProfiles.savePins(
+            PlayerPanelProfiles.savePinsBounds(
                 host.key(),
-                new PinsPanelGeometry(
-                    new Rect(bounds.x, bounds.y, width, height),
-                    new PanelLayoutReference(machine, viewport(gui))));
+                new Rect(bounds.x, bounds.y, width, height),
+                new PanelLayoutReference(machine, viewport(gui)));
         } catch (IOException | IllegalArgumentException failure) {
             DynamicInventory.LOG.warn("Could not save AE2 Pins layout for {}", host.key(), failure);
         }
@@ -565,7 +616,7 @@ public final class AePinnedPanel extends Gui {
                 y,
                 wheelSteps(Mouse.getEventDWheel())))
             return true;
-        if (button == 0 && down && gui instanceof GuiContainer container) {
+        if (button == 0 && down && !SlotLockControls.isToggle(button) && gui instanceof GuiContainer container) {
             int slotId = host.playerSlotAt(x, y, false);
             if (slotId < 0) PANEL.clearShiftClick();
             if (PANEL.playerClick(container, slotId, true)) {
@@ -607,6 +658,7 @@ public final class AePinnedPanel extends Gui {
         var slot = container.inventorySlots.getSlot(slotId);
         // Bogo Sorter suppresses canTakeStack on the client. The server checks it before returning the stack.
         if (PinnedItemTransfer.playerIndex(player, slot) < 0) return false;
+        if (dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.locked(slot, player)) return true;
         ItemStack stack = prediction.slot(container, player.inventory, slot);
         if (shift && !bulk && AppliedEnergisticsPatternTransfers.canLoadPattern(container.inventorySlots, stack))
             return false;
@@ -644,6 +696,8 @@ public final class AePinnedPanel extends Gui {
                 shiftClickItem = ItemStack.copyItemStack(stack);
                 shiftClickReleased = false;
             }
+            // Ordinary Shift-click belongs to the open ME terminal, including when Pins uses another network.
+            return false;
         }
         if (!InventoryViewSettings.pinsReturnMatching || stack == null) return false;
         var view = sourceTerminal(gui);
@@ -651,6 +705,15 @@ public final class AePinnedPanel extends Gui {
             if (entry.stack instanceof IAEItemStack pin && pin.isSameType(stack)) {
                 int[] scope = space ? DetachedChestPanel.of(gui)
                     .spaceTransferSlots(slotId) : null;
+                if (OpenInventoryTransfers.canDeposit(
+                    player,
+                    container.inventorySlots,
+                    slot,
+                    stack,
+                    !bulk,
+                    scope,
+                    id -> prediction.slot(container, player.inventory, container.inventorySlots.getSlot(id))))
+                    return false;
                 if (scope != null) {
                     movePanel(container, view == null ? epoch : 0, entry.index, slotId, pin, scope);
                     return true;
@@ -690,7 +753,8 @@ public final class AePinnedPanel extends Gui {
             id,
             dev.gilbe.dynamicinventory.inventory.InventoryLayout.of(inventory)
                 .revision(),
-            slots);
+            slots,
+            item);
     }
 
     private void move(GuiContainer gui, long source, int index, Transfer action, int argument, IAEItemStack item) {
@@ -700,7 +764,7 @@ public final class AePinnedPanel extends Gui {
             ? Math.max(-64, Math.min(64, argument))
             : argument;
         long id = prediction.predict(gui, player.inventory, index, action, amount, item, slot -> pin(gui, slot), null);
-        AePinsChannel.transfer(source, gui.inventorySlots.windowId, index, action, amount, id);
+        AePinsChannel.transfer(source, gui.inventorySlots.windowId, index, action, amount, id, item);
     }
 
     private IAEStack<?> pin(GuiScreen gui, int index) {
@@ -736,8 +800,9 @@ public final class AePinnedPanel extends Gui {
             scrollingScreen = null;
             if (gesture != null) {
                 move(gui, host, x, y);
+                boolean resizing = resizeCorner != 0;
                 Rect settled = resizing ? lastBounds
-                    : InventoryPanelLayout.snapDrag(lastBounds, viewport(gui), obstacles(gui, host));
+                    : InventoryPanelLayout.snapDrag(lastBounds, viewport(gui), obstacles(gui, host), gap());
                 if (settled != null && (settled.x != gesture.x || settled.y != gesture.y
                     || settled.width != gesture.width
                     || settled.height != gesture.height)) saveGeometry(gui, host, settled, resizing);
@@ -762,13 +827,17 @@ public final class AePinnedPanel extends Gui {
             if (menu.contains(x, y)) {
                 if (mouseButton == 0 && down) {
                     pressedScreen = gui;
-                    if (optionsControl(menu).contains(x, y)) {
+                    if (optionsControl(menu, 0).contains(x, y)) {
                         InventoryViewSettings.setPinsWirelessOnly(!InventoryViewSettings.pinsWirelessOnly);
                         prediction.clear();
                         scroll = columnScroll = 0;
                         TerminalPinsView view = terminal(gui);
                         if (view != null) view.dynamicinventory$rebuildPins();
-                    }
+                    } else if (optionsControl(menu, 1).contains(x, y) && gui instanceof GuiContainer container
+                        && PanelSettingsOverlay.openPins(container, host)) {
+                            optionsScreen = null;
+                            pressedScreen = null;
+                        }
                 }
                 return true;
             }
@@ -821,6 +890,15 @@ public final class AePinnedPanel extends Gui {
             if (mouseButton == 0) InventoryViewSettings.togglePinsReturnMatching();
             return true;
         }
+        int corner = PanelChrome.corner(area, x, y);
+        if (mouseButton == 0 && (y < area.y + header() || corner != 0)) {
+            pressX = lastX = x;
+            pressY = lastY = y;
+            gesture = lastBounds = area;
+            gestureScreen = gui;
+            resizeCorner = corner;
+            return true;
+        }
         Rect horizontal = columnTrack(area);
         if (mouseButton == 0 && horizontal != null && horizontal.contains(x, y)) {
             columnScroll = Math.round(horizontalMax * (x - horizontal.x) / (float) (horizontal.width - 1));
@@ -834,15 +912,6 @@ public final class AePinnedPanel extends Gui {
             scrollTo(area, track, entries.size(), y);
             return true;
         }
-        boolean corner = PanelChrome.corner(area, x, y) == 10;
-        if (mouseButton == 0 && (y < area.y + HEADER || corner)) {
-            pressX = lastX = x;
-            pressY = lastY = y;
-            gesture = lastBounds = area;
-            gestureScreen = gui;
-            resizing = corner;
-            return true;
-        }
         if (entry != null && entry.index >= 0 && gui instanceof GuiContainer container)
             clickEntry(container, view, entry, mouseButton);
         return true;
@@ -854,8 +923,8 @@ public final class AePinnedPanel extends Gui {
         ItemStack cursor = prediction.cursor(gui, inventory);
         boolean shift = GuiScreen.isShiftKeyDown();
         int window = gui.inventorySlots.windowId;
-        if (button == 2 && cursor == null && entry.stack instanceof IAEItemStack item && item.isCraftable()) {
-            AePinsChannel.transfer(view == null ? epoch : 0, window, entry.index, Transfer.CRAFT, 0);
+        if (button == 2 && cursor == null && (view != null || remote) && entry.stack instanceof IAEItemStack item) {
+            AePinsChannel.transfer(view == null ? epoch : 0, window, entry.index, Transfer.CRAFT, 0, 0, item);
             return;
         }
         boolean remove = shift && button == 1 && cursor == null;
@@ -867,15 +936,16 @@ public final class AePinnedPanel extends Gui {
             Transfer action = bulk ? matchingCursor ? Transfer.PICKUP : Transfer.ALL
                 : shift && button == 0 ? Transfer.STACK : button == 0 ? Transfer.PICKUP : Transfer.SPLIT;
             boolean inventoryMove = action == Transfer.ALL || action == Transfer.STACK;
-            if ((view != null || remote)
-                && (inventoryMove || matchingCursor || cursor == null && item.getStackSize() > 0)) {
+            if ((view != null || remote) && (inventoryMove || matchingCursor || cursor == null)) {
                 move(gui, view == null ? epoch : 0, entry.index, action, 0, item);
                 return;
             }
         }
-        if (view != null) view.dynamicinventory$clickPin(entry.index, button);
-        else if (remote && (remove && entry.stack != null || button == 0 && entry.stack == null && cursor != null))
-            AePinsChannel.edit(epoch, window, entry.index, remove);
+        if (remove && entry.stack != null && (view != null || remote))
+            AePinsChannel.edit(view == null ? epoch : 0, window, entry.index, true, entry.stack);
+        else if (view != null) view.dynamicinventory$clickPin(entry.index, button);
+        else if (remote && button == 0 && entry.stack == null && cursor != null)
+            AePinsChannel.edit(epoch, window, entry.index, false, AEItemStack.create(cursor));
     }
 
     private boolean transferOnWheel(GuiScreen gui, DetachedChestPanel host, Rect area, TerminalPinsView view,
@@ -930,12 +1000,20 @@ public final class AePinnedPanel extends Gui {
         if (amount == 0) return false;
         var slot = gui.inventorySlots.getSlot(slotId);
         if (!slot.func_111238_b() || PinnedItemTransfer.playerIndex(player, slot) < 0) return false;
+        if (dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.locked(slot, player)) return true;
         ItemStack stack = prediction.slot(gui, player.inventory, slot);
         if (stack == null) return false;
         for (Entry entry : entries(gui)) {
             if (!(entry.stack instanceof IAEItemStack pin) || !pin.isSameType(stack)) continue;
             if (amount < 0 && (prediction.renderPin(gui, pin)
                 .getStackSize() <= 0 || PinnedItemTransfer.scrollPullRoom(slot, stack, pin) == 0)) continue;
+            if (OpenInventoryTransfers.canScroll(
+                player,
+                gui.inventorySlots,
+                slot,
+                stack,
+                PackClientCompatibility.pinsTransferAmount(steps, true) > 0,
+                PackClientCompatibility.pinsTransferAmount(steps, false) > 0)) return false;
             move(
                 gui,
                 view == null ? epoch : 0,
@@ -964,16 +1042,26 @@ public final class AePinnedPanel extends Gui {
         lastY = y;
         Rect viewport = viewport(gui);
         List<Rect> obstacles = obstacles(gui, host);
-        if (resizing) {
-            Rect requested = new Rect(
-                gesture.x,
-                gesture.y,
-                Math.max(72, Math.min(450, gesture.width + x - pressX)),
-                Math.max(43, Math.min(450, gesture.height + y - pressY)));
-            lastBounds = InventoryPanelLayout.constrainGesture(lastBounds, requested, viewport, obstacles, 72, 43);
+        if (resizeCorner != 0) {
+            Rect requested = PinsPanelGeometry
+                .resizeFromCorner(gesture, viewport, resizeCorner, x - pressX, y - pressY, minimumHeight());
+            requested = InventoryPanelLayout.alignResize(
+                gesture,
+                requested,
+                resizeCorner,
+                viewport,
+                obstacles,
+                PinsPanelGeometry.MIN_WIDTH,
+                minimumHeight(),
+                PinsPanelGeometry.MAX_WIDTH,
+                InventoryPanelLayout.MAX_HEIGHT,
+                gap());
+            lastBounds = InventoryPanelLayout
+                .constrainGesture(lastBounds, requested, viewport, obstacles, requested.width, requested.height, gap());
         } else {
             Rect requested = new Rect(gesture.x + x - pressX, gesture.y + y - pressY, gesture.width, gesture.height);
-            InventoryPanelLayout.Alignment aligned = InventoryPanelLayout.alignDrag(requested, viewport, obstacles, 3);
+            InventoryPanelLayout.Alignment aligned = InventoryPanelLayout
+                .alignDrag(requested, viewport, obstacles, 3, gap());
             lastBounds = aligned.bounds;
             guideX = aligned.guideX;
             guideY = aligned.guideY;
@@ -983,6 +1071,7 @@ public final class AePinnedPanel extends Gui {
     private void clearGesture() {
         gesture = lastBounds = null;
         gestureScreen = null;
+        resizeCorner = 0;
         guideX = guideY = Integer.MIN_VALUE;
     }
 
@@ -1026,30 +1115,30 @@ public final class AePinnedPanel extends Gui {
             || ClientInputGuard.isPending(gui)
             || !area.contains(x, y)) return null;
         List<Entry> entries = PANEL.entries(gui);
-        Rect scrollbar = scrollTrack(area, entries.size());
+        Rect scrollbar = PANEL.scrollTrack(area, entries.size());
         if (scrollbar != null && scrollbar.contains(x, y)) return null;
         Entry entry = PANEL.entryAt(area, entries, x, y);
         return entry == null || entry.stack == null ? null : entry.stack.getItemStackForNEI();
     }
 
     private Entry entryAt(Rect area, List<Entry> entries, int x, int y) {
-        int gridX = x - area.x - PADDING, gridY = y - area.y - HEADER, columns = gridColumns(area);
+        int gridX = x - area.x - padding, gridY = y - area.y - header(), columns = gridColumns(area);
         if (gridX < 0 || gridY < 0 || gridX >= Math.min(columns(area), columns) * CELL || gridY >= rows(area) * CELL)
             return null;
         int index = (scroll + gridY / CELL) * columns + columnScroll + gridX / CELL;
         return index < entries.size() ? entries.get(index) : null;
     }
 
-    private static Rect scrollTrack(Rect area, int count) {
+    private Rect scrollTrack(Rect area, int count) {
         int rows = rows(area);
         return maxScroll(count, gridColumns(area), rows) == 0 ? null
-            : new Rect(area.right() - SCROLLBAR - 2, area.y + HEADER, SCROLLBAR, rows * CELL - 1);
+            : new Rect(area.right() - Math.max(8, padding) + 1, area.y + header(), SCROLLBAR, rows * CELL - 1);
     }
 
-    private static Rect columnTrack(Rect area) {
+    private Rect columnTrack(Rect area) {
         int visible = columns(area);
         return gridColumns(area) <= visible ? null
-            : new Rect(area.x + PADDING, area.bottom() - 5, visible * CELL - 1, 4);
+            : new Rect(area.x + padding, area.bottom() - 5 - frameCrop, visible * CELL - 1, 4);
     }
 
     private Rect scrollThumb(Rect area, Rect track, int count) {
@@ -1077,17 +1166,17 @@ public final class AePinnedPanel extends Gui {
         if (track != null) scrollTo(area, track, count, y);
     }
 
-    private static int columns(Rect area) {
-        return Math.max(1, (area.width - PADDING * 2) / CELL);
+    private int columns(Rect area) {
+        return Math.max(1, (area.width - padding - Math.max(8, padding)) / CELL);
     }
 
-    private static int gridColumns(Rect area) {
+    private int gridColumns(Rect area) {
         AePinsGrid saved = InventoryViewSettings.pinsGrid;
         return saved == null ? columns(area) : saved.columns;
     }
 
-    private static int rows(Rect area) {
-        return Math.max(1, (area.height - HEADER - 4) / CELL);
+    private int rows(Rect area) {
+        return Math.max(1, (area.height - header() - 4 - frameCrop) / CELL);
     }
 
     private static int maxScroll(int count, int columns, int rows) {

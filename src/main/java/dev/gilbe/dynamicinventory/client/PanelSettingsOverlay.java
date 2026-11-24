@@ -37,6 +37,14 @@ public final class PanelSettingsOverlay {
     }
 
     public static boolean open(GuiContainer host, DetachedChestPanel panel) {
+        return open(host, panel, false);
+    }
+
+    static boolean openPins(GuiContainer host, DetachedChestPanel panel) {
+        return open(host, panel, true);
+    }
+
+    private static boolean open(GuiContainer host, DetachedChestPanel panel, boolean pins) {
         Minecraft mc = Minecraft.getMinecraft();
         currentFor(host);
         if (active != null || mc.currentScreen != host
@@ -46,7 +54,7 @@ public final class PanelSettingsOverlay {
             || mc.thePlayer.inventory.getItemStack() != null
             || ((ContainerPanelAccess) host).dynamicinventory$draggingItems()
             || PackCompatibility.enabled() && PackClientCompatibility.neiDragging()) return false;
-        active = new View(host, panel);
+        active = new View(host, panel, pins);
         active.setWorldAndResolution(mc, host.width, host.height);
         return true;
     }
@@ -107,6 +115,7 @@ public final class PanelSettingsOverlay {
         private final Container container;
         private final List<Slot> slots;
         private final DetachedChestPanel panel;
+        private final boolean pins;
         private final int capacity;
         private final int storageCapacity;
         private final java.util.Set<Integer> excluded;
@@ -133,9 +142,10 @@ public final class PanelSettingsOverlay {
         private String status = "";
         private final List<String> groupNames = new ArrayList<>();
 
-        private View(GuiContainer host, DetachedChestPanel panel) {
+        private View(GuiContainer host, DetachedChestPanel panel, boolean pins) {
             this.host = host;
             this.panel = panel;
+            this.pins = pins;
             container = host.inventorySlots;
             slots = new ArrayList<>(container.inventorySlots);
             storageCapacity = InventoryLayout.of(Minecraft.getMinecraft().thePlayer.inventory)
@@ -145,7 +155,10 @@ public final class PanelSettingsOverlay {
             capacity = storageCapacity - excluded.size();
             global = panel == null;
             selected = panel == null ? PlayerPanelSet.MAIN : panel.selected();
-            load();
+            if (pins) {
+                page = 2;
+                draft = initialMain = PlayerPanelProfiles.pinsAppearance(panel.key());
+            } else load();
         }
 
         private void load() {
@@ -209,6 +222,19 @@ public final class PanelSettingsOverlay {
             roomy = height >= 308;
             presetRows = roomy ? 5 : 3;
             menuHeight = roomy ? 300 : 232;
+            footerY = menuHeight - 22;
+            left = (width - menuWidth) / 2;
+            top = Math.max(2, (height - menuHeight) / 2);
+            buttonList.clear();
+            int scopeWidth = (menuWidth - 20) / 2;
+            if (pins) {
+                add(21, 8, roomy ? 42 : 35, scopeWidth, "Make global default");
+                add(40, 12 + scopeWidth, roomy ? 42 : 35, scopeWidth, "Reset to global default");
+                appearanceControls();
+                add(0, 8, footerY, scopeWidth, "Cancel");
+                add(50, 12 + scopeWidth, footerY, scopeWidth, "Apply / Done");
+                return;
+            }
             int rows = roomy ? 5 : 4;
             if (rows != panelRows) panelPage = panelDraft.entries.indexOf(panelDraft.get(selected)) / rows;
             panelRows = rows;
@@ -218,13 +244,8 @@ public final class PanelSettingsOverlay {
             positionY = roomy ? 196 : 140;
             toolsY = roomy ? 224 : 160;
             layoutY = roomy ? 248 : 180;
-            footerY = menuHeight - 22;
-            left = (width - menuWidth) / 2;
-            top = Math.max(2, (height - menuHeight) / 2);
             listWidth = (menuWidth - 28) / 3;
             editorX = 20 + listWidth;
-            buttonList.clear();
-            int scopeWidth = (menuWidth - 20) / 2;
             add(21, 8, roomy ? 42 : 35, scopeWidth, "Make global default");
             ((GuiButton) buttonList.get(0)).enabled = !global && total() == capacity;
             add(40, 12 + scopeWidth, roomy ? 42 : 35, scopeWidth, "Reset to global default");
@@ -243,16 +264,7 @@ public final class PanelSettingsOverlay {
             if (page == 0) {
                 panelControls();
             } else if (page == 2) {
-                add(
-                    11,
-                    8,
-                    roomy ? 110 : 86,
-                    menuWidth - 16,
-                    "Frame: " + (draft.frameStyle < 0 ? "Follow interface" : NativePanelFrame.NAMES[draft.frameStyle]));
-                adjusters(12, roomy ? 140 : 110);
-                adjusters(14, roomy ? 168 : 134);
-                adjusters(16, roomy ? 196 : 158);
-                adjusters(18, roomy ? 224 : 182);
+                appearanceControls();
             } else if (page == 4) {
                 presetNames = PanelLayoutPresets.names();
                 presetPage = clamp(presetPage, 0, Math.max(0, (presetNames.size() - 1) / presetRows));
@@ -310,13 +322,29 @@ public final class PanelSettingsOverlay {
             add(0, 8, footerY, (menuWidth - 20) / 2, "Cancel");
             add(50, 12 + (menuWidth - 20) / 2, footerY, (menuWidth - 20) / 2, "Apply / Done");
             ((GuiButton) buttonList.get(buttonList.size() - 1)).enabled = total() == capacity;
-            if (page == 2
-                && (draft.frameStyle == 0 || draft.frameStyle < 0 && panel != null && panel.inheritedFrameStyle() == 0))
-                for (Object entry : buttonList) {
-                    GuiButton button = (GuiButton) entry;
-                    if (button.id == 12 || button.id == 13 || button.id == 16 || button.id == 17)
-                        button.enabled = false;
-                }
+        }
+
+        private void appearanceControls() {
+            add(
+                11,
+                8,
+                roomy ? 110 : 86,
+                menuWidth - 16,
+                "Frame: " + (draft.frameStyle < 0 ? "Follow interface" : NativePanelFrame.NAMES[draft.frameStyle]));
+            adjusters(12, roomy ? 140 : 110);
+            adjusters(14, roomy ? 168 : 134);
+            adjusters(16, roomy ? 196 : 158);
+            adjusters(18, roomy ? 224 : 182);
+            int style = appearanceStyle();
+            if (style == 0 || style == NativePanelFrame.SEAMLESS) for (Object entry : buttonList) {
+                GuiButton button = (GuiButton) entry;
+                if (button.id == 12 || button.id == 13 || button.id == 16 || button.id == 17) button.enabled = false;
+                if (style == NativePanelFrame.SEAMLESS && (button.id == 14 || button.id == 15)) button.enabled = false;
+            }
+        }
+
+        private int appearanceStyle() {
+            return draft.frameStyle >= 0 ? draft.frameStyle : panel == null ? 2 : panel.inheritedFrameStyle();
         }
 
         private int total() {
@@ -424,8 +452,10 @@ public final class PanelSettingsOverlay {
                         .intValueExact();
                     int ay = new java.math.BigDecimal(y).movePointRight(2)
                         .intValueExact();
-                    if (w < 26 || w > 340 || h < (PlayerPanelSet.MAIN.equals(selected) ? 60 : 40) || h > 262)
-                        throw new IllegalArgumentException();
+                    boolean main = PlayerPanelSet.MAIN.equals(selected);
+                    if (w < 26 || w > InventoryPanelLayout.maximumWidth(main)
+                        || h < (main ? 60 : 40)
+                        || h > InventoryPanelLayout.MAX_HEIGHT) throw new IllegalArgumentException();
                     draft = draft.withBounds(w, h, ax, ay);
                 } catch (IllegalArgumentException | ArithmeticException invalid) {
                     status = "Use valid pixel sizes and positions from 0-100%";
@@ -489,6 +519,20 @@ public final class PanelSettingsOverlay {
             int id = button.id;
             if (id == 0) {
                 closing = true;
+                return;
+            }
+            if (pins) {
+                if (id == 21 || id == 40 || id == 50) {
+                    try {
+                        if (id != 50 || !draft.toJson()
+                            .equals(initialMain.toJson()))
+                            PlayerPanelProfiles.savePinsAppearance(panel.key(), id == 40 ? null : draft, id == 21);
+                        closing = true;
+                    } catch (IOException failure) {
+                        status = "Could not save Pins appearance";
+                    }
+                } else if (id >= 11 && id <= 19) editAppearance(id);
+                initGui();
                 return;
             }
             if (id >= 400 && id < 532) {
@@ -621,27 +665,18 @@ public final class PanelSettingsOverlay {
             } else if (id >= 2 && id <= 9) {
                 int step = (id % 2 == 0 ? -1 : 1) * (isShiftKeyDown() ? 18 : 1);
                 int w = draft.width, h = draft.height, x = draft.anchorX, y = draft.anchorY;
-                if (id < 4) w = clamp(w + step, 26, 340);
-                else if (id < 6) h = clamp(h + step, PlayerPanelSet.MAIN.equals(selected) ? 64 : 44, 262);
+                if (id < 4)
+                    w = clamp(w + step, 26, InventoryPanelLayout.maximumWidth(PlayerPanelSet.MAIN.equals(selected)));
+                else if (id < 6) h = clamp(
+                    h + step,
+                    PlayerPanelSet.MAIN.equals(selected) ? 64 : 44,
+                    InventoryPanelLayout.MAX_HEIGHT);
                 else if (id < 8) x = clamp(x + step * 100, 0, 10000);
                 else y = clamp(y + step * 100, 0, 10000);
                 draft = draft.withBounds(w, h, x, y);
             } else if (id == 10) draft = draft.withBounds(draft.width, draft.height, 5000, 5000);
-            else if (id == 11) draft = draft.withAppearance(
-                draft.frameStyle == 2 ? -1 : draft.frameStyle + 1,
-                draft.borderWidth,
-                draft.frameCrop,
-                draft.cornerCrop);
-            else if (id >= 12 && id <= 17) {
-                int change = id % 2 == 0 ? -1 : 1;
-                draft = draft.withAppearance(
-                    draft.frameStyle < 0 ? panel == null ? 2 : panel.inheritedFrameStyle() : draft.frameStyle,
-                    id < 14 ? clamp(draft.borderWidth + change, 0, 6) : draft.borderWidth,
-                    id >= 14 && id < 16 ? clamp(draft.frameCrop + change, 0, 8) : draft.frameCrop,
-                    id >= 16 ? clamp(draft.cornerCrop + change, 0, 8) : draft.cornerCrop);
-            } else if (id == 18 || id == 19) {
-                draft = draft.withMinimumMargin(clamp(draft.minimumMargin + (id == 18 ? -1 : 1), 4, 18));
-            } else if (id == 43) {
+            else if (id >= 11 && id <= 19) editAppearance(id);
+            else if (id == 43) {
                 try {
                     Map<String, Integer> found = new TreeMap<>(NativeLayoutPatches.groups());
                     found.putAll(PlayerPanelProfiles.groups());
@@ -683,6 +718,22 @@ public final class PanelSettingsOverlay {
             }
             if (PlayerPanelSet.MAIN.equals(selected)) mainDraft = draft;
             initGui();
+        }
+
+        private void editAppearance(int id) {
+            if (id == 11) {
+                int style = draft.frameStyle == NativePanelFrame.SEAMLESS ? -1 : draft.frameStyle + 1;
+                draft = draft.withAppearance(style, draft.borderWidth, draft.frameCrop, draft.cornerCrop);
+                if (!pins && PlayerPanelSet.MAIN.equals(selected) && style == NativePanelFrame.SEAMLESS)
+                    draft = draft.detached(true);
+            } else if (id <= 17) {
+                int change = id % 2 == 0 ? -1 : 1;
+                draft = draft.withAppearance(
+                    appearanceStyle(),
+                    id < 14 ? clamp(draft.borderWidth + change, 0, 6) : draft.borderWidth,
+                    id >= 14 && id < 16 ? clamp(draft.frameCrop + change, 0, 8) : draft.frameCrop,
+                    id >= 16 ? clamp(draft.cornerCrop + change, 0, 8) : draft.cornerCrop);
+            } else draft = draft.withMinimumMargin(clamp(draft.minimumMargin + (id == 18 ? -1 : 1), 4, 18));
         }
 
         private PlayerPanelSet allocation() {
@@ -765,10 +816,14 @@ public final class PanelSettingsOverlay {
             GL11.glDisable(GL11.GL_DEPTH_TEST);
             InventoryGuiTheme theme = InventoryGuiTheme.get();
             drawRect(0, 0, width, height, 0x99000000);
-            drawRect(left - 2, top - 2, left + menuWidth + 2, top + menuHeight + 2, theme.settingsOuter);
-            drawRect(left, top, left + menuWidth, top + menuHeight, theme.settingsFill);
-            drawCenteredString(fontRendererObj, "Inventory panels", width / 2, top + 7, theme.settingsText);
+            NativePanelFrame.drawSettingsFrame(left - 2, top - 2, menuWidth + 4, menuHeight + 4);
             drawCenteredString(
+                fontRendererObj,
+                pins ? "AE2 Pins Appearance" : "Inventory panels",
+                width / 2,
+                top + 7,
+                theme.settingsText);
+            if (!pins) drawCenteredString(
                 fontRendererObj,
                 total() + " / " + capacity + " slots | Main keeps remaining slots",
                 width / 2,

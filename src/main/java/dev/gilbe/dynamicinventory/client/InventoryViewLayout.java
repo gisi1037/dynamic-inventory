@@ -21,7 +21,9 @@ public final class InventoryViewLayout {
     public InventoryViewLayout(int screenWidth, int screenHeight, int preferredColumns, int preferredRows,
         int storageSlots) {
         if (storageSlots < 1) throw new IllegalArgumentException("storage slots");
-        columns = Math.max(3, Math.min(Math.min(18, preferredColumns), (screenWidth - 42) / 18));
+        columns = Math.max(
+            3,
+            Math.min(Math.min(InventoryPanelLayout.MAX_MAIN_COLUMNS, preferredColumns), (screenWidth - 42) / 18));
         totalRows = (storageSlots + columns - 1) / columns;
         visibleRows = Math.max(1, Math.min(Math.min(totalRows, preferredRows), (screenHeight - 132) / 18));
         boolean scroll = totalRows > visibleRows;

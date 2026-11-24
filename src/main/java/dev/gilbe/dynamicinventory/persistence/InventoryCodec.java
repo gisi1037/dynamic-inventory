@@ -289,11 +289,14 @@ public final class InventoryCodec {
         NBTTagList retained = new NBTTagList();
         for (int i = 0; i < records.tagCount(); i++) {
             NBTTagCompound record = records.getCompoundTagAt(i);
+            if (!"capacity".equals(record.getString("origin")) || !record.hasKey("entry", 10)) {
+                retained.appendTag(record.copy());
+                continue;
+            }
             NBTTagCompound entry = record.getCompoundTag("entry");
             int index = entry.getInteger("Slot");
-            ItemStack stack = "capacity".equals(record.getString("origin")) && entry.hasKey("Slot", 3)
-                && InventoryLayout.of(inventory)
-                    .isExtra(index) ? decode(entry) : null;
+            ItemStack stack = entry.hasKey("Slot", 3) && InventoryLayout.of(inventory)
+                .isExtra(index) ? decode(entry) : null;
             if (stack != null && inventory.mainInventory[InventoryLayout.of(inventory)
                 .rawIndex(index)] == null)
                 inventory.mainInventory[InventoryLayout.of(inventory)

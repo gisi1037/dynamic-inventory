@@ -20,9 +20,10 @@ import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import io.netty.buffer.ByteBuf;
 
-/** Network threads queue bounded requests; inventory swaps happen only on the server's player END tick. */
+/** Bounded hotbar requests are committed on the game thread before the next ordered play packet. */
 public final class HotbarRequest implements IMessage {
 
+    public static final String CHANNEL = "dinv-hotbars";
     private static final Map<EntityPlayerMP, java.util.Deque<HotbarRequest>> PENDING = new WeakHashMap<>();
     private static final Map<EntityPlayerMP, int[]> SENT = new WeakHashMap<>();
     private static final Map<EntityPlayerMP, Long> SENT_REVISION = new WeakHashMap<>();
@@ -41,7 +42,7 @@ public final class HotbarRequest implements IMessage {
     }
 
     public static void initialize() {
-        channel = NetworkRegistry.INSTANCE.newSimpleChannel("dinv-hotbars");
+        channel = NetworkRegistry.INSTANCE.newSimpleChannel(CHANNEL);
         channel.registerMessage(ServerHandler.class, HotbarRequest.class, 0, Side.SERVER);
         channel.registerMessage(ClientHandler.class, HotbarRequest.class, 1, Side.CLIENT);
         channel.registerMessage(HotbarSwapReply.Handler.class, HotbarSwapReply.class, 2, Side.CLIENT);
@@ -136,52 +137,60 @@ public final class HotbarRequest implements IMessage {
         }
     }
 
+    public static void applyPending(EntityPlayerMP player) {
+        java.util.Deque<HotbarRequest> requests;
+        synchronized (PENDING) {
+            requests = PENDING.remove(player);
+        }
+        if (requests == null) return;
+        boolean configured = false;
+        HotbarRequest acknowledgement = null;
+        for (HotbarRequest request : requests) {
+            if (request.revision == InventoryLayout.of(player.inventory)
+                .revision()) {
+                try {
+                    if (request.operation == 0) HotbarBanks.configure(player, request.slots);
+                    else if (request.operation == 1) HotbarBanks.swap(player, request.value);
+                } catch (IllegalArgumentException | IllegalStateException refused) {
+                    player.addChatMessage(new ChatComponentText("Hotbars: " + refused.getMessage()));
+                }
+            }
+            configured |= request.operation != 1;
+            if (request.sequence > 0) acknowledgement = request;
+        }
+        // Acknowledge through the latest processed sequence, including refused swaps.
+        if (acknowledgement != null) channel.sendTo(HotbarSwapReply.capture(player, acknowledgement.sequence), player);
+        if (configured) synchronizeSlots(player, true);
+    }
+
+    private static void synchronizeSlots(EntityPlayerMP player, boolean configured) {
+        int[] slots = HotbarBanks.slots(player);
+        long revision = InventoryLayout.of(player.inventory)
+            .revision();
+        if (configured || !java.util.Arrays.equals(slots, SENT.get(player))
+            || !Long.valueOf(revision)
+                .equals(SENT_REVISION.get(player))) {
+            SENT.put(player, slots.clone());
+            SENT_REVISION.put(player, revision);
+            HotbarRequest state = new HotbarRequest(
+                2,
+                slots.length / 9,
+                InventoryLayout.of(player.inventory)
+                    .revision());
+            state.slots = slots;
+            channel.sendTo(state, player);
+            channel.sendTo(new HotbarRequest(3, HotbarBanks.next(player), state.revision), player);
+        }
+    }
+
     public static final class Events {
 
         @SubscribeEvent
         public void tick(TickEvent.PlayerTickEvent event) {
             if (event.phase != TickEvent.Phase.END || !(event.player instanceof EntityPlayerMP player)
                 || player.playerNetServerHandler == null) return;
-            java.util.Deque<HotbarRequest> requests;
-            synchronized (PENDING) {
-                requests = PENDING.remove(player);
-            }
-            boolean configured = false;
-            HotbarRequest acknowledgement = null;
-            if (requests != null) for (HotbarRequest request : requests) {
-                if (request.revision == InventoryLayout.of(player.inventory)
-                    .revision()) {
-                    try {
-                        if (request.operation == 0) HotbarBanks.configure(player, request.slots);
-                        else if (request.operation == 1) HotbarBanks.swap(player, request.value);
-                    } catch (IllegalArgumentException | IllegalStateException refused) {
-                        player.addChatMessage(new ChatComponentText("Hotbars: " + refused.getMessage()));
-                    }
-                }
-                configured |= request.operation != 1;
-                if (request.sequence > 0) acknowledgement = request;
-            }
-            // One snapshot acknowledges the entire ordered tick batch, including any refusals.
-            if (acknowledgement != null)
-                channel.sendTo(HotbarSwapReply.capture(player, acknowledgement.sequence), player);
-            int[] slots = HotbarBanks.slots(player);
-            long revision = InventoryLayout.of(player.inventory)
-                .revision();
-            if (configured || !java.util.Arrays.equals(slots, SENT.get(player))
-                || !Long.valueOf(revision)
-                    .equals(SENT_REVISION.get(player))) {
-                SENT.put(player, slots.clone());
-                SENT_REVISION.put(player, revision);
-                HotbarBanks.receive(player, slots);
-                HotbarRequest state = new HotbarRequest(
-                    2,
-                    slots.length / 9,
-                    InventoryLayout.of(player.inventory)
-                        .revision());
-                state.slots = slots;
-                channel.sendTo(state, player);
-                channel.sendTo(new HotbarRequest(3, HotbarBanks.next(player), state.revision), player);
-            }
+            applyPending(player);
+            synchronizeSlots(player, false);
         }
     }
 }

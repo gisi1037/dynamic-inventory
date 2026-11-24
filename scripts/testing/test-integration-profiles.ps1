@@ -25,7 +25,9 @@ $cases=@(
     @('rc2-backhand','2.9.0-RC-2','1.8.16','false','true'),
     @('rc2-integration','2.9.0-RC-2','1.8.16','true','true'),
     @('daily-2026-10-19','2.9.0-nightly-2026-10-19','1.8.17','true','true'),
-    @('daily-2026-10-27-803','daily-2026-10-27+803','1.8.17','true','true'))
+    @('daily-2026-10-27-803','daily-2026-10-27+803','1.8.17','true','true'),
+    @('gtnh-2.9.0','2.9.0','1.8.18','true','true'),
+    @('gtnh-2.9.1','2.9.1','1.8.18','true','true'))
 foreach($case in $cases){
     & $runtime.Java "-Ddynamicinventory.profile=$($case[0])" -cp $classes `
         dev.gilbe.dynamicinventory.qualification.IntegrationProfileFixtures @case
@@ -76,7 +78,9 @@ Copy-Item src/main/resources/integration-profiles.properties $guardClasses -Forc
 $guardCases=@(
     @('rc2-integration','1.9.6-GTNH','2.9.84','1.12.22-GTNH','6.1.13','2.6.60-GTNH'),
     @('daily-2026-10-19','1.9.6-GTNH','2.9.93','1.12.22-GTNH','6.1.13','2.6.64-GTNH'),
-    @('daily-2026-10-27-803','1.9.6-GTNH','2.9.98','1.12.22-GTNH','6.1.13','2.6.64-GTNH'))
+    @('daily-2026-10-27-803','1.9.6-GTNH','2.9.98','1.12.22-GTNH','6.1.13','2.6.64-GTNH'),
+    @('gtnh-2.9.0','1.9.6-GTNH','2.9.99','1.12.22-GTNH','6.1.13','2.6.65-GTNH'),
+    @('gtnh-2.9.1','1.9.7-GTNH','2.9.105','1.12.24-GTNH','6.1.13','2.6.66-GTNH'))
 foreach($case in $guardCases){
     & $runtime.Java "-Ddynamicinventory.profile=$($case[0])" -cp $guardClasses `
         dev.gilbe.dynamicinventory.qualification.PackCompatibilityFixtures $case[1] $case[2] $case[3] $case[4] $case[5]
@@ -90,16 +94,18 @@ if($LaunchManifest){
     if(!$launch.offlineOnly -or [string]$launch.classpath -notlike "*$projectRoot*"){
         throw 'Expected this workspace offline fixture classpath'
     }
-    foreach($profile in @('rc2-integration','daily-2026-10-19','daily-2026-10-27-803')){
+    foreach($profile in @('rc2-integration','daily-2026-10-19','daily-2026-10-27-803','gtnh-2.9.0','gtnh-2.9.1')){
         & $runtime.Java "-Ddynamicinventory.profile=$profile" -cp $launch.classpath `
             dev.gilbe.dynamicinventory.qualification.EarlyNetworkFixtures
         if($LASTEXITCODE -ne 0){throw "Early network checks failed: $profile"}
         $networkAssertions+=7
     }
 }
-@{success=$true;checks=142;profiles=@($cases|ForEach-Object{$_[0]});java8Compiled=$true;
-    optionalPackVersionAssertions=75;
+$selectionAssertions = 11 * $cases.Count + 1
+$optionalAssertions = 25 * $guardCases.Count
+@{success=$true;checks=($selectionAssertions+$optionalAssertions+$networkAssertions);profiles=@($cases|ForEach-Object{$_[0]});java8Compiled=$true;
+    optionalPackVersionAssertions=$optionalAssertions;
     earlyNetworkAssertions=$networkAssertions;
     pinsSha256=(Get-FileHash src/main/resources/integration-profiles.properties).Hash;
     capturedAtUtc=[datetime]::UtcNow.ToString('o')} | ConvertTo-Json | Set-Content $report
-Write-Host 'PASS: 67 early profile-selection and 75 optional pack-version checks'
+Write-Host "PASS: $selectionAssertions early profile-selection and $optionalAssertions optional pack-version checks"

@@ -25,6 +25,6 @@ public abstract class NativeMergeMixin extends Container {
         int[] ids = region.destinations(start, end, reverse);
         if (ids == null)
             ids = dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.nativeRange(this, start, end, reverse);
-        if (ids != null) cir.setReturnValue(PlayerInventoryTransfers.merge(this, stack, ids));
+        if (ids != null) cir.setReturnValue(PlayerInventoryTransfers.mergeToPlayer(this, stack, ids));
     }
 }

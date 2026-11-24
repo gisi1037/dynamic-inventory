@@ -8,6 +8,7 @@ import com.gtnewhorizons.modularui.api.forge.PlayerMainInvWrapper;
 
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 /** Native handler type is retained for framework transfer/sorting classification; logical indices skip Backhand. */
 public final class Mui1PlayerInventory extends PlayerMainInvWrapper {
@@ -38,11 +39,13 @@ public final class Mui1PlayerInventory extends PlayerMainInvWrapper {
 
     @Override
     public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+        if (InventorySlotLocks.contains(getInventoryPlayer().player, slot)) return stack;
         return canonical.insertItem(shape.rawIndex(slot), stack, simulate);
     }
 
     @Override
     public ItemStack extractItem(int slot, int amount, boolean simulate) {
+        if (InventorySlotLocks.contains(getInventoryPlayer().player, slot)) return null;
         return canonical.extractItem(shape.rawIndex(slot), amount, simulate);
     }
 
@@ -53,7 +56,8 @@ public final class Mui1PlayerInventory extends PlayerMainInvWrapper {
 
     @Override
     public boolean isItemValid(int slot, ItemStack stack) {
-        return canonical.isItemValid(shape.rawIndex(slot), stack);
+        return !InventorySlotLocks.contains(getInventoryPlayer().player, slot)
+            && canonical.isItemValid(shape.rawIndex(slot), stack);
     }
 
     @Override

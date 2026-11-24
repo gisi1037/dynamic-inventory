@@ -16,10 +16,13 @@ public final class BuiltinInventoryUiAdapters {
         if (Loader.isModLoaded("GalacticraftCore")) GalacticraftCompatibility.registerInventoryAdapters();
         if (Loader.isModLoaded("IronChest")) IronChestCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("Forestry")) ForestryCompatibility.registerInventoryAdapters();
+        if (OptionalInventoryAdapters.reviewedVersion("Railcraft")) RailcraftCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.profileVersion("appliedenergistics2", "Applied-Energistics-2-Unofficial")) {
             AppliedEnergisticsCompatibility.registerInventoryAdapters();
             if (OptionalInventoryAdapters.reviewedVersion("ae2fc"))
                 Ae2FluidCraftingCompatibility.registerInventoryAdapters();
+            if (ThaumicEnergisticsCompatibility.supportedVersion())
+                ThaumicEnergisticsCompatibility.registerInventoryAdapters();
         }
         if (Loader.isModLoaded("etfuturum")) EtFuturumCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("EnderIO")

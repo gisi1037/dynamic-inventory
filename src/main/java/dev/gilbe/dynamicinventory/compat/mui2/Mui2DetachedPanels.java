@@ -28,11 +28,14 @@ import com.cleanroommc.modularui.widget.sizer.Area;
 import com.cleanroommc.modularui.widgets.TextWidget;
 import com.cleanroommc.modularui.widgets.slot.ItemSlot;
 
+import dev.gilbe.dynamicinventory.client.AePinnedPanel;
 import dev.gilbe.dynamicinventory.client.ContainerPanelAccess;
 import dev.gilbe.dynamicinventory.client.DetachedChestPanel;
+import dev.gilbe.dynamicinventory.client.HotbarBankPanel;
 import dev.gilbe.dynamicinventory.client.InventoryPanelLayout.Rect;
 import dev.gilbe.dynamicinventory.client.PanelSettingsOverlay;
 import dev.gilbe.dynamicinventory.client.PlayerPanelProfiles;
+import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 import dev.gilbe.dynamicinventory.mixins.modularui2.Mui2PanelHoverAccess;
@@ -55,6 +58,7 @@ public final class Mui2DetachedPanels {
     private int verticalShift;
     private boolean centered;
     private boolean updating;
+    private boolean coverProjected;
     private boolean hoverCurrent;
     private int hoverX, hoverY;
 
@@ -102,11 +106,16 @@ public final class Mui2DetachedPanels {
         slotIds = null;
         verticalShift = 0;
         centered = false;
+        coverProjected = false;
         hoverCurrent = false;
     }
 
     /** Called after native resizing, before hover calculation, rendering and mouse dispatch. */
     public void update(ModularScreen screen) {
+        update(screen, false);
+    }
+
+    private void update(ModularScreen screen, boolean drawFrame) {
         if (updating || screen.isOverlay()
             || screen.getScreenWrapper() == null
             || !(screen.getScreenWrapper()
@@ -150,6 +159,7 @@ public final class Mui2DetachedPanels {
                     profileKey);
                 ((ContainerPanelAccess) host).dynamicinventory$floating(controller);
             }
+            long previousRevision = controller.revision();
             if (controller.displayedProfile(dev.gilbe.dynamicinventory.client.PlayerPanelSet.MAIN).detached)
                 compactMachineSiblings();
             Rect machine = machineBounds(), attached = attachedBounds();
@@ -170,7 +180,7 @@ public final class Mui2DetachedPanels {
             }
             group.setDetachedPresentation(detached);
             if (detached) {
-                if (verticalShift != 0) translateOwner(verticalShift);
+                if (verticalShift != 0) translatePanel(owner, 0, verticalShift);
                 machine = controller.machineBounds();
                 remember(owner);
                 owner.getArea().height = machine.height;
@@ -190,8 +200,10 @@ public final class Mui2DetachedPanels {
                         .getArea());
             if (detached) {
                 // Native slots receive display coordinates only; their IDs and enabled state are untouched.
+                if (drawFrame) controller.updateDragFrame();
+                if (controller.revision() != previousRevision) invalidateHover();
                 controller.position();
-                dev.gilbe.dynamicinventory.client.HotbarBankPanel.layout(host);
+                HotbarBankPanel.layout(host);
                 ContainerPanelAccess access = (ContainerPanelAccess) host;
                 for (ItemSlot widget : widgets) {
                     Slot slot = widget.getSlot();
@@ -202,21 +214,71 @@ public final class Mui2DetachedPanels {
                 }
             }
             controller.attachedControl(controlBounds(screen, machine));
+            coverProjected = positionCoverPopups(screen, auxiliary);
         } finally {
             updating = false;
         }
     }
 
-    private void translateOwner(int by) {
+    private void translatePanel(ModularPanel panel, int dx, int dy) {
         ArrayDeque<IWidget> pending = new ArrayDeque<>();
-        pending.add(owner);
+        pending.add(panel);
         while (!pending.isEmpty()) {
             IWidget widget = pending.removeFirst();
             remember(widget);
-            widget.getArea().y += by;
-            if (widget == owner) widget.getArea().ry += by;
+            Area area = widget.getArea();
+            area.x += dx;
+            area.y += dy;
+            if (widget == panel) {
+                area.rx += dx;
+                area.ry += dy;
+            }
             pending.addAll(widget.getChildren());
         }
+    }
+
+    private boolean positionCoverPopups(ModularScreen screen, List<Rect> auxiliary) {
+        boolean projected = false;
+        List<Rect> nativePanels = null;
+        List<Rect> playerPanels = null;
+        Rect pins = null;
+        Rect inventory = controller.playerBounds();
+        Rect viewport = new Rect(2, 2, screenWidth - 4, screenHeight - 4);
+        for (ModularPanel panel : screen.getPanelManager()
+            .getOpenPanels()) {
+            if (!isCoverPopup(panel)) continue;
+            Area area = panel.getArea();
+            if (area.width <= 0 || area.height <= 0) continue;
+            if (nativePanels == null) {
+                nativePanels = new ArrayList<>(auxiliary);
+                Area frame = owner.getArea();
+                int overhang = ResponsiveInventoryPanel.topOverhang(owner);
+                nativePanels.add(new Rect(frame.x, frame.y - overhang, frame.width, frame.height + overhang));
+                playerPanels = controller.bounds();
+                if (!controller.detached()) playerPanels.add(inventory);
+                Rect hotbar = controller.detached() ? HotbarBankPanel.bounds(host) : null;
+                if (hotbar != null) playerPanels.add(hotbar);
+                if (PackCompatibility.aePinnedPanel()) pins = AePinnedPanel.layoutBounds(host, controller);
+            }
+            Rect position = Mui2CoverPopup.position(
+                new Rect(area.x, area.y, area.width, area.height),
+                viewport,
+                inventory,
+                playerPanels,
+                nativePanels,
+                pins);
+            nativePanels.add(position);
+            int dx = position.x - area.x, dy = position.y - area.y;
+            if (dx != 0 || dy != 0) {
+                translatePanel(panel, dx, dy);
+                projected = true;
+            }
+        }
+        return projected;
+    }
+
+    private boolean isCoverPopup(ModularPanel panel) {
+        return panel != owner && !panel.isMainPanel() && Mui2CoverPopup.isWirelessController(panel.getName());
     }
 
     private PlayerInventoryWidgetGroup findGroup(ModularScreen screen) {
@@ -349,7 +411,7 @@ public final class Mui2DetachedPanels {
     private List<Rect> auxiliary(ModularScreen screen) {
         List<Rect> result = new ArrayList<>();
         for (ModularPanel panel : screen.getPanelManager()
-            .getOpenPanels()) if (panel != owner) {
+            .getOpenPanels()) if (panel != owner && !isCoverPopup(panel)) {
                 Area area = panel.getArea();
                 result.add(new Rect(area.x, area.y, area.width, area.height));
             }
@@ -414,13 +476,11 @@ public final class Mui2DetachedPanels {
     }
 
     public void drawBackground(ModularScreen screen) {
-        update(screen);
+        update(screen, true);
         if (controller == null) return;
-        controller.updateDragFrame();
         if (controller.detached()) {
             java.util.function.Consumer<Rect> frame = bounds -> Mui2PanelFrame.draw(owner, screen.getContext(), bounds);
             controller.drawPanels(false, frame);
-            update(screen);
             dev.gilbe.dynamicinventory.client.HotbarBankPanel
                 .drawFramework(host, frame, Mui2PanelFrame.textColor(owner));
         }
@@ -430,7 +490,7 @@ public final class Mui2DetachedPanels {
     }
 
     public void rememberHover(ModularScreen screen) {
-        if (!hasDetachedLayout()) return;
+        if (!hasProjectedLayout()) return;
         var context = screen.getContext();
         hoverX = context.getAbsMouseX();
         hoverY = context.getAbsMouseY();
@@ -438,7 +498,7 @@ public final class Mui2DetachedPanels {
     }
 
     public void refreshHover(ModularScreen screen, int x, int y) {
-        if (!hasDetachedLayout() || hoverCurrent && hoverX == x && hoverY == y) return;
+        if (!hasProjectedLayout() || hoverCurrent && hoverX == x && hoverY == y) return;
         var context = screen.getContext();
         context.updateState(x, y, context.getPartialTicks());
         rebuildHover(screen);
@@ -447,15 +507,15 @@ public final class Mui2DetachedPanels {
     }
 
     public void rebuildHover(ModularScreen screen) {
-        if (!hasDetachedLayout()) return;
+        if (!hasProjectedLayout()) return;
         // ModularPanel gathers candidates in a frame listener, before ModularGuiContext resolves hover.
         // Its original candidates were measured while the widgets still had their attached bounds.
         for (ModularPanel panel : screen.getPanelManager()
             .getOpenPanels()) ((Mui2PanelHoverAccess) panel).dynamicinventory$findHoveredWidgets();
     }
 
-    private boolean hasDetachedLayout() {
-        return controller != null && controller.detached();
+    private boolean hasProjectedLayout() {
+        return controller != null && (controller.detached() || coverProjected);
     }
 
     public void invalidateHover() {
@@ -479,9 +539,9 @@ public final class Mui2DetachedPanels {
     }
 
     public void drawPins(ModularScreen screen) {
-        if (controller == null || !dev.gilbe.dynamicinventory.compat.PackCompatibility.aePinnedPanel()) return;
+        if (controller == null || !PackCompatibility.aePinnedPanel()) return;
         var context = screen.getContext();
-        dev.gilbe.dynamicinventory.client.AePinnedPanel.draw(host, context.getAbsMouseX(), context.getAbsMouseY());
+        AePinnedPanel.draw(host, context.getAbsMouseX(), context.getAbsMouseY());
     }
 
     public static String profileKey(ModularScreen screen) {

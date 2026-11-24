@@ -16,6 +16,7 @@ public final class InventoryViewSettings {
     public static boolean automaticStorageScroll = true;
     public static boolean centerLastRow = true;
     public static boolean hotbarPanelVisible = false;
+    static int slotLockMouseButton;
     static int hotbarPanelColumns = 9;
     static int hotbarPanelRows = HotbarBanks.MAX_BANKS;
     static int hotbarPanelX = -1, hotbarPanelY = -1;
@@ -41,6 +42,13 @@ public final class InventoryViewSettings {
 
     public static void initialize(File file) {
         configuration = new Configuration(file);
+        slotLockMouseButton = configuration.getInt(
+            "mouseButton",
+            "slotLock",
+            0,
+            0,
+            2,
+            "Mouse button used with Alt+Shift to toggle a slot lock. 0=left, 1=right, 2=middle.");
         legacyPinsGeometry = new PinsPanelGeometry(
             new InventoryPanelLayout.Rect(
                 configuration.getInt("x", "ae2Pins", -1, -1, 10000, "Legacy pinned panel horizontal position."),
@@ -84,14 +92,14 @@ public final class InventoryViewSettings {
             "layout",
             DEFAULT_COLUMNS,
             3,
-            18,
+            InventoryPanelLayout.MAX_MAIN_COLUMNS,
             "Preferred storage columns; automatically limited to fit the scaled window.");
         rows = configuration.getInt(
             "visibleRows",
             "layout",
             DEFAULT_ROWS,
             1,
-            12,
+            InventoryPanelLayout.MAX_ROWS,
             "Preferred visible storage rows; remaining rows scroll. Does not change capacity.");
         // Retire superseded preferences without carrying their old behavior into panel layouts.
         configuration.getCategory("layout")
@@ -191,8 +199,8 @@ public final class InventoryViewSettings {
     }
 
     public static void set(int preferredColumns, int preferredRows) {
-        columns = Math.max(3, Math.min(18, preferredColumns));
-        rows = Math.max(1, Math.min(12, preferredRows));
+        columns = Math.max(3, Math.min(InventoryPanelLayout.MAX_MAIN_COLUMNS, preferredColumns));
+        rows = Math.max(1, Math.min(InventoryPanelLayout.MAX_ROWS, preferredRows));
         if (configuration != null) {
             configuration.get("layout", "columns", DEFAULT_COLUMNS)
                 .set(columns);

@@ -59,9 +59,11 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
                 "minecraft.EntityPlayerMixin",
                 "minecraft.ContainerPlayerMixin",
                 "minecraft.SlotInventoryAccess",
+                "minecraft.SlotLockMixin",
                 "minecraft.ContainerRegionMixin",
                 "minecraft.RegisteredInventoryClickMixin",
                 "minecraft.InventoryOpeningServerMixin",
+                "minecraft.HotbarPacketOrderMixin",
                 "minecraft.WindowPacketMixins$Contents",
                 "minecraft.WindowPacketMixins$Slot",
                 "minecraft.WindowPacketMixins$Property",
@@ -72,6 +74,7 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
                 "minecraft.VanillaMerchantOpeningMixin"));
         boolean nei = getClass().getClassLoader()
             .getResource("codechicken/nei/asm/NEICorePlugin.class") != null;
+        if (backhand && BackhandCompatibility.enabled()) mixins.add("backhand.OffhandLockMixin");
         // ItemStack is loaded before late mod mixins. The hook itself links Baubles only on item use.
         if (dev.gilbe.dynamicinventory.compat.IntegrationProfile.selected()
             .usesPackAdapters()

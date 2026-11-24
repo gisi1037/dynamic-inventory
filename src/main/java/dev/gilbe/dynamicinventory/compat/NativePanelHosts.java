@@ -14,22 +14,7 @@ public final class NativePanelHosts {
             "com.dreammaster.modbabychest.GuiBabyChest" },
         { "dynamicinventory:discovered/guicompressedchest",
             "wanion.avaritiaddons.block.chest.compressed.ContainerCompressedChest",
-            "wanion.avaritiaddons.block.chest.compressed.GuiCompressedChest" },
-        { "dynamicinventory:harvestcraft/churn", "com.pam.harvestcraft.ContainerChurn",
-            "com.pam.harvestcraft.GuiChurn" },
-        { "dynamicinventory:harvestcraft/oven", "com.pam.harvestcraft.ContainerOven", "com.pam.harvestcraft.GuiOven" },
-        { "dynamicinventory:harvestcraft/quern", "com.pam.harvestcraft.ContainerQuern",
-            "com.pam.harvestcraft.GuiQuern" },
-        { "dynamicinventory:harvestcraft/animal-trap", "com.pam.harvestcraft.ContainerPamAnimalTrap",
-            "com.pam.harvestcraft.GuiPamAnimalTrap" },
-        { "dynamicinventory:harvestcraft/fish-trap", "com.pam.harvestcraft.ContainerPamFishTrap",
-            "com.pam.harvestcraft.GuiPamFishTrap" },
-        { "dynamicinventory:harvestcraft/apiary", "com.pam.harvestcraft.ContainerPamApiary",
-            "com.pam.harvestcraft.GuiPamApiary" },
-        { "dynamicinventory:harvestcraft/grinder", "com.pam.harvestcraft.ContainerPamGrinder",
-            "com.pam.harvestcraft.GuiPamGrinder" },
-        { "dynamicinventory:harvestcraft/presser", "com.pam.harvestcraft.ContainerPamPresser",
-            "com.pam.harvestcraft.GuiPamPresser" } };
+            "wanion.avaritiaddons.block.chest.compressed.GuiCompressedChest" } };
 
     private NativePanelHosts() {}
 
@@ -51,6 +36,7 @@ public final class NativePanelHosts {
                 .getName())
             && (adapter.matchesGuiClass(screen) || EtFuturumCompatibility.alternateScreen(adapter, screen.getName())
                 || EnderIoCompatibility.alternateScreen(adapter, screen.getName())
+                || ForestryCompatibility.alternateScreen(adapter, screen.getName())
                 || Ae2FluidCraftingCompatibility.alternateScreen(adapter, screen.getName()));
     }
 
@@ -59,12 +45,17 @@ public final class NativePanelHosts {
     private static boolean reviewedAdapter(InventoryUiAdapter adapter, String container) {
         if (adapter == null || adapter.isIncludingSubclasses() || adapter.getCompatibilityRevision() < 2) return false;
         if (AppliedEnergisticsCompatibility.panelHost(adapter, container)
-            || Ae2FluidCraftingCompatibility.panelHost(adapter, container)) return true;
+            || Ae2FluidCraftingCompatibility.panelHost(adapter, container)
+            || ThaumicEnergisticsCompatibility.panelHost(adapter, container)) return true;
         if (EtFuturumCompatibility.panelHost(adapter, container) || EnderIoCompatibility.panelHost(adapter, container)
             || ExtraUtilitiesCompatibility.panelHost(adapter, container)
             || DraconicEvolutionCompatibility.panelHost(adapter, container)
             || ThaumcraftCompatibility.panelHost(adapter, container)
-            || BackpackCompatibility.panelHost(adapter, container)) return true;
+            || ForestryCompatibility.panelHost(adapter, container)
+            || RailcraftCompatibility.panelHost(adapter, container)
+            || BackpackCompatibility.panelHost(adapter, container)
+            || HarvestCraftCompatibility.panelHost(adapter, container)
+            || GalacticraftCompatibility.panelHost(adapter, container)) return true;
         for (String[] host : HOSTS) if (host[0].equals(adapter.getId()) && host[1].equals(container)
             && host[1].equals(adapter.getContainerClassName())
             && host[2].equals(adapter.getGuiClassName())) return true;

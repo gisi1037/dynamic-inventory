@@ -217,7 +217,10 @@ public final class HotbarBankFixtures {
                     throw new AssertionError("oversized reservation accepted");
                 } catch (IllegalArgumentException expected) {}
                 inventory.shape = new InventoryShape(216, offhand, 2);
-                if (count == 2) prediction(player, inventory, item);
+                if (count == 2) {
+                    partialRowShrink(player, inventory);
+                    prediction(player, inventory, item);
+                }
                 HotbarBanks.configure(player, 0);
                 dev.gilbe.dynamicinventory.client.PlayerPanelSet panels = dev.gilbe.dynamicinventory.client.PlayerPanelSet.DEFAULT
                     .add();
@@ -262,6 +265,28 @@ public final class HotbarBankFixtures {
                 + " direct/cycle identity checks plus prediction/reconciliation, reservation, full-range offhand safety, cursor refusal and merge exclusion");
     }
 
+    private static void partialRowShrink(Player player, Inventory inventory) {
+        InventoryShape original = inventory.shape;
+        int[] saved = java.util.stream.IntStream.range(0, 18)
+            .map(i -> 71 - i)
+            .toArray();
+        inventory.shape = original.resized(72);
+        HotbarBanks.configure(player, saved);
+        inventory.shape = inventory.shape.resized(71);
+        int[] usable = java.util.Arrays.copyOfRange(saved, 9, 18);
+        check(
+            java.util.Arrays.equals(usable, HotbarBanks.slots(player)),
+            "An incomplete row cannot borrow other rows' cells");
+        inventory.shape = inventory.shape.resized(72);
+        check(java.util.Arrays.equals(saved, HotbarBanks.slots(player)), "Growing restores both saved rows in order");
+        inventory.shape = inventory.shape.resized(71);
+        HotbarBanks.configure(player, new int[0]);
+        inventory.shape = original;
+        check(
+            java.util.Arrays.equals(java.util.Arrays.copyOf(saved, 9), HotbarBanks.slots(player)),
+            "Removing an available row preserves the dormant row");
+    }
+
     private static void prediction(Player player, Inventory inventory, Item item) throws Exception {
         long revision = inventory.shape.revision();
         Field access = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
@@ -301,6 +326,36 @@ public final class HotbarBankFixtures {
         }
         int[] slots = { 27, 0, 28, 100, 215, 5, 7, 12, 14, 200, 1, 29, 101, 214, 6, 8, 13, 15 };
         HotbarBanks.configure(player, slots);
+        // Simulate Forge dispatch of a swap followed immediately by a vanilla action on the current slot.
+        dev.gilbe.dynamicinventory.network.HotbarRequest ordered = new dev.gilbe.dynamicinventory.network.HotbarRequest();
+        ordered.fromBytes(
+            io.netty.buffer.Unpooled.buffer()
+                .writeInt(1)
+                .writeInt(0)
+                .writeLong(revision));
+        net.minecraft.network.Packet packet = new cpw.mods.fml.common.network.internal.FMLProxyPacket(
+            io.netty.buffer.Unpooled.buffer(),
+            dev.gilbe.dynamicinventory.network.HotbarRequest.CHANNEL);
+        com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> dispatch = ignored -> {
+            new dev.gilbe.dynamicinventory.network.HotbarRequest.ServerHandler().onMessage(ordered, context);
+            return null;
+        };
+        dev.gilbe.dynamicinventory.mixins.minecraft.HotbarPacketOrderMixin hook = new dev.gilbe.dynamicinventory.mixins.minecraft.HotbarPacketOrderMixin() {};
+        java.lang.reflect.Method deliver = hook.getClass()
+            .getSuperclass()
+            .getDeclaredMethod(
+                "dynamicinventory$applyHotbarBeforeNextPacket",
+                net.minecraft.network.Packet.class,
+                net.minecraft.network.INetHandler.class,
+                com.llamalad7.mixinextras.injector.wrapoperation.Operation.class);
+        deliver.setAccessible(true);
+        ItemStack nextHeld = inventory.mainInventory[inventory.shape.rawIndex(9 + slots[0])];
+        deliver.invoke(hook, packet, connection, dispatch);
+        check(
+            inventory.getCurrentItem() == nextHeld && nextHeld != null,
+            "Next held-item action sees the committed swap");
+        HotbarBanks.swap(player, 0);
+        HotbarBanks.next(player, 0);
         HotbarPrediction prediction = new HotbarPrediction();
         check(prediction.predict(player, 0) == null, "Older peers require no speculative inventory change");
         prediction.enable(player, inventory.shape.revision(), 0);

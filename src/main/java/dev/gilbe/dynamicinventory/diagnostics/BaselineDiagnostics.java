@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Container;
@@ -31,6 +32,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagIntArray;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.ChatComponentText;
+import net.minecraftforge.common.config.Configuration;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -73,10 +75,26 @@ public final class BaselineDiagnostics {
             "hodgepodge",
             "lwjgl3ify"));
     private static File reportDirectory;
+    private static boolean captureOnJoin;
+    private static int automaticReportLimit;
 
     private BaselineDiagnostics() {}
 
     public static void initialize(File configDirectory) {
+        Configuration config = new Configuration(new File(configDirectory, "dynamicinventory-diagnostics.cfg"));
+        captureOnJoin = config.getBoolean(
+            "captureOnJoin",
+            "reports",
+            false,
+            "Capture a full inventory report including item NBT when a player joins.");
+        automaticReportLimit = config.getInt(
+            "automaticReportsPerSide",
+            "reports",
+            10,
+            1,
+            100,
+            "Number of automatic inventory reports to retain per side. Manual reports are kept separately.");
+        if (config.hasChanged()) config.save();
         reportDirectory = new File(
             configDirectory.getAbsoluteFile()
                 .getParentFile(),
@@ -160,18 +178,37 @@ public final class BaselineDiagnostics {
                 InventoryLayout.of(player.inventory)
                     .mainSlots()));
         report.addProperty("expandedPlayerLayoutMatches", matchesExpandedLayout(player));
-        report.add("playerContainer", container(player, player.inventoryContainer));
-        report.add("activeContainer", container(player, player.openContainer));
+        JsonObject playerContainer = container(player, player.inventoryContainer);
+        report.add("playerContainer", playerContainer);
+        report.add(
+            "activeContainer",
+            player.openContainer == player.inventoryContainer ? playerContainer
+                : container(player, player.openContainer));
         report.addProperty("vanillaPlayerLayoutMatches", matchesVanillaLayout(player));
         return report;
     }
 
     public static void capture(EntityPlayer player, String screen, String reason, boolean notify) {
+        capture(player, screen, reason, notify, false);
+    }
+
+    public static void onJoin(EntityPlayer player, String screen) {
+        if (captureOnJoin)
+            capture(player, screen, player.worldObj.isRemote ? "client-join" : "player-login", false, true);
+    }
+
+    private static void capture(EntityPlayer player, String screen, String reason, boolean notify, boolean automatic) {
         JsonObject report = snapshot(player, screen, reason);
         String side = player.worldObj.isRemote ? "client" : "server";
-        String name = side + "-" + timestamp("yyyyMMdd-HHmmss-SSS") + "-" + SEQUENCE.incrementAndGet() + ".json";
+        String name = (automatic ? "auto-" : "") + side
+            + "-"
+            + timestamp("yyyyMMdd-HHmmss-SSS")
+            + "-"
+            + SEQUENCE.incrementAndGet()
+            + ".json";
         try {
             File file = write(name, report);
+            if (automatic) pruneAutomaticReports(reportDirectory, side, automaticReportLimit);
             String summary = "Inventory baseline (" + side
                 + "): "
                 + player.inventory.mainInventory.length
@@ -192,6 +229,19 @@ public final class BaselineDiagnostics {
             DynamicInventory.LOG.error("Could not write inventory baseline report", e);
             if (notify) player.addChatMessage(new ChatComponentText("Baseline report failed; see the game log."));
         }
+    }
+
+    static void pruneAutomaticReports(File directory, String side, int limit) throws IOException {
+        Pattern name = Pattern.compile("auto-" + Pattern.quote(side) + "-[0-9]{8}-[0-9]{6}-[0-9]{3}-[0-9]+\\.json");
+        File[] reports = directory.listFiles(
+            file -> file.isFile() && name.matcher(file.getName())
+                .matches());
+        if (reports == null || reports.length <= limit) return;
+        Arrays.sort(
+            reports,
+            Comparator.comparingLong(File::lastModified)
+                .thenComparing(File::getName));
+        for (int i = 0; i < reports.length - limit; i++) Files.deleteIfExists(reports[i].toPath());
     }
 
     private static JsonObject container(EntityPlayer player, Container container) {

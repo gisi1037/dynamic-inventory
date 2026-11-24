@@ -79,6 +79,7 @@ public final class PanelScaleFixtures {
                 .isEmpty(),
             "reset removes custom reference");
         current.remove("interfaceReferences");
+        current.remove("pinsLayout");
         current.addProperty("schemaVersion", 6);
         byte[] old = current.toString()
             .getBytes(java.nio.charset.StandardCharsets.UTF_8);

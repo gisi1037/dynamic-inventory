@@ -7,7 +7,9 @@ import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 
 import dev.gilbe.dynamicinventory.compat.BackhandCompatibility;
+import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 /** Shift-click destinations use logical regions rather than assuming storage has contiguous container IDs. */
 public final class PlayerInventoryTransfers {
@@ -20,21 +22,19 @@ public final class PlayerInventoryTransfers {
             inventory,
             InventoryLayout.HOTBAR_SLOTS,
             InventoryLayout.of(inventory)
-                .mainSlots(),
-            false);
-        int[] hotbar = mainSlots(inventory, 0, InventoryLayout.HOTBAR_SLOTS, false);
+                .mainSlots());
+        int[] hotbar = mainSlots(inventory, 0, InventoryLayout.HOTBAR_SLOTS);
         int[] allMain = mainSlots(
             inventory,
-            InventoryLayout.HOTBAR_SLOTS,
+            0,
             InventoryLayout.of(inventory)
-                .mainSlots(),
-            true);
+                .mainSlots());
         if (id < 0 || id >= container.inventorySlots.size()) return null;
         // Appended Baubles equipment is manual-only in our player screen, in both
         // directions. Shift-click moves ordinary storage/hotbar items or equips armor.
         if (id >= PlayerContainerLayout.slotCount(inventory)) return null;
         Slot slot = container.getSlot(id);
-        if (!slot.getHasStack() || !slot.canTakeStack(player)) return null;
+        if (InventorySlotLocks.locked(slot) || !slot.getHasStack() || !slot.canTakeStack(player)) return null;
         ItemStack source = slot.getStack();
         ItemStack original = source.copy();
         boolean moved;
@@ -43,7 +43,7 @@ public final class PlayerInventoryTransfers {
             if (moved) slot.onSlotChange(source, original);
         } else if (id < PlayerContainerLayout.LEGACY_STORAGE_START
             || (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND)) {
-                moved = merge(container, source, allMain);
+                moved = mergeAutomatic(container, source, allMain);
             } else {
                 moved = equipArmor(container, source);
                 if (!moved) {
@@ -82,7 +82,7 @@ public final class PlayerInventoryTransfers {
         if (container != player.inventoryContainer || PlayerContainerLayout.mainIndex(player.inventory, id) < 0)
             return null;
         Slot source = container.getSlot(id);
-        if (!source.getHasStack() || !source.canTakeStack(player)) return null;
+        if (InventorySlotLocks.locked(source) || !source.getHasStack() || !source.canTakeStack(player)) return null;
         for (int armor = PlayerContainerLayout.ARMOR_START; armor
             < PlayerContainerLayout.LEGACY_STORAGE_START; armor++) {
             Slot destination = container.getSlot(armor);
@@ -99,13 +99,12 @@ public final class PlayerInventoryTransfers {
     public static ItemStack transferTo(Container container, EntityPlayer player, int id, int[] destinations,
         int preferred) {
         Slot slot = container.getSlot(id);
-        if (!slot.getHasStack() || !slot.canTakeStack(player)) return null;
+        if (InventorySlotLocks.locked(slot) || !slot.getHasStack() || !slot.canTakeStack(player)) return null;
         ItemStack source = slot.getStack();
         ItemStack original = source.copy();
-        boolean moved = merge(container, source, java.util.Arrays.copyOf(destinations, preferred));
+        boolean moved = merge(container, source, destinations, 0, preferred);
         if (source.stackSize > 0 && preferred < destinations.length)
-            moved = merge(container, source, java.util.Arrays.copyOfRange(destinations, preferred, destinations.length))
-                || moved;
+            moved = merge(container, source, destinations, preferred, destinations.length) || moved;
         if (!moved) return null;
         if (source.stackSize == 0) slot.putStack(null);
         else slot.onSlotChanged();
@@ -114,20 +113,19 @@ public final class PlayerInventoryTransfers {
     }
 
     public static boolean merge(Container container, ItemStack source, int[] destinations) {
+        return merge(container, source, destinations, 0, destinations.length);
+    }
+
+    private static boolean merge(Container container, ItemStack source, int[] destinations, int start, int end) {
         int originalCount = source.stackSize;
         // Merge across the entire region before choosing an empty slot, including across the old/new boundary.
         if (source.isStackable()) {
-            for (int id : destinations) {
-                Slot slot = container.getSlot(id);
+            for (int i = start; i < end; i++) {
+                Slot slot = container.getSlot(destinations[i]);
                 if (reserved(slot)) continue;
                 ItemStack existing = slot.getStack();
-                if (existing == null || existing == source
-                    || !slot.isItemValid(source)
-                    || existing.getItem() != source.getItem()
-                    || (source.getHasSubtypes() && existing.getItemDamage() != source.getItemDamage())
-                    || !ItemStack.areItemStackTagsEqual(existing, source)) continue;
-                int limit = Math.min(slot.getSlotStackLimit(), source.getMaxStackSize());
-                int count = Math.min(source.stackSize, Math.max(0, limit - existing.stackSize));
+                if (existing == null || !slot.isItemValid(source)) continue;
+                int count = Math.min(source.stackSize, mergeRoom(slot, source, existing));
                 if (count > 0) {
                     existing.stackSize += count;
                     source.stackSize -= count;
@@ -136,12 +134,12 @@ public final class PlayerInventoryTransfers {
                 if (source.stackSize == 0) return true;
             }
         }
-        for (int id : destinations) {
+        for (int i = start; i < end; i++) {
             if (source.stackSize == 0) break;
-            Slot slot = container.getSlot(id);
+            Slot slot = container.getSlot(destinations[i]);
             if (reserved(slot)) continue;
             if (slot.getHasStack() || !slot.isItemValid(source)) continue;
-            int count = Math.min(source.stackSize, Math.min(slot.getSlotStackLimit(), source.getMaxStackSize()));
+            int count = Math.min(source.stackSize, mergeRoom(slot, source, null));
             if (count <= 0) continue;
             ItemStack inserted = source.copy();
             inserted.stackSize = count;
@@ -152,46 +150,70 @@ public final class PlayerInventoryTransfers {
     }
 
     public static boolean mergeAutomatic(Container container, ItemStack source, int[] destinations) {
-        return merge(
-            container,
-            source,
-            dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, destinations));
+        return mergeToPlayer(container, source, AutomaticInventoryRouting.filter(container, destinations));
+    }
+
+    /** Routed player targets are in logical order. Fill the active hotbar before touching Main storage. */
+    public static boolean mergeToPlayer(Container container, ItemStack source, int[] destinations) {
+        int hotbar = hotbarPrefix(container, destinations);
+        boolean moved = merge(container, source, destinations, 0, hotbar);
+        return source.stackSize > 0 && merge(container, source, destinations, hotbar, destinations.length) || moved;
+    }
+
+    public static int hotbarPrefix(Container container, int[] destinations) {
+        int end = 0;
+        while (end < destinations.length) {
+            Slot slot = container.getSlot(destinations[end]);
+            if (!(slot.inventory instanceof InventoryPlayer) || slot.getSlotIndex() < 0
+                || slot.getSlotIndex() >= InventoryLayout.HOTBAR_SLOTS) break;
+            end++;
+        }
+        return end;
     }
 
     /** Native pattern extraction clears its source only on full success, so partial insertion is unsafe. */
     public static boolean mergeAutomaticAll(Container container, ItemStack source, int[] destinations) {
-        int[] allowed = java.util.Arrays
-            .stream(dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting.filter(container, destinations))
+        int[] allowed = java.util.Arrays.stream(AutomaticInventoryRouting.filter(container, destinations))
             .distinct()
             .toArray();
-        long room = 0;
-        for (int id : allowed) {
-            Slot slot = container.getSlot(id);
-            if (reserved(slot) || !slot.isItemValid(source)) continue;
-            ItemStack existing = slot.getStack();
-            int limit = Math.min(slot.getSlotStackLimit(), source.getMaxStackSize());
-            if (existing == null) room += Math.max(0, limit);
-            else if (source.isStackable() && existing.getItem() == source.getItem()
-                && (!source.getHasSubtypes() || existing.getItemDamage() == source.getItemDamage())
-                && ItemStack.areItemStackTagsEqual(existing, source)) room += Math.max(0, limit - existing.stackSize);
-            if (room >= source.stackSize) return merge(container, source, allowed);
-        }
-        return false;
+        return remainingAfterMerge(container, source, allowed) == 0 && mergeToPlayer(container, source, allowed);
     }
 
-    private static int[] mainSlots(InventoryPlayer inventory, int start, int end, boolean includeHotbar) {
-        int[] ids = new int[end - start + (includeHotbar ? InventoryLayout.HOTBAR_SLOTS : 0)];
-        int next = 0;
-        for (int main = start; main < end; main++) ids[next++] = PlayerContainerLayout.containerId(inventory, main);
-        if (includeHotbar) {
-            for (int main = 0; main < InventoryLayout.HOTBAR_SLOTS; main++)
-                ids[next++] = PlayerContainerLayout.containerId(inventory, main);
+    /** Simulate the same slot rules as merge for a unique, already routed destination list. */
+    public static int remainingAfterMerge(Container container, ItemStack source, int[] destinations) {
+        int remaining = source.stackSize;
+        for (int id : destinations) {
+            Slot slot = container.getSlot(id);
+            if (reserved(slot) || !slot.isItemValid(source)) continue;
+            remaining -= Math.min(remaining, mergeRoom(slot, source, slot.getStack()));
+            if (remaining == 0) break;
         }
+        return remaining;
+    }
+
+    public static boolean hasTransferRoom(Slot slot, ItemStack stack) {
+        return slot.isItemValid(stack) && mergeRoom(slot, stack, slot.getStack()) > 0;
+    }
+
+    private static int mergeRoom(Slot slot, ItemStack source, ItemStack existing) {
+        int limit = Math.min(slot.getSlotStackLimit(), source.getMaxStackSize());
+        if (existing == null) return Math.max(0, limit);
+        if (existing == source || !source.isStackable()
+            || existing.getItem() != source.getItem()
+            || (source.getHasSubtypes() && existing.getItemDamage() != source.getItemDamage())
+            || !ItemStack.areItemStackTagsEqual(existing, source)) return 0;
+        return Math.max(0, limit - existing.stackSize);
+    }
+
+    private static int[] mainSlots(InventoryPlayer inventory, int start, int end) {
+        int[] ids = new int[end - start];
+        for (int main = start; main < end; main++)
+            ids[main - start] = PlayerContainerLayout.containerId(inventory, main);
         return ids;
     }
 
     private static boolean reserved(Slot slot) {
-        return slot.inventory instanceof InventoryPlayer inventory
+        return InventorySlotLocks.locked(slot) || slot.inventory instanceof InventoryPlayer inventory
             && dev.gilbe.dynamicinventory.inventory.HotbarBanks.isReserved(inventory, slot.getSlotIndex());
     }
 

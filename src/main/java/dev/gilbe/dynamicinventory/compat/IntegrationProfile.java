@@ -74,6 +74,10 @@ public enum IntegrationProfile {
         return override == null ? pin(key) : override;
     }
 
+    public static String alternateReviewedVersion(String modId) {
+        return PINS.getProperty(CURRENT.prefix + ".reviewedAlternate." + modId);
+    }
+
     private static String pin(String key) {
         String value = PINS.getProperty(key);
         if (value == null || value.trim()

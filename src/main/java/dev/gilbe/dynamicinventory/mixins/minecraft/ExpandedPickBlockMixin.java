@@ -20,6 +20,7 @@ import dev.gilbe.dynamicinventory.container.PlayerContainerLayout;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 @Mixin(value = ForgeHooks.class, priority = 900, remap = false)
 public abstract class ExpandedPickBlockMixin {
@@ -37,11 +38,12 @@ public abstract class ExpandedPickBlockMixin {
         InventoryShape shape = InventoryLayout.of(inventory);
         for (int logical = InventoryShape.LEGACY_MAIN_SLOTS; logical < shape.mainSlots(); logical++) {
             int raw = shape.rawIndex(logical);
-            if (HotbarBanks.isReserved(inventory, raw)) continue;
+            if (HotbarBanks.isReserved(inventory, raw) || InventorySlotLocks.locked(inventory, raw)) continue;
             ItemStack stack = inventory.getStackInSlot(raw);
             if (stack == null || !stack.isItemEqual(result) || !ItemStack.areItemStackTagsEqual(stack, result))
                 continue;
             int hotbar = dynamicinventory$chooseHotbar(inventory);
+            if (hotbar < 0) return;
             int source = PlayerContainerLayout.containerId(inventory, logical);
             // Number-key swap is one ordinary, predicted window click. The server moves both stacks together.
             mc.playerController.windowClick(player.inventoryContainer.windowId, source, hotbar, 2, player);
@@ -59,10 +61,24 @@ public abstract class ExpandedPickBlockMixin {
         int ordinary = -1;
         for (int offset = 0; offset < InventoryShape.HOTBAR_SLOTS; offset++) {
             int candidate = (inventory.currentItem + offset) % InventoryShape.HOTBAR_SLOTS;
+            if (InventorySlotLocks.locked(inventory, candidate)) continue;
             ItemStack stack = inventory.getStackInSlot(candidate);
             if (stack == null) return candidate;
             if (ordinary < 0 && !stack.isItemEnchanted()) ordinary = candidate;
         }
-        return ordinary < 0 ? inventory.currentItem : ordinary;
+        return ordinary < 0 && !InventorySlotLocks.locked(inventory, inventory.currentItem) ? inventory.currentItem
+            : ordinary;
+    }
+
+    @Inject(
+        method = "onPickBlock",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/entity/player/InventoryPlayer;setInventorySlotContents(ILnet/minecraft/item/ItemStack;)V",
+            remap = true),
+        cancellable = true)
+    private static void dynamicinventory$protectCreativePick(MovingObjectPosition target, EntityPlayer player,
+        World world, CallbackInfoReturnable<Boolean> result, @Local(ordinal = 0) int destination) {
+        if (InventorySlotLocks.locked(player.inventory, destination)) result.setReturnValue(false);
     }
 }

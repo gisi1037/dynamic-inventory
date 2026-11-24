@@ -534,9 +534,24 @@ public final class PlayerPanelFixtures {
         byte[] invalid = "{\"schemaVersion\":999}".getBytes(StandardCharsets.UTF_8);
         Files.write(file, invalid);
         PlayerPanelProfiles.initialize(file.toFile());
+        PlayerPanelProfiles.establishReference(
+            vanilla,
+            new dev.gilbe.dynamicinventory.client.PanelLayoutReference(originMachine, originViewport));
         check(
             java.util.Arrays.equals(invalid, Files.readAllBytes(file)) && !PlayerPanelProfiles.global().detached,
-            "invalid documents are not overwritten during load");
+            "opening a screen leaves unrecognized preferences untouched");
+        PlayerPanelProfiles.setGlobal(global);
+        try (java.util.stream.Stream<Path> files = Files.list(directory)) {
+            Path backup = files.filter(
+                path -> path.getFileName()
+                    .toString()
+                    .startsWith("player-panels.unreadable-"))
+                .findFirst()
+                .get();
+            check(
+                java.util.Arrays.equals(invalid, Files.readAllBytes(backup)),
+                "explicit save preserves unreadable data");
+        }
         Path blockedFile = directory.resolve("blocked");
         Files.createDirectory(blockedFile);
         PlayerPanelProfiles.initialize(blockedFile.toFile());
@@ -550,14 +565,25 @@ public final class PlayerPanelFixtures {
         Files.createDirectories(layouts);
         for (String name : new String[] { "vanilla-old", "vanilla-new", "forestry" }) {
             JsonObject target = new JsonObject(), document = new JsonObject();
-            target.addProperty("adapterId", "dynamicinventory:fixture");
+            target.addProperty("adapterId", name.equals("forestry") ? "example:machine" : "dynamicinventory:fixture");
             target.addProperty(
                 "containerClass",
                 name.startsWith("vanilla") ? "net.minecraft.inventory.ContainerChest"
                     : "forestry.factory.gui.ContainerCarpenter");
+            target.addProperty("guiClass", "example.machine.GuiMachine");
+            target.addProperty(name.endsWith("old") ? "adapterRevision" : "presentationRevision", 1);
+            target.addProperty("ordinarySlotCount", 36);
             document.addProperty("schemaVersion", name.endsWith("old") ? 1 : 9);
             document.add("target", target);
-            document.add("layout", new JsonObject());
+            document.add(
+                "layout",
+                new dev.gilbe.dynamicinventory.client.editor.NativeLayoutPatch(
+                    9,
+                    3,
+                    0,
+                    0,
+                    dev.gilbe.dynamicinventory.api.NativeUiLayout.builder()
+                        .build()).toJson());
             Files.write(
                 layouts.resolve(name + ".json"),
                 document.toString()
@@ -582,6 +608,10 @@ public final class PlayerPanelFixtures {
                     .count() == 2,
                 "both old editor layouts retained as backups");
         }
+        check(
+            NativeLayoutPatches.reset(null) == 1 && NativeLayoutPatches.groups()
+                .isEmpty() && Files.exists(layouts.resolve("unrelated.json")),
+            "reset all includes third-party adapters");
     }
 
     private static void neiMasks() {

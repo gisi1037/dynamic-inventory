@@ -31,7 +31,7 @@ public final class PlayerPanelProfile {
             || anchorY < 0
             || anchorY > 10000
             || frameStyle < -1
-            || frameStyle > 2
+            || frameStyle > NativePanelFrame.SEAMLESS
             || borderWidth < 0
             || borderWidth > 6
             || frameCrop < 0

@@ -1,8 +1,10 @@
 package dev.gilbe.dynamicinventory.mixins.appliedenergistics2;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Container;
@@ -14,6 +16,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -23,6 +26,7 @@ import appeng.container.slot.SlotPlayerInv;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.compat.ae2.AppliedEnergisticsContainerAccess;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
+import dev.gilbe.dynamicinventory.container.PlayerInventoryTransfers;
 import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 
@@ -55,15 +59,30 @@ public abstract class AeContainerMixin extends Container implements AppliedEnerg
             .removeIf(
                 slot -> slot.inventory == inventory
                     && !AutomaticInventoryRouting.transfer(inventory, slot.getSlotIndex()));
-        // Extra player slots are appended after the original hotbar. Sort the player-only
-        // destination list by the logical grid so the hotbar remains the fallback.
         var shape = InventoryLayout.of(inventory);
-        cir.getReturnValue()
-            .sort(java.util.Comparator.comparingInt(slot -> {
-                int logical = slot.inventory == inventory ? shape.ordinaryIndex(slot.getSlotIndex()) : -1;
-                return logical < 0 ? Integer.MAX_VALUE
-                    : logical < InventoryLayout.HOTBAR_SLOTS ? shape.mainSlots() + logical : logical;
-            }));
+        AutomaticInventoryRouting.orderPlayerSlots(
+            cir.getReturnValue(),
+            slot -> slot.inventory == inventory ? shape.ordinaryIndex(slot.getSlotIndex()) : -1);
+    }
+
+    @Redirect(
+        method = { "transferStackInSlot", "func_82846_b" },
+        at = @At(value = "INVOKE", target = "Ljava/util/List;iterator()Ljava/util/Iterator;", ordinal = 0))
+    private Iterator<AppEngSlot> dynamicinventory$prioritizeHotbar(List<AppEngSlot> targets, EntityPlayer player,
+        int sourceId) {
+        if (ContainerInventoryRegion.of(this) == null || !(getSlot(sourceId) instanceof AppEngSlot source)
+            || source.isPlayerSide()) return targets.iterator();
+        InventoryPlayer inventory = getPlayerInv();
+        if (targets.stream()
+            .noneMatch(
+                slot -> slot.inventory == inventory && slot.getSlotIndex() < 9
+                    && PlayerInventoryTransfers.hasTransferRoom(slot, source.getStack())))
+            return targets.iterator();
+        // The second native pass handles empty slots and partial stacks in order. Defer
+        // storage partials to that pass so they cannot take items ahead of an open hotbar.
+        return targets.stream()
+            .filter(slot -> slot.inventory != inventory || slot.getSlotIndex() < 9)
+            .iterator();
     }
 
     @Inject(method = "detectAndSendChanges", at = @At("HEAD"), cancellable = true, remap = true)

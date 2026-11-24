@@ -44,6 +44,17 @@ public final class StoragePanelGeometryFixtures {
                 geometry.cropBottom == band && geometry.bottom == band + 6 && geometry.fillBackground,
                 "Thaumcraft artwork retains the workstation and excludes the old inventory frame");
         }
+        StoragePanelGeometry research = StoragePanelGeometry
+            .of("thaumcraft.client.gui.GuiResearchTable", 255, 171, 26, 2);
+        check(
+            research.cropBottom == 167 && research.bottom >= research.cropBottom && research.fillBackground,
+            "Research Table retains the full 167-pixel research sheet without the old inventory");
+        for (String screen : new String[] { "soul.GuiSoulBinder", "slicensplice.GuiSliceAndSplice",
+            "spawner.GuiPoweredSpawner" }) {
+            StoragePanelGeometry machine = StoragePanelGeometry
+                .of("crazypants.enderio.machine." + screen, 176, 80, 76, 8);
+            check(machine.cropBottom == 82 && machine.fillBackground, "Ender IO keeps the machine header " + screen);
+        }
         for (String type : new String[] { "Churn", "Oven", "Quern", "PamAnimalTrap", "PamFishTrap", "PamApiary",
             "PamGrinder", "PamPresser" }) {
             StoragePanelGeometry machine = StoragePanelGeometry.of("com.pam.harvestcraft.Gui" + type, 176, 80, 69, 3);

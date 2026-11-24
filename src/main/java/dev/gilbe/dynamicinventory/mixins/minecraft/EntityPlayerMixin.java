@@ -12,10 +12,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import dev.gilbe.dynamicinventory.inventory.ExpandedInventoryAccess;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryResizing;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 import dev.gilbe.dynamicinventory.persistence.InventoryCodec;
 
 @Mixin(EntityPlayer.class)
@@ -23,6 +25,12 @@ public class EntityPlayerMixin {
 
     @Shadow
     public InventoryPlayer inventory;
+
+    @Inject(method = "dropOneItem", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$lockDrop(boolean entireStack,
+        CallbackInfoReturnable<net.minecraft.entity.item.EntityItem> result) {
+        if (InventorySlotLocks.locked(inventory, inventory.currentItem)) result.setReturnValue(null);
+    }
 
     @Redirect(
         method = "readEntityFromNBT",

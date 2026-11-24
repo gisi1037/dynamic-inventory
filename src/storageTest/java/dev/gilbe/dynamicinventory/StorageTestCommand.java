@@ -278,6 +278,22 @@ public final class StorageTestCommand extends CommandBase {
                     .tagCount() == 1,
             "malformed recovery survives a newly rejected entry");
 
+        NBTTagList opaqueItems = new NBTTagList();
+        for (String origin : new String[] { "legacy", "capacity" }) {
+            NBTTagCompound opaque = new NBTTagCompound();
+            opaque.setString("origin", origin);
+            opaque.setString("entry", "opaque recovery payload");
+            opaqueItems.appendTag(opaque);
+        }
+        NBTTagCompound opaqueRecovery = new NBTTagCompound();
+        opaqueRecovery.setTag("items", opaqueItems);
+        NBTTagCompound withOpaque = (NBTTagCompound) saved.copy();
+        withOpaque.getCompoundTag("dynamicinventory")
+            .setTag("recovery", opaqueRecovery.copy());
+        load(loaded, withOpaque);
+        load(loaded, save(loaded));
+        check(recovery(loaded).equals(opaqueRecovery), "Nested opaque recovery records retain their complete NBT");
+
         NBTTagCompound legacyInvalid = (NBTTagCompound) saved.copy();
         NBTTagList invalidLegacyList = legacyInvalid.getTagList("Inventory", 10);
         invalidLegacyList.appendTag(

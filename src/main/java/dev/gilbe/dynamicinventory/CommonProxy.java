@@ -28,6 +28,8 @@ public class CommonProxy {
 
     public void receiveHotbarSwap(dev.gilbe.dynamicinventory.network.HotbarSwapReply reply) {}
 
+    public void receiveInventoryLocks(net.minecraft.network.INetHandler connection, int[] locks) {}
+
     public void receiveAePins(dev.gilbe.dynamicinventory.network.AePinsChannel.Snapshot snapshot) {}
 
     public void receiveAePinsTransfer(long sequence) {}
@@ -72,6 +74,7 @@ public class CommonProxy {
         dev.gilbe.dynamicinventory.upgrades.InventoryUpgrades.register();
         dev.gilbe.dynamicinventory.network.PanelTransferRequest.initialize();
         dev.gilbe.dynamicinventory.network.HotbarRequest.initialize();
+        dev.gilbe.dynamicinventory.network.InventoryLockSync.initialize();
         dev.gilbe.dynamicinventory.network.MainInventoryRoutingRequest.initialize();
         if (PackCompatibility.aePinnedPanel()) dev.gilbe.dynamicinventory.network.AePinsChannel.initialize();
 

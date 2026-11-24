@@ -15,6 +15,7 @@ import com.cleanroommc.bogosorter.common.refill.RefillHandler;
 
 import dev.gilbe.dynamicinventory.container.PlayerContainerLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 import it.unimi.dsi.fastutil.ints.IntList;
 
 @Mixin(targets = "com.cleanroommc.bogosorter.common.refill.RefillHandler", remap = false)
@@ -26,6 +27,9 @@ public abstract class BogoRefillMixin {
     private EntityPlayer player;
     @Shadow
     private InventoryPlayer inventory;
+
+    @Shadow
+    private int hotbarIndex;
 
     @Inject(
         method = "<init>(ILnet/minecraft/item/ItemStack;Lnet/minecraft/entity/player/EntityPlayer;ZZ)V",
@@ -39,6 +43,16 @@ public abstract class BogoRefillMixin {
                 InventoryLayout.of(inventory)
                     .rawIndex(logical));
         }
+        for (int i = slots.size() - 1; i >= 0; i--) {
+            if (InventorySlotLocks.locked(inventory, slots.getInt(i))) slots.removeInt(i);
+        }
+    }
+
+    @Inject(method = "handleRefill", at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$protectRefillTarget(
+        org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> result) {
+        int raw = hotbarIndex == 40 ? InventoryLayout.OFFHAND_INDEX : hotbarIndex;
+        if (InventorySlotLocks.locked(inventory, raw)) result.setReturnValue(false);
     }
 
     @Redirect(

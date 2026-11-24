@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.inventory.Container;
+import net.minecraftforge.common.MinecraftForge;
 
 import appeng.api.storage.data.IAEStack;
 import appeng.container.AEBaseContainer;
@@ -26,6 +27,7 @@ import cpw.mods.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import cpw.mods.fml.relauncher.Side;
 import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
+import dev.gilbe.dynamicinventory.compat.ae2.PinIdentity;
 import dev.gilbe.dynamicinventory.compat.ae2.PinnedItemTransfer;
 import dev.gilbe.dynamicinventory.compat.ae2.WirelessPinsFeed;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
@@ -48,13 +50,15 @@ public final class AePinsChannel {
     private AePinsChannel() {}
 
     public static void initialize() {
-        channel = NetworkRegistry.INSTANCE.newSimpleChannel("dinv-ae-pins");
+        channel = NetworkRegistry.INSTANCE.newSimpleChannel("dinv-ae-pins2");
         channel.registerMessage(ReceiveRequest.class, Request.class, 0, Side.SERVER);
         channel.registerMessage(ReceiveSnapshot.class, Snapshot.class, 1, Side.CLIENT);
         channel.registerMessage(ReceiveTransferReply.class, TransferReply.class, 2, Side.CLIENT);
+        Events events = new Events();
         FMLCommonHandler.instance()
             .bus()
-            .register(new Events());
+            .register(events);
+        MinecraftForge.EVENT_BUS.register(events);
     }
 
     public static void send(long epoch, boolean open, boolean renew, boolean background) {
@@ -65,12 +69,13 @@ public final class AePinsChannel {
         channel.sendToServer(request);
     }
 
-    public static void edit(long epoch, int windowId, int index, boolean remove) {
+    public static void edit(long epoch, int windowId, int index, boolean remove, IAEStack<?> expected) {
         Request request = new Request();
         request.epoch = epoch;
         request.kind = remove ? REMOVE_PIN : SET_PIN;
         request.windowId = windowId;
         request.index = index;
+        request.expected = PinIdentity.of(expected);
         channel.sendToServer(request);
     }
 
@@ -115,11 +120,8 @@ public final class AePinsChannel {
         return argument & 0xff;
     }
 
-    public static void transfer(long epoch, int windowId, int index, Transfer action, int argument) {
-        transfer(epoch, windowId, index, action, argument, 0);
-    }
-
-    public static void transfer(long epoch, int windowId, int index, Transfer action, int argument, long sequence) {
+    public static void transfer(long epoch, int windowId, int index, Transfer action, int argument, long sequence,
+        IAEStack<?> expected) {
         Request request = new Request();
         request.epoch = epoch;
         request.kind = FIRST_TRANSFER + action.ordinal();
@@ -127,11 +129,12 @@ public final class AePinsChannel {
         request.index = index;
         request.argument = action.argumentBytes == 1 ? Math.max(-64, Math.min(64, argument)) : argument;
         request.sequence = sequence;
+        request.expected = PinIdentity.of(expected);
         channel.sendToServer(request);
     }
 
     public static void transferPanel(long epoch, int windowId, int index, int clicked, long sequence, long revision,
-        int[] slots) {
+        int[] slots, IAEStack<?> expected) {
         if (slots.length == 0) return;
         Request request = new Request();
         request.epoch = epoch;
@@ -142,6 +145,7 @@ public final class AePinsChannel {
         request.sequence = sequence;
         request.revision = revision;
         request.slots = slots.clone();
+        request.expected = PinIdentity.of(expected);
         channel.sendToServer(request);
     }
 
@@ -162,14 +166,13 @@ public final class AePinsChannel {
         int kind = -1;
         int windowId, index, argument;
         int[] slots;
+        byte[] expected;
         boolean background;
 
         @Override
         public void fromBytes(ByteBuf bytes) {
             int length = bytes.readableBytes();
-            if (length != 9 && length != 10
-                && length != 15
-                && (length < 23 || length > 35 + 2 * (InventoryShape.MAX_STORAGE + 9))) return;
+            if (length < 9 || length > PinIdentity.BYTES + 35 + 2 * (InventoryShape.MAX_STORAGE + 9)) return;
             epoch = bytes.readLong();
             int action = bytes.readUnsignedByte();
             if (length == 9) {
@@ -184,9 +187,12 @@ public final class AePinsChannel {
                 return;
             }
             Transfer transfer = Transfer.fromKind(action);
+            length -= PinIdentity.BYTES;
             int argumentBytes = transfer == null ? 0 : transfer.argumentBytes;
             if (transfer == null ? length != 15 || action != SET_PIN && action != REMOVE_PIN
                 : transfer == Transfer.SPACE_PANEL ? length < 37 : length != 23 + argumentBytes) return;
+            expected = new byte[PinIdentity.BYTES];
+            bytes.readBytes(expected);
             windowId = bytes.readInt();
             index = bytes.readUnsignedShort();
             if (argumentBytes == 1) {
@@ -214,7 +220,8 @@ public final class AePinsChannel {
             bytes.writeLong(epoch)
                 .writeByte(kind);
             if (background) bytes.writeByte(1);
-            if (kind >= SET_PIN) bytes.writeInt(windowId)
+            if (kind >= SET_PIN) bytes.writeBytes(expected)
+                .writeInt(windowId)
                 .writeShort(index);
             Transfer transfer = Transfer.fromKind(kind);
             if (transfer != null && transfer.argumentBytes == 1) bytes.writeByte(argument);
@@ -378,7 +385,9 @@ public final class AePinsChannel {
 
         @Override
         public IMessage onMessage(Request request, MessageContext context) {
-            if (request.epoch < 0 || request.epoch == 0 && Transfer.fromKind(request.kind) == null) return null;
+            if (request.epoch < 0
+                || request.epoch == 0 && request.kind != REMOVE_PIN && Transfer.fromKind(request.kind) == null)
+                return null;
             EntityPlayerMP player = context.getServerHandler().playerEntity;
             if (request.kind >= OPEN && request.kind <= CLOSE) PENDING.merge(
                 player,
@@ -455,13 +464,19 @@ public final class AePinsChannel {
                 if (edit.epoch == 0 && container instanceof AEBaseContainer ae && InventoryUi.findAdapter(ae) != null)
                     PinnedItemTransfer.moveNativePanel(player, ae, edit.slots);
                 else if (feed != null && edit.epoch == feed.epoch())
-                    feed.transfer(container, edit.index, transfer, edit.argument, edit.slots);
+                    feed.transfer(container, edit.index, transfer, edit.argument, edit.slots, edit.expected);
             } else if (edit.epoch == 0 && transfer != null && container instanceof ContainerMEMonitorable terminal) {
-                PinnedItemTransfer.fromTerminal(player, terminal, edit.index, transfer, edit.argument);
-            } else if (feed != null && edit.epoch == feed.epoch() && transfer != Transfer.DEPOSIT_TERMINAL_ALL) {
-                if (transfer != null) feed.transfer(container, edit.index, transfer, edit.argument, null);
-                else feed.edit(edit.index, edit.kind == REMOVE_PIN);
-            }
+                PinnedItemTransfer.fromTerminal(player, terminal, edit.index, transfer, edit.argument, edit.expected);
+            } else if (edit.epoch == 0 && edit.kind == REMOVE_PIN
+                && container instanceof ContainerMEMonitorable terminal
+                && player.inventory.getItemStack() == null
+                && PinIdentity.matches(edit.expected, terminal.getPin(edit.index))) {
+                    terminal.setPin(null, edit.index);
+                } else if (feed != null && edit.epoch == feed.epoch() && transfer != Transfer.DEPOSIT_TERMINAL_ALL) {
+                    if (transfer != null)
+                        feed.transfer(container, edit.index, transfer, edit.argument, null, edit.expected);
+                    else feed.edit(edit.index, edit.kind == REMOVE_PIN, edit.expected);
+                }
         }
 
         private static boolean validPanel(EntityPlayerMP player, Container container, Request edit) {
@@ -481,13 +496,20 @@ public final class AePinsChannel {
 
         @SubscribeEvent
         public void logout(PlayerEvent.PlayerLoggedOutEvent event) {
-            if (event.player instanceof EntityPlayerMP player) {
-                PENDING.remove(player);
-                synchronized (PENDING_EDITS) {
-                    PENDING_EDITS.remove(player);
-                }
-                cleanup(player);
+            if (event.player instanceof EntityPlayerMP player) releasePlayer(player);
+        }
+
+        @SubscribeEvent
+        public void clone(net.minecraftforge.event.entity.player.PlayerEvent.Clone event) {
+            if (event.original instanceof EntityPlayerMP player) releasePlayer(player);
+        }
+
+        private static void releasePlayer(EntityPlayerMP player) {
+            PENDING.remove(player);
+            synchronized (PENDING_EDITS) {
+                PENDING_EDITS.remove(player);
             }
+            cleanup(player);
         }
 
         private static void cleanup(EntityPlayerMP player) {

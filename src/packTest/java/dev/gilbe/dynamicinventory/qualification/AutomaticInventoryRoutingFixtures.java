@@ -5,7 +5,6 @@ import java.util.Arrays;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.entity.player.InventoryPlayer;
-import net.minecraft.inventory.Container;
 import net.minecraft.inventory.InventoryBasic;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
@@ -19,6 +18,8 @@ import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
 import dev.gilbe.dynamicinventory.inventory.ExpandedInventoryAccess;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
+import dev.gilbe.dynamicinventory.mixins.nei.WorkbenchCapacityMixin;
 import dev.gilbe.dynamicinventory.network.MainInventoryRoutingRequest;
 
 /** Main-only automatic destinations, native transfer callbacks, persisted layouts and manual placement. */
@@ -70,7 +71,7 @@ public final class AutomaticInventoryRoutingFixtures {
         public void dynamicinventory$setRecovery(NBTTagCompound value) {}
     }
 
-    private static final class Host extends Container implements ExpandedContainerAccess {
+    private static final class Host extends WorkbenchCapacityMixin implements ExpandedContainerAccess {
 
         private ContainerInventoryRegion region;
 
@@ -146,11 +147,26 @@ public final class AutomaticInventoryRoutingFixtures {
             check(
                 Arrays.equals(targets, machine.region.destinations(1, 37, true))
                     && Arrays.equals(targets, machine.region.destinations(1, machine.inventorySlots.size(), true))
-                    && targets[0] == machine.region.id(10),
-                "Reversed chest transfer fills Main storage from the top");
+                    && targets[0] == machine.region.id(0)
+                    && targets[9] == machine.region.id(10),
+                "Either native range direction gives left-to-right hotbar and top-to-bottom Main");
+            inventory.mainInventory[1] = null;
+            inventory.mainInventory[2] = null;
             source.setInventorySlotContents(0, new ItemStack(item, 8));
             check(
-                PlayerInventoryTransfers.transferTo(machine, player, 0, targets) != null,
+                PlayerInventoryTransfers
+                    .transferTo(machine, player, 0, targets, PlayerInventoryTransfers.hotbarPrefix(machine, targets))
+                    != null && inventory.mainInventory[1].stackSize == 8
+                    && inventory.mainInventory[2] == null
+                    && inventory.mainInventory[10].stackSize == 61,
+                "A compatible Main stack never takes priority over the leftmost free hotbar slot");
+            inventory.mainInventory[1].stackSize = 64;
+            inventory.mainInventory[2] = new ItemStack(item, 64);
+            source.setInventorySlotContents(0, new ItemStack(item, 8));
+            check(
+                PlayerInventoryTransfers
+                    .transferTo(machine, player, 0, targets, PlayerInventoryTransfers.hotbarPrefix(machine, targets))
+                    != null,
                 "Native source transfers into Main");
             check(inventory.mainInventory[9].stackSize == 60, "Matching subpanel stack is untouched");
             check(
@@ -221,12 +237,161 @@ public final class AutomaticInventoryRoutingFixtures {
                 "Releasing a hotbar returns its Main cells automatically");
             patternExtraction(player, inventory, machine, item);
             BogoHotbarFixtures.check(player, inventory);
+            workbench(player, inventory, item);
+            if (capacity == 72 && offhand) tradingStation(player, inventory, item);
+            slotLocks(player, inventory, restored, item);
             checks += 20;
         }
         wire();
+        System.out.println("PASS slot locks across six capacities/Backhand combinations, manual and automatic moves");
         System.out.println(
             "PASS " + checks
                 + " Main-only pickup/transfer, full-Main refusal, manual placement, persistence and offhand cases");
+    }
+
+    private static void tradingStation(Player player, Inventory inventory, Item item) {
+        Host host = new Host();
+        host.windowId = 12;
+        player.openContainer = host;
+        InventoryBasic station = new InventoryBasic("trade station", false, 25);
+        for (int id = 0; id < 25; id++) host.dynamicinventory$append(new Slot(station, id, 0, 0));
+        for (int index = 9; index < 36; index++) host.dynamicinventory$append(new Slot(inventory, index, 0, 0));
+        for (int index = 0; index < 9; index++) host.dynamicinventory$append(new Slot(inventory, index, 0, 0));
+        ContainerInventoryRegion.attach(host, inventory);
+        var binding = host.region;
+        int last = inventory.shape.mainSlots() - 1;
+        int raw = inventory.shape.rawIndex(last);
+        int expandedSource = binding.id(last);
+        Arrays.fill(inventory.mainInventory, null);
+        inventory.mainInventory[raw] = new ItemStack(item, 5);
+        for (int id = 0; id < 9; id++) station.setInventorySlotContents(id, new ItemStack(item, 7));
+        check(
+            dev.gilbe.dynamicinventory.compat.RailcraftCompatibility.transfer(host, player, expandedSource, binding)
+                != null && inventory.mainInventory[raw] == null
+                && station.getStackInSlot(9).stackSize == 5,
+            "Expanded sources reach the first native stockpile slot");
+        check(
+            station.getStackInSlot(0).stackSize == 7 && station.getStackInSlot(19) == null,
+            "Deposits preserve ghost recipes and output");
+        check(
+            dev.gilbe.dynamicinventory.compat.RailcraftCompatibility.transfer(host, player, 0, binding) == null,
+            "Ghost stacks are never transferred to a player");
+        check(
+            AutomaticInventoryRouting.receive(
+                player,
+                inventory.shape.revision(),
+                host.windowId,
+                new int[] { last - 9 },
+                new int[] { last - 9 }),
+            "Retain one expanded Main destination");
+        station.setInventorySlotContents(19, new ItemStack(item, 3));
+        check(
+            dev.gilbe.dynamicinventory.compat.RailcraftCompatibility.transfer(host, player, 19, binding) != null
+                && inventory.mainInventory[0].stackSize == 3
+                && station.getStackInSlot(19) == null,
+            "Native trade rewards prefer the first hotbar slot");
+        for (int i = 0; i < 9; i++) inventory.mainInventory[i] = new ItemStack(item, 64);
+        station.setInventorySlotContents(19, new ItemStack(item, 3));
+        check(
+            dev.gilbe.dynamicinventory.compat.RailcraftCompatibility.transfer(host, player, 19, binding) != null
+                && inventory.mainInventory[raw].stackSize == 3
+                && station.getStackInSlot(19) == null,
+            "Native trade rewards reach expanded Main when the hotbar is full");
+        System.out.println("PASS Railcraft Trading Station transfers, output routing and phantom recipe protection");
+    }
+
+    private static void slotLocks(Player player, Inventory inventory, Player restored, Item item) {
+        Host host = new Host();
+        player.openContainer = player.inventoryContainer = host;
+        int raw = inventory.shape.rawIndex(inventory.shape.mainSlots() - 1);
+        int storageLock = InventorySlotLocks.index(inventory, raw);
+        int armorLock = InventorySlotLocks.index(inventory, inventory.shape.rawMainSlots());
+        int offhandLock = InventorySlotLocks.index(inventory, InventoryShape.OFFHAND_INDEX);
+        host.dynamicinventory$append(new Slot(inventory, raw, 0, 0));
+        host.dynamicinventory$append(new Slot(inventory, 1, 0, 0));
+        inventory.mainInventory[raw] = new ItemStack(item, 8);
+        inventory.mainInventory[1] = null;
+        inventory.mainInventory[10] = new ItemStack(item, 2);
+        InventorySlotLocks.toggle(player, storageLock);
+        InventorySlotLocks.toggle(player, armorLock);
+        InventorySlotLocks.toggle(player, 0);
+        if (inventory.shape.hasOffhand()) {
+            check(offhandLock != armorLock && offhandLock != storageLock, "Offhand lock has its own identity");
+            InventorySlotLocks.toggle(player, offhandLock);
+        }
+        for (int mode : new int[] { 0, 1, 2, 3, 4, 5, 6 }) {
+            check(InventorySlotLocks.blocksClick(host, player, 0, 1, mode), "Refuse mode " + mode);
+        }
+        check(
+            InventorySlotLocks.blocksClick(host, player, 1, 0, 2)
+                && !InventorySlotLocks.blocksClick(host, player, 1, 1, 2),
+            "Check both ends of a number-key swap");
+        check(
+            !AutomaticInventoryRouting.pickup(inventory, raw) && !AutomaticInventoryRouting.pickup(inventory, 0),
+            "Locked hotbar and storage reject automatic inserts");
+        ItemStack incoming = new ItemStack(item, 4);
+        check(
+            !PlayerInventoryTransfers.merge(host, incoming, new int[] { 0 }) && incoming.stackSize == 4,
+            "Manual transfer cannot merge into the lock");
+        check(
+            PlayerInventoryTransfers.transferTo(host, player, 0, new int[] { 1 }) == null
+                && inventory.mainInventory[raw].stackSize == 8,
+            "Explicit transfer leaves locked source intact");
+        HotbarBanks.receive(
+            player,
+            java.util.stream.IntStream.range(0, 9)
+                .toArray());
+        ItemStack[] before = inventory.mainInventory.clone();
+        HotbarBanks.exchange(player, 0);
+        check(
+            inventory.mainInventory[0] == before[0] && inventory.mainInventory[9] == before[9]
+                && inventory.mainInventory[1] == before[10],
+            "Bank exchange skips locked pairs and moves other pairs");
+        restored.getEntityData()
+            .setTag(
+                net.minecraft.entity.player.EntityPlayer.PERSISTED_NBT_TAG,
+                player.getEntityData()
+                    .getCompoundTag(net.minecraft.entity.player.EntityPlayer.PERSISTED_NBT_TAG)
+                    .copy());
+        check(InventorySlotLocks.locked(restored.inventory, raw), "Reopened player keeps the saved lock");
+        inventory.shape = inventory.shape.resized(inventory.shape.storageSlots() == 27 ? 28 : 27);
+        check(
+            InventorySlotLocks.locked(inventory, inventory.shape.rawMainSlots()),
+            "Armor stays locked when its raw index moves with resize");
+        InventorySlotLocks.toggle(player, storageLock);
+        check(!InventorySlotLocks.contains(player, storageLock), "Second toggle releases the slot");
+    }
+
+    private static void workbench(Player player, Inventory inventory, Item item) throws Exception {
+        Host table = new Host();
+        player.openContainer = table;
+        InventoryBasic crafting = new InventoryBasic("workbench", false, 10);
+        for (int i = 0; i < 10; i++) table.dynamicinventory$append(new Slot(crafting, i, 0, 0));
+        for (int i = 9; i < 36; i++) table.dynamicinventory$append(new Slot(inventory, i, 0, 0));
+        for (int i = 0; i < 9; i++) table.dynamicinventory$append(new Slot(inventory, i, 0, 0));
+        ContainerInventoryRegion.attach(table, inventory);
+        HotbarBanks.receive(player, 0);
+        check(
+            AutomaticInventoryRouting.receive(player, 3, table.windowId, new int[] { 0 }, new int[] { 0 }),
+            "Workbench assigns exactly one Main storage cell");
+        Arrays.fill(inventory.mainInventory, null);
+        for (int i = 0; i < 9; i++) inventory.mainInventory[i] = new ItemStack(item, 64);
+        ItemStack output = new ItemStack(item, 4);
+        inventory.mainInventory[9] = new ItemStack(item, 63);
+        java.lang.reflect.Method capacity = WorkbenchCapacityMixin.class
+            .getDeclaredMethod("dynamicinventory$capacity", Object.class, ItemStack.class, boolean.class);
+        capacity.setAccessible(true);
+        check(
+            (int) capacity.invoke(table, null, output, true) == 3 && output.stackSize == 4
+                && inventory.mainInventory[9].stackSize == 63,
+            "Multi-item crafting refuses a partial fit despite empty satellite slots");
+        inventory.mainInventory[9].stackSize = 60;
+        check(
+            (int) capacity.invoke(table, null, output, true) == 0
+                && PlayerInventoryTransfers.merge(table, output, table.region.destinations(10, 46, true))
+                && output.stackSize == 0
+                && inventory.mainInventory[9].stackSize == 64,
+            "Complete workbench output fits the destinations used by the native transfer");
     }
 
     private static void patternExtraction(Player player, Inventory inventory, Host machine, Item item) {

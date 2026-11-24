@@ -10,11 +10,13 @@ import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 
+import com.cleanroommc.bogosorter.ShortcutHandler;
 import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 
 import dev.gilbe.dynamicinventory.compat.PanelSortScope;
 import dev.gilbe.dynamicinventory.compat.mui1.Mui1PlayerInventory;
 import dev.gilbe.dynamicinventory.compat.mui2.Mui2PlayerInventory;
+import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 
@@ -29,6 +31,14 @@ final class BogoHotbarFixtures {
         int[] bank = java.util.stream.IntStream.range(capacity - 9, capacity)
             .toArray();
         HotbarBanks.receive(player, bank);
+        int[] main = { 0, capacity - 1 };
+        AutomaticInventoryRouting.receive(
+            player,
+            InventoryLayout.of(inventory)
+                .revision(),
+            player.openContainer.windowId,
+            main,
+            main);
         for (int framework = 0; framework < 3; framework++) {
             List<SlotAccessor> group = new ArrayList<>();
             for (int logical = 0; logical < capacity + 9; logical++) {
@@ -47,6 +57,21 @@ final class BogoHotbarFixtures {
                 group.add((SlotAccessor) slot);
             }
             List<SlotAccessor> available = PanelSortScope.filter(group);
+            List<SlotAccessor> targets = PanelSortScope.automaticTargets(group);
+            require(
+                targets.equals(group.subList(0, 10)),
+                "Single-item targets exclude hidden banks and non-Main cells");
+            if (framework == 0) {
+                net.minecraft.item.Item item = new net.minecraft.item.Item();
+                for (SlotAccessor target : targets) target.callPutStack(new ItemStack(item, 64));
+                for (boolean emptyOnly : new boolean[] { true, false }) {
+                    ItemStack incoming = new ItemStack(item, 1);
+                    require(
+                        ShortcutHandler.insertToSlots(targets, incoming, emptyOnly) == incoming
+                            && incoming.stackSize == 1,
+                        "Both native single-item modes leave the source intact when Main is full");
+                }
+            }
             require(available.size() == capacity, "Unscoped native sort protects nine reserved cells");
             require(group.size() == capacity + 9, "Bogo's cached group is untouched");
             for (int i = 0; i < group.size(); i++)

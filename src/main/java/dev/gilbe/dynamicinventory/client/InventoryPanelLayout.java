@@ -4,19 +4,22 @@ package dev.gilbe.dynamicinventory.client;
 public final class InventoryPanelLayout {
 
     public static final int CELL = 18, MIN_WIDTH = 178, MIN_HEIGHT = 64;
+    static final int SCROLLBAR_WIDTH = 3;
+    public static final int MAX_MAIN_COLUMNS = 36, MAX_ROWS = 36, MAX_HEIGHT = 720;
+    private static final int MAX_SUBPANEL_COLUMNS = 18;
     public final Rect bounds;
     public final int columns, rows, gridX, gridY, hotbarX, hotbarY, hotbarColumns;
 
-    private InventoryPanelLayout(Rect bounds, int storage, int margin) {
-        this(bounds, storage, margin, true);
+    private InventoryPanelLayout(Rect bounds, int storage, int margin, boolean hotbar) {
+        this(bounds, storage, margin, hotbar, maxColumns(hotbar), MAX_ROWS);
     }
 
-    private InventoryPanelLayout(Rect bounds, int storage, int margin, boolean hotbar) {
-        columns = Math.max(1, Math.min(18, (bounds.width - margin * 2) / CELL));
+    private InventoryPanelLayout(Rect bounds, int storage, int margin, boolean hotbar, int columnLimit, int rowLimit) {
+        columns = Math.max(1, Math.min(columnLimit, (bounds.width - margin * 2) / CELL));
         hotbarColumns = Math.min(9, columns);
         int overhead = (hotbar ? 20 + ((9 + hotbarColumns - 1) / hotbarColumns) * CELL : 18) + margin;
         rows = Math
-            .max(1, Math.min(12, Math.min((storage + columns - 1) / columns, (bounds.height - overhead) / CELL)));
+            .max(1, Math.min(rowLimit, Math.min((storage + columns - 1) / columns, (bounds.height - overhead) / CELL)));
         this.bounds = bounds;
         // Keep the frame under the pointer; distribute space between cell thresholds on both sides.
         // Coordinates refer to item origins. Slot artwork begins one pixel before the item origin.
@@ -61,6 +64,14 @@ public final class InventoryPanelLayout {
         return (hotbar ? 38 + ((9 + columns - 1) / columns) * CELL : 36) + margin;
     }
 
+    private static int maxColumns(boolean main) {
+        return main ? MAX_MAIN_COLUMNS : MAX_SUBPANEL_COLUMNS;
+    }
+
+    public static int maximumWidth(boolean main) {
+        return main ? MAX_MAIN_COLUMNS * CELL + 36 : 340;
+    }
+
     /** Center a partial storage row without changing its slot identities or row order. */
     public static int rowOffset(int index, int storage, int columns) {
         int occupied = Math.min(columns, storage - index / columns * columns);
@@ -68,7 +79,7 @@ public final class InventoryPanelLayout {
     }
 
     public Rect scrollbar() {
-        return new Rect(gridX + columns * CELL, gridY - 1, 3, rows * CELL);
+        return new Rect(gridX + columns * CELL, gridY - 1, SCROLLBAR_WIDTH, rows * CELL);
     }
 
     public Rect scrollbarTarget() {
@@ -101,7 +112,8 @@ public final class InventoryPanelLayout {
                 clamp(requested.y, area.y, area.bottom() - h),
                 w,
                 h);
-            InventoryPanelLayout candidate = new InventoryPanelLayout(fitted, storage, margin);
+            // The fixed nine-slot layout is retained for callers using the original machine-bounds overload.
+            InventoryPanelLayout candidate = new InventoryPanelLayout(fitted, storage, margin, true, 18, 12);
             if (machine != null && candidate.bounds.intersects(machine)) continue;
             long cost = square(candidate.bounds.x - requested.x) + square(candidate.bounds.y - requested.y)
                 + square(candidate.bounds.width - requested.width)
@@ -116,12 +128,17 @@ public final class InventoryPanelLayout {
 
     public static InventoryPanelLayout fit(Rect requested, Rect viewport, java.util.List<Rect> obstacles, int storage,
         int margin, boolean hotbar) {
+        return fit(requested, viewport, obstacles, storage, margin, hotbar, 1);
+    }
+
+    static InventoryPanelLayout fit(Rect requested, Rect viewport, java.util.List<Rect> obstacles, int storage,
+        int margin, boolean hotbar, int gap) {
         margin = Math.max(4, Math.min(18, margin));
         int minWidth = 18 + margin * 2;
         int minHeight = (hotbar ? 56 : 36) + margin;
         InventoryPanelLayout best = null;
         long cost = Long.MAX_VALUE;
-        for (Rect area : freeAreas(viewport, obstacles, minWidth, minHeight, 1)) {
+        for (Rect area : freeAreas(viewport, obstacles, minWidth, minHeight, gap)) {
             int w = Math.min(area.width, Math.max(minWidth, requested.width));
             while (minimumHeight(w, margin, hotbar) > area.height) {
                 int wider = ((w - margin * 2) / CELL + 1) * CELL + margin * 2;
@@ -130,7 +147,7 @@ public final class InventoryPanelLayout {
             }
             int requiredHeight = minimumHeight(w, margin, hotbar);
             if (requiredHeight > area.height) continue;
-            int h = Math.min(area.height, Math.max(requiredHeight, requested.height));
+            int h = Math.min(Math.min(area.height, MAX_HEIGHT), Math.max(requiredHeight, requested.height));
             Rect rect = new Rect(
                 clamp(requested.x, area.x, area.right() - w),
                 clamp(requested.y, area.y, area.bottom() - h),
@@ -149,9 +166,13 @@ public final class InventoryPanelLayout {
 
     /** Closest unobstructed position to the pointer, keeping the panel's dimensions and a one-pixel gap. */
     public static Rect snapDrag(Rect requested, Rect viewport, java.util.List<Rect> obstacles) {
+        return snapDrag(requested, viewport, obstacles, 1);
+    }
+
+    static Rect snapDrag(Rect requested, Rect viewport, java.util.List<Rect> obstacles, int gap) {
         Rect best = null;
         long cost = Long.MAX_VALUE;
-        for (Rect area : freeAreas(viewport, obstacles, requested.width, requested.height, 1)) {
+        for (Rect area : freeAreas(viewport, obstacles, requested.width, requested.height, gap)) {
             Rect candidate = new Rect(
                 clamp(requested.x, area.x, area.right() - requested.width),
                 clamp(requested.y, area.y, area.bottom() - requested.height),
@@ -180,6 +201,10 @@ public final class InventoryPanelLayout {
 
     /** Small edge/center magnets, measured from the requested position rather than the previous frame. */
     public static Alignment alignDrag(Rect requested, Rect viewport, java.util.List<Rect> panels, int tolerance) {
+        return alignDrag(requested, viewport, panels, tolerance, 1);
+    }
+
+    static Alignment alignDrag(Rect requested, Rect viewport, java.util.List<Rect> panels, int tolerance, int gap) {
         int x = clamp(requested.x, viewport.x, viewport.right() - requested.width);
         int y = clamp(requested.y, viewport.y, viewport.bottom() - requested.height);
         int dx = tolerance + 1, dy = tolerance + 1;
@@ -205,15 +230,96 @@ public final class InventoryPanelLayout {
                     guideY = yGuides[i];
                 }
             }
+            if (reference == viewport) continue;
+            if (y < reference.bottom() && y + requested.height > reference.y) {
+                int after = reference.right() + gap - x;
+                int before = reference.x - requested.width - gap - x;
+                int near = Math.abs(after) < Math.abs(before) ? after : before;
+                if (Math.abs(near) < Math.abs(dx)) {
+                    dx = near;
+                    guideX = near == after ? reference.right() : reference.x;
+                }
+            }
+            if (x < reference.right() && x + requested.width > reference.x) {
+                int after = reference.bottom() + gap - y;
+                int before = reference.y - requested.height - gap - y;
+                int near = Math.abs(after) < Math.abs(before) ? after : before;
+                if (Math.abs(near) < Math.abs(dy)) {
+                    dy = near;
+                    guideY = near == after ? reference.bottom() : reference.y;
+                }
+            }
         }
         if (Math.abs(dx) > tolerance) dx = 0;
         if (Math.abs(dy) > tolerance) dy = 0;
         return new Alignment(new Rect(x + dx, y + dy, requested.width, requested.height), guideX, guideY);
     }
 
+    /** Match another panel's width or height within three pixels, keeping the opposite corner fixed. */
+    public static Rect alignResize(Rect before, Rect requested, int grip, Rect viewport, java.util.List<Rect> panels,
+        int minimumWidth, int minimumHeight, int maximumWidth, int maximumHeight) {
+        return alignResize(
+            before,
+            requested,
+            grip,
+            viewport,
+            panels,
+            minimumWidth,
+            minimumHeight,
+            maximumWidth,
+            maximumHeight,
+            1);
+    }
+
+    static Rect alignResize(Rect before, Rect requested, int grip, Rect viewport, java.util.List<Rect> panels,
+        int minimumWidth, int minimumHeight, int maximumWidth, int maximumHeight, int gap) {
+        int width = requested.width, height = requested.height;
+        int dx = 4, dy = 4;
+        for (Rect panel : panels) {
+            int w = Math.abs(panel.width - requested.width), h = Math.abs(panel.height - requested.height);
+            if (w < dx && panel.width >= minimumWidth && panel.width <= maximumWidth) {
+                width = panel.width;
+                dx = w;
+            }
+            if (h < dy && panel.height >= minimumHeight && panel.height <= maximumHeight) {
+                height = panel.height;
+                dy = h;
+            }
+        }
+        if (width == requested.width && height == requested.height) return requested;
+        Rect both = fromOppositeCorner(requested, grip, width, height);
+        if (canResize(before, both, viewport, panels, gap)) return both;
+        Rect matchWidth = fromOppositeCorner(requested, grip, width, requested.height);
+        Rect matchHeight = fromOppositeCorner(requested, grip, requested.width, height);
+        if (width != requested.width && (height == requested.height || dx <= dy)
+            && canResize(before, matchWidth, viewport, panels, gap)) return matchWidth;
+        if (height != requested.height && canResize(before, matchHeight, viewport, panels, gap)) return matchHeight;
+        return width != requested.width && canResize(before, matchWidth, viewport, panels, gap) ? matchWidth
+            : requested;
+    }
+
+    private static boolean canResize(Rect before, Rect requested, Rect viewport, java.util.List<Rect> panels, int gap) {
+        if (!contains(viewport, requested)) return false;
+        for (Rect panel : panels) if (blocksResize(before, requested, panel, gap)) return false;
+        return true;
+    }
+
+    private static Rect fromOppositeCorner(Rect before, int grip, int width, int height) {
+        return new Rect(
+            (grip & 1) == 0 ? before.x : before.right() - width,
+            (grip & 4) == 0 ? before.y : before.bottom() - height,
+            width,
+            height);
+    }
+
     /** Resizing follows the pointer up to the first obstacle, preserving its anchored edge. */
     public static Rect constrainGesture(Rect before, Rect requested, Rect viewport, java.util.List<Rect> obstacles,
         int minimumWidth, int minimumHeight) {
+        return constrainGesture(before, requested, viewport, obstacles, minimumWidth, minimumHeight, 1);
+    }
+
+    static Rect constrainGesture(Rect before, Rect requested, Rect viewport, java.util.List<Rect> obstacles,
+        int minimumWidth, int minimumHeight, int gap) {
         int w = Math.max(minimumWidth, Math.min(viewport.width, requested.width));
         int h = Math.max(minimumHeight, Math.min(viewport.height, requested.height));
         Rect target = new Rect(
@@ -231,7 +337,7 @@ public final class InventoryPanelLayout {
                 before.y + (int) ((long) (target.y - before.y) * step / steps),
                 before.width + (int) ((long) (target.width - before.width) * step / steps),
                 before.height + (int) ((long) (target.height - before.height) * step / steps));
-            for (Rect obstacle : obstacles) if (blocksResize(before, candidate, obstacle)) return safe;
+            for (Rect obstacle : obstacles) if (blocksResize(before, candidate, obstacle, gap)) return safe;
             safe = candidate;
         }
         return safe;
@@ -239,6 +345,11 @@ public final class InventoryPanelLayout {
 
     /** Existing touching edges may stay touching while resizing away or parallel to them. */
     public static boolean blocksResize(Rect before, Rect after, Rect obstacle) {
+        return blocksResize(before, after, obstacle, 1);
+    }
+
+    private static boolean blocksResize(Rect before, Rect after, Rect obstacle, int gap) {
+        if (gap == 0) return after.intersects(obstacle);
         Rect padded = new Rect(obstacle.x - 1, obstacle.y - 1, obstacle.width + 2, obstacle.height + 2);
         return after.intersects(before.intersects(padded) && !before.intersects(obstacle) ? obstacle : padded);
     }
@@ -246,24 +357,25 @@ public final class InventoryPanelLayout {
     /** Nearest complete grid size, keeping the opposite corner fixed and respecting neighboring frames. */
     public static Rect snapResize(Rect before, Rect requested, int grip, Rect viewport, java.util.List<Rect> obstacles,
         int margin, boolean hotbar, int storage) {
+        return snapResize(before, requested, grip, viewport, obstacles, margin, hotbar, storage, 1);
+    }
+
+    static Rect snapResize(Rect before, Rect requested, int grip, Rect viewport, java.util.List<Rect> obstacles,
+        int margin, boolean hotbar, int storage, int gap) {
         Rect best = null;
         long cost = Long.MAX_VALUE;
-        for (int columns = 1; columns <= 18; columns++) {
+        for (int columns = 1; columns <= maxColumns(hotbar); columns++) {
             int width = columns * CELL + margin * 2;
-            if (width > 340) break;
+            if (width > maximumWidth(hotbar) || width > viewport.width) break;
             int overhead = minimumHeight(width, margin, hotbar) - CELL;
-            int rowLimit = Math.max(1, Math.min(12, (storage + columns - 1) / columns));
+            int rowLimit = Math.max(1, Math.min(MAX_ROWS, (storage + columns - 1) / columns));
             for (int rows = 1; rows <= rowLimit; rows++) {
                 int height = rows * CELL + overhead;
-                if (height > 262) break;
-                Rect candidate = new Rect(
-                    (grip & 1) != 0 ? before.right() - width : before.x,
-                    (grip & 4) != 0 ? before.bottom() - height : before.y,
-                    width,
-                    height);
+                if (height > MAX_HEIGHT || height > viewport.height) break;
+                Rect candidate = fromOppositeCorner(before, grip, width, height);
                 if (!contains(viewport, candidate)) continue;
                 boolean blocked = false;
-                for (Rect obstacle : obstacles) if (blocksResize(before, candidate, obstacle)) {
+                for (Rect obstacle : obstacles) if (blocksResize(before, candidate, obstacle, gap)) {
                     blocked = true;
                     break;
                 }

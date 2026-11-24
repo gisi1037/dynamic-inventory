@@ -1,11 +1,15 @@
 package dev.gilbe.dynamicinventory.mixins.bogosorter;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.inventory.Container;
 
+import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.cleanroommc.bogosorter.common.network.CSort;
 import com.cleanroommc.bogosorter.common.network.IPacket;
@@ -13,11 +17,20 @@ import com.cleanroommc.bogosorter.common.network.NetworkHandler;
 import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 
 import dev.gilbe.dynamicinventory.client.DetachedChestPanel;
+import dev.gilbe.dynamicinventory.client.SlotLockControls;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.network.PanelSortRequest;
 
 @Mixin(targets = "com.cleanroommc.bogosorter.ClientEventHandler", remap = false)
 public abstract class BogoClientPanelSortMixin {
+
+    @Inject(method = "handleInput", at = @At("HEAD"), cancellable = true)
+    private static void dynamicinventory$leaveLockClick(GuiContainer container, boolean fromMouse,
+        CallbackInfoReturnable<Boolean> result) {
+        // Bogo's Alt+click bulk move otherwise sees the chord before the inventory GUI.
+        if (container != null && fromMouse && SlotLockControls.isToggle(Mouse.getEventButton()))
+            result.setReturnValue(false);
+    }
 
     @Redirect(
         method = "doSort",

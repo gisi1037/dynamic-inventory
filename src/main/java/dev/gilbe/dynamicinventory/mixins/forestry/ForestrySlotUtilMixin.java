@@ -12,7 +12,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.api.PlayerInventoryBinding;
@@ -22,6 +24,17 @@ import dev.gilbe.dynamicinventory.compat.ForestryCompatibility;
 @Pseudo
 @Mixin(targets = "forestry.core.utils.SlotUtil", remap = false)
 public abstract class ForestrySlotUtilMixin {
+
+    @Inject(method = "transferStackInSlot", at = @At("HEAD"), cancellable = true)
+    private static void dynamicinventory$canTake(List<Slot> slots, EntityPlayer player, int index,
+        CallbackInfoReturnable<ItemStack> result) {
+        if (ForestryCompatibility.handles(player.openContainer) && player.openContainer.inventorySlots == slots
+            && index >= 0
+            && index < slots.size()
+            && !slots.get(index)
+                .canTakeStack(player))
+            result.setReturnValue(null);
+    }
 
     @Shadow
     private static boolean shiftItemStack(List<Slot> slots, ItemStack stack, int index, int count, boolean crafting) {
@@ -64,19 +77,26 @@ public abstract class ForestrySlotUtilMixin {
 
         List<Slot> storage = new ArrayList<>();
         for (int id : dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting
-            .filter(container, binding.getStorageSlotIds())) storage.add(container.getSlot(id));
+            .filter(container, binding.getStorageSlotIds()))
+            if (container.getSlot(id)
+                .isItemValid(stack)) storage.add(container.getSlot(id));
         List<Slot> hotbar = new ArrayList<>();
-        for (int id : binding.getHotbarSlotIds()) hotbar.add(container.getSlot(id));
+        for (int id : dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting
+            .filter(container, binding.getHotbarSlotIds()))
+            if (container.getSlot(id)
+                .isItemValid(stack)) hotbar.add(container.getSlot(id));
         if (logical >= 0) {
             List<Slot> destination = logical < 9 ? storage : hotbar;
             boolean changed = shiftItemStackToRangeMerge(destination, stack, 0, destination.size());
             return shiftItemStackToRangeOpenSlots(destination, stack, 0, destination.size()) | changed;
         }
-        // Preserve native order: merge both regions before using any empty slot, hotbar first.
+        // Finish the hotbar before entering storage, preserving Forestry's stack and slot rules.
         boolean changed = shiftItemStackToRangeMerge(hotbar, stack, 0, hotbar.size());
-        changed |= shiftItemStackToRangeMerge(storage, stack, 0, storage.size());
         changed |= shiftItemStackToRangeOpenSlots(hotbar, stack, 0, hotbar.size());
-        changed |= shiftItemStackToRangeOpenSlots(storage, stack, 0, storage.size());
+        if (stack.stackSize > 0) {
+            changed |= shiftItemStackToRangeMerge(storage, stack, 0, storage.size());
+            changed |= shiftItemStackToRangeOpenSlots(storage, stack, 0, storage.size());
+        }
         return changed;
     }
 }

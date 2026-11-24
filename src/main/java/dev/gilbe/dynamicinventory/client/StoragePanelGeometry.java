@@ -27,7 +27,7 @@ public final class StoragePanelGeometry {
             case "crazypants.enderio.machine.invpanel.GuiInventoryPanel" -> 187;
             case "crazypants.enderio.machine.capbank.GuiCapBank" -> Math.max(83, contentBottom + 6);
             case "crazypants.enderio.conduit.gui.GuiExternalConnection" -> storageTop + 4;
-            case "crazypants.enderio.machine.crafter.GuiCrafter", "crazypants.enderio.machine.spawner.GuiPoweredSpawner", "crazypants.enderio.machine.tank.GuiTank", "crazypants.enderio.machine.buffer.GuiBuffer" -> storageTop
+            case "crazypants.enderio.machine.crafter.GuiCrafter", "crazypants.enderio.machine.spawner.GuiPoweredSpawner", "crazypants.enderio.machine.soul.GuiSoulBinder", "crazypants.enderio.machine.slicensplice.GuiSliceAndSplice", "crazypants.enderio.machine.tank.GuiTank", "crazypants.enderio.machine.buffer.GuiBuffer" -> storageTop
                 + 2;
             default -> 0;
         };
@@ -58,6 +58,7 @@ public final class StoragePanelGeometry {
             return new StoragePanelGeometry(0, 176, contentBottom + 8, contentBottom + 2, true);
         int thaumcraftCrop = switch (screen) {
             case "thaumcraft.client.gui.GuiFocalManipulator" -> 143;
+            case "thaumcraft.client.gui.GuiResearchTable" -> 167;
             case "thaumcraft.client.gui.GuiAlchemyFurnace", "thaumcraft.client.gui.GuiThaumatorium" -> 76;
             default -> 0;
         };

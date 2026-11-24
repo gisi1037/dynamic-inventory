@@ -107,18 +107,10 @@ public final class EnderIoCompatibility {
         for (String[] host : HOSTS) InventoryUi.register(
             InventoryUiAdapter.builder("dynamicinventory:enderio/" + host[0], host[1])
                 .gui(host[2])
-                .compatibilityRevision(2)
+                .compatibilityRevision(host[0].equals("conduit") ? 3 : 2)
                 .layout(LAYOUT)
                 .extraTransfers((container, player, id, binding) -> {
-                    if (host[0].equals("conduit")) {
-                        int[] targets = java.util.stream.IntStream.range(0, binding.getNativeSlotCount())
-                            .filter(
-                                target -> binding.logicalFromContainerId(target) < 0
-                                    && container.getSlot(target).xDisplayPosition >= 0)
-                            .toArray();
-                        return InventoryTransfers.toSlots(targets)
-                            .transfer(container, player, id, binding);
-                    }
+                    if (host[0].equals("conduit")) return container.transferStackInSlot(player, id);
                     ItemStack before = container.getSlot(id)
                         .getStack();
                     if (before == null) return null;

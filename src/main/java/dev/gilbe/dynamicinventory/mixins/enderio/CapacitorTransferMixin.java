@@ -45,9 +45,9 @@ public abstract class CapacitorTransferMixin extends Container {
         } else {
             moved = id < 4 && mergeItemStackIntoArmor(player, stack, id);
             if (stack.stackSize > 0)
-                moved = PlayerInventoryTransfers.mergeAutomatic(this, stack, region.getStorageSlotIds()) || moved;
+                moved = PlayerInventoryTransfers.mergeAutomatic(this, stack, region.getHotbarSlotIds()) || moved;
             if (stack.stackSize > 0)
-                moved = PlayerInventoryTransfers.merge(this, stack, region.getHotbarSlotIds()) || moved;
+                moved = PlayerInventoryTransfers.mergeAutomatic(this, stack, region.getStorageSlotIds()) || moved;
         }
         if (!moved) return;
         if (stack.stackSize == 0) source.putStack(null);

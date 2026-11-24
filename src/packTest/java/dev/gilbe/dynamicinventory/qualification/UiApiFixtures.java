@@ -629,6 +629,17 @@ public final class UiApiFixtures implements IGuiHandler {
                 "registry refuses duplicate ordinary index before slot mutation",
                 passed);
 
+            for (int raw : new int[] { -1, player.inventory.getSizeInventory() }) {
+                NativeContainer badIndex = new NativeContainer(player.inventory, 27);
+                badIndex.inventorySlots.set(0, new Slot(player.inventory, raw, 0, 0));
+                expectAttachRefusal(
+                    badIndex,
+                    player,
+                    badIndex.inventorySlots.size(),
+                    "registry refuses out-of-range player slot " + raw,
+                    passed);
+            }
+
             NativeContainer wrongCount = new NativeContainer(player.inventory, 26);
             int wrongCountBefore = wrongCount.inventorySlots.size();
             expectAttachRefusal(

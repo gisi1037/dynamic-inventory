@@ -18,6 +18,7 @@ import net.minecraft.item.ItemStack;
 import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.container.ContainerInventoryRegion;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 import dev.gilbe.dynamicinventory.network.ServerInventoryGate;
 
 /**
@@ -218,17 +219,18 @@ public final class InventoryUi {
                 "Expected " + adapter.getExpectedNativeSlots()
                     + " native slots; found "
                     + container.inventorySlots.size());
-        if (inventory.mainInventory.length != InventoryLayout.of(inventory)
-            .rawMainSlots())
+        InventoryShape shape = InventoryLayout.of(inventory);
+        if (inventory.mainInventory.length != shape.rawMainSlots())
             throw new IllegalArgumentException("Player backing array differs from its inventory shape");
-        boolean[] seen = new boolean[InventoryLayout.of(inventory)
-            .mainSlots()];
+        boolean[] seen = new boolean[shape.mainSlots()];
         for (Slot slot : container.inventorySlots) {
             if (slot.inventory instanceof InventoryPlayer && slot.inventory != inventory)
                 throw new IllegalArgumentException("Container contains another player's inventory");
             if (slot.inventory != inventory) continue;
-            int logical = InventoryLayout.of(inventory)
-                .ordinaryIndex(slot.getSlotIndex());
+            int raw = slot.getSlotIndex();
+            if (raw < 0 || raw >= inventory.getSizeInventory())
+                throw new IllegalArgumentException("Player slot index outside inventory: " + raw);
+            int logical = shape.ordinaryIndex(raw);
             if (logical < 0) continue;
             if (seen[logical]) throw new IllegalArgumentException("Duplicate player index " + logical);
             seen[logical] = true;
@@ -259,6 +261,7 @@ public final class InventoryUi {
     /** Uses the registered policy and the canonical binding; never invents machine-specific destinations. */
     public static ItemStack transferAdditional(Container container, EntityPlayer player, int slotId) {
         if (!handlesAdditionalTransfer(container, slotId) || player == null) return null;
+        if (dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.locked(container, slotId, player)) return null;
         PlayerInventoryBinding binding = getBinding(container);
         if (binding.getPlayerInventory() != player.inventory) return null;
         return findAdapter(container).getTransferPolicy()

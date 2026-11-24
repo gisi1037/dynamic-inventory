@@ -5,6 +5,8 @@ import cpw.mods.fml.common.Loader;
 /** Exact named fixtures are checked independently; selecting a daily does not qualify it. */
 public final class PackCompatibility {
 
+    private static boolean aePins;
+
     private PackCompatibility() {}
 
     public static boolean enabled() {
@@ -13,12 +15,17 @@ public final class PackCompatibility {
     }
 
     public static boolean aePinnedPanel() {
-        return IntegrationProfile.selected()
-            .usesRelease29Adapters() && Loader.isModLoaded("appliedenergistics2");
+        return aePins;
     }
 
     public static void verifyVersions() {
         if (!enabled()) return;
+        aePins = IntegrationProfile.selected()
+            .usesRelease29Adapters()
+            && matchesVersion(
+                "appliedenergistics2",
+                IntegrationProfile.selected()
+                    .version("Applied-Energistics-2-Unofficial"));
         require("backhand", "Backhand");
         require("Baubles", "Baubles-Expanded");
         require("NotEnoughItems", "NotEnoughItems");
@@ -43,12 +50,16 @@ public final class PackCompatibility {
     static void require(String id, String project) {
         IntegrationProfile profile = IntegrationProfile.selected();
         String version = profile.version(project);
-        if (!Loader.isModLoaded(id) || !version.equals(
+        if (!matchesVersion(id, version)) {
+            throw new IllegalStateException(profile.profileName() + " requires " + id + " " + version);
+        }
+    }
+
+    static boolean matchesVersion(String id, String version) {
+        return Loader.isModLoaded(id) && version.equals(
             Loader.instance()
                 .getIndexedModList()
                 .get(id)
-                .getVersion())) {
-            throw new IllegalStateException(profile.profileName() + " requires " + id + " " + version);
-        }
+                .getVersion());
     }
 }

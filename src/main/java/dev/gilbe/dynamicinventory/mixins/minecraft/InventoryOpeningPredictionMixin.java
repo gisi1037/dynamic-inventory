@@ -30,6 +30,11 @@ public abstract class InventoryOpeningPredictionMixin {
         }
         Minecraft mc = Minecraft.getMinecraft();
         if (player != mc.thePlayer || player.openContainer.windowId != window) return;
+        if (dev.gilbe.dynamicinventory.inventory.InventorySlotLocks
+            .blocksClick(player.openContainer, player, slot, button, mode)) {
+            cir.setReturnValue(null);
+            return;
+        }
         boolean quickMove = mode == 1 && (button == 0 || button == 1);
         if (PackCompatibility.aePinnedPanel() && (quickMove && AePinnedPanel.depositMatching(mc.currentScreen, slot)
             || AePinnedPanel.protects(mc.currentScreen, player.inventory, slot, mode))) {

@@ -11,6 +11,7 @@ import com.cleanroommc.bogosorter.common.PinnedSlots;
 import com.cleanroommc.bogosorter.mixins.early.minecraft.SlotAccessor;
 
 import dev.gilbe.dynamicinventory.compat.BogoExpandedPins;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 @Mixin(value = PinnedSlots.class, remap = false)
 public abstract class BogoPinnedSlotsMixin {
@@ -29,6 +30,10 @@ public abstract class BogoPinnedSlotsMixin {
         cancellable = true)
     private static void dynamicinventory$pinnedSlot(EntityPlayer player, SlotAccessor slot,
         CallbackInfoReturnable<Boolean> result) {
+        if (slot instanceof net.minecraft.inventory.Slot actual && InventorySlotLocks.locked(actual, player)) {
+            result.setReturnValue(true);
+            return;
+        }
         int index = BogoExpandedPins.index(slot, player.inventory);
         if (index >= 0) result.setReturnValue(BogoExpandedPins.isPinned(player, index));
     }
@@ -36,6 +41,10 @@ public abstract class BogoPinnedSlotsMixin {
     @Inject(method = "isPinned(Lnet/minecraft/entity/player/EntityPlayer;I)Z", at = @At("HEAD"), cancellable = true)
     private static void dynamicinventory$pinnedRaw(EntityPlayer player, int raw,
         CallbackInfoReturnable<Boolean> result) {
+        if (InventorySlotLocks.locked(player.inventory, raw)) {
+            result.setReturnValue(true);
+            return;
+        }
         int index = BogoExpandedPins.indexFromRaw(player.inventory, raw);
         if (index >= 0) result.setReturnValue(BogoExpandedPins.isPinned(player, index));
     }

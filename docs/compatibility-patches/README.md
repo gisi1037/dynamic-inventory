@@ -22,9 +22,10 @@ shipped code small and the difference between planned and working support clear.
 | Avaritiaddons / `avaritiaddons` | [Avaritiaddons](avaritiaddons.md) | Compressed-chest adapter and modular panels |
 | GTNH Core / `dreamcraft` | [Dreamcraft](dreamcraft.md) | Baby-chest adapter and modular panels |
 | Ender IO / `EnderIO` | [Ender IO](ender-io.md) | 29 exact inventory families plus alternate TelePad travel screen; review pending |
-| Forestry / `Forestry` | [Forestry](forestry.md) | 21 stationary machine screens; player visual review complete |
+| Forestry / `Forestry` | [Forestry](forestry.md) | 35 inventory containers, including machines, backpacks, genetics tools, minecarts, and mail |
 | Binnie's Mods / `BinnieCore` | [Binnie](binnie.md) | Inspection required; separate from Forestry |
-| Thaumcraft / `Thaumcraft` | [Thaumcraft](thaumcraft.md) | Reviewed Alchemical Furnace; other hosts need inspection |
+| Thaumcraft / `Thaumcraft` | [Thaumcraft](thaumcraft.md) | Workstation adapters, including the Research Table and Alchemical Furnace |
+| Railcraft / `Railcraft` | `RailcraftCompatibility` | Trading Station inventory with native ghost recipes and expanded shift-click routing |
 | Iron Chests / `IronChest` | [Iron Chests](iron-chests.md) | Exact native adapter and modular panels for all 11 chest tiers |
 | HarvestCraft / `harvestcraft` | [HarvestCraft](harvestcraft.md) | Eight reviewed processing adapters with modular panels; seven enabled lab blocks |
 | Storage Drawers / `StorageDrawers` | [Storage Drawers](storage-drawers.md) | Inspection required |

@@ -1,6 +1,9 @@
 package dev.gilbe.dynamicinventory.mixins.minecraft;
 
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.inventory.Container;
+import net.minecraft.item.ItemStack;
 import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.client.C0DPacketCloseWindow;
@@ -16,6 +19,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
+import dev.gilbe.dynamicinventory.network.InventoryLockSync;
 import dev.gilbe.dynamicinventory.network.InventoryOpeningProtocol;
 import dev.gilbe.dynamicinventory.network.InventoryResizeProtocol;
 import dev.gilbe.dynamicinventory.network.ServerGateAccess;
@@ -55,6 +63,22 @@ public abstract class InventoryOpeningServerMixin implements ServerGateAccess {
         if (!dynamicinventory$gate.allowsInput(playerEntity, packet.func_149548_c())) ci.cancel();
     }
 
+    @WrapOperation(
+        method = "processClickWindow",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/inventory/Container;slotClick(IIILnet/minecraft/entity/player/EntityPlayer;)Lnet/minecraft/item/ItemStack;"))
+    private ItemStack dynamicinventory$lockedClick(Container container, int slot, int button, int mode,
+        EntityPlayer player, Operation<ItemStack> original) {
+        // Preserve the vanilla transaction and inventory correction for refused predictions.
+        if (InventorySlotLocks.blocksClick(container, player, slot, button, mode)) {
+            // Some native hosts return null even for successful predicted moves.
+            playerEntity.sendContainerToPlayer(container);
+            return null;
+        }
+        return original.call(container, slot, button, mode, player);
+    }
+
     @Inject(method = "processEnchantItem", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$button(C11PacketEnchantItem packet, CallbackInfo ci) {
         if (!dynamicinventory$gate.allowsInput(playerEntity, packet.func_149539_c())) ci.cancel();
@@ -77,6 +101,12 @@ public abstract class InventoryOpeningServerMixin implements ServerGateAccess {
             return;
         }
         if (!dynamicinventory$resize.allowsInput(playerEntity)) {
+            ci.cancel();
+            return;
+        }
+        if (InventoryLockSync.REQUEST.equals(channel)) {
+            if (dynamicinventory$gate.allowsInput(playerEntity, playerEntity.openContainer.windowId))
+                InventoryLockSync.toggle(playerEntity, packet.func_149558_e());
             ci.cancel();
             return;
         }
@@ -107,7 +137,18 @@ public abstract class InventoryOpeningServerMixin implements ServerGateAccess {
     @Inject(method = "processCreativeInventoryAction", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$creative(net.minecraft.network.play.client.C10PacketCreativeInventoryAction packet,
         CallbackInfo ci) {
-        if (!dynamicinventory$resize.allowsInput(playerEntity)) ci.cancel();
+        if (!dynamicinventory$resize.allowsInput(playerEntity)) {
+            ci.cancel();
+        } else if (InventorySlotLocks.locked(playerEntity.inventoryContainer, packet.func_149627_c(), playerEntity)) {
+            int slot = packet.func_149627_c();
+            playerEntity.playerNetServerHandler.sendPacket(
+                new net.minecraft.network.play.server.S2FPacketSetSlot(
+                    0,
+                    slot,
+                    playerEntity.inventoryContainer.getSlot(slot)
+                        .getStack()));
+            ci.cancel();
+        }
     }
 
     @Inject(method = "processPlayerDigging", at = @At("HEAD"), cancellable = true)
