@@ -29,6 +29,15 @@ public final class PanelLayoutReference {
         return translate(profile.requested(viewport), currentMachine, true);
     }
 
+    int verticalOffset(Rect baseMachine, Rect currentViewport) {
+        if (viewport.x != currentViewport.x || viewport.y != currentViewport.y
+            || viewport.width != currentViewport.width
+            || viewport.height != currentViewport.height
+            || machine.width != baseMachine.width
+            || machine.height != baseMachine.height) return -1;
+        return Math.max(0, machine.y - baseMachine.y);
+    }
+
     Rect translate(Rect panel, Rect currentMachine, boolean custom) {
         int dx = currentMachine.x - machine.x;
         int dy = currentMachine.y - machine.y;

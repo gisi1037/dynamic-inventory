@@ -24,12 +24,8 @@ import dev.gilbe.dynamicinventory.compat.PackCompatibility;
 public class ClientProxy extends CommonProxy {
 
     @Override
-    public void receiveInventoryLocks(net.minecraft.network.INetHandler connection, int[] locks) {
-        Minecraft mc = Minecraft.getMinecraft();
-        mc.func_152344_a(() -> {
-            if (mc.getNetHandler() == connection && mc.thePlayer != null)
-                dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.receive(mc.thePlayer, locks);
-        });
+    public void receiveInventoryLocks(net.minecraft.network.INetHandler connection, int[] locks, int[] types) {
+        dev.gilbe.dynamicinventory.client.HotbarControls.receiveLocks(connection, locks, types);
     }
 
     @Override
@@ -136,6 +132,9 @@ public class ClientProxy extends CommonProxy {
     public void postInit(FMLPostInitializationEvent event) {
         super.postInit(event);
         dev.gilbe.dynamicinventory.client.HotbarControls.initialize();
+        FMLCommonHandler.instance()
+            .bus()
+            .register(new dev.gilbe.dynamicinventory.client.SlotLockControls.Lifecycle());
         dev.gilbe.dynamicinventory.client.MainInventoryRoutingClient.initialize();
         if (Loader.isModLoaded("NotEnoughItems")) hideLegacyController();
         if (PackCompatibility.enabled()) PackClientCompatibility.initialize();

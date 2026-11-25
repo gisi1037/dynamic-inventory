@@ -111,6 +111,7 @@ public final class AeNativePanelControls extends Gui {
         viewport = area;
         obstacles = fixed;
         this.gap = gap;
+        Map<String, Placement> previous = new LinkedHashMap<>(placed);
         frames.clear();
         placed.clear();
         List<Rect> occupied = new ArrayList<>(fixed);
@@ -128,7 +129,12 @@ public final class AeNativePanelControls extends Gui {
                 int rows = frame.tool() ? limitRows(frame, custom ? saved[3] : frame.rows) : 0;
                 Rect wanted = frame
                     .size(custom ? saved[0] : frame.suggested.x, custom ? saved[1] : frame.suggested.y, columns, rows);
-                Rect bounds = fit(wanted, area, occupied, gap);
+                Placement retained = previous.get(frame.id);
+                Rect bounds = retained != null && retained.bounds.width == wanted.width
+                    && retained.bounds.height == wanted.height
+                    && area.contains(retained.bounds.x, retained.bounds.y)
+                    && area.contains(retained.bounds.right() - 1, retained.bounds.bottom() - 1) ? retained.bounds
+                        : fit(wanted, area, occupied, gap);
                 if (bounds == null && frame.tool()) {
                     // Retain access to every tool slot through scrolling on a tight viewport.
                     while (bounds == null && rows > 1) {
@@ -183,7 +189,8 @@ public final class AeNativePanelControls extends Gui {
 
     boolean pointer(int x, int y, int button, boolean down) {
         if (releaseOwned && button == 0 && !down) {
-            if (captured != null && !blocked()) finish(x, y);
+            if (blocked()) cancel();
+            else if (captured != null) finish(x, y);
             captured = null;
             releaseOwned = false;
             return true;
@@ -206,7 +213,7 @@ public final class AeNativePanelControls extends Gui {
                 releaseOwned = true;
                 return true;
             }
-            if (!corner && !moveGrip(bounds).contains(x, y)) continue;
+            if (!corner && !moveGrip(frame, bounds).contains(x, y)) continue;
             captured = frame;
             initial = preview = position;
             resizing = corner;
@@ -233,6 +240,7 @@ public final class AeNativePanelControls extends Gui {
 
     boolean cancel() {
         if (captured == null) return false;
+        placed.put(captured.id, initial);
         captured = null;
         return true;
     }
@@ -260,9 +268,15 @@ public final class AeNativePanelControls extends Gui {
         int columns = initial.columns, rows = initial.rows;
         Rect bounds;
         if (resizing) {
-            columns = limitColumns(captured, columns + Math.round(dx / (float) CELL));
-            rows = limitRows(captured, rows + Math.round(dy / (float) CELL));
-            bounds = clamp(captured.size(start.x, start.y, columns, rows), viewport);
+            columns = Math.min(
+                limitColumns(captured, columns + Math.round(dx / (float) CELL)),
+                (viewport.right() - start.x - FRAME_PADDING) / CELL);
+            rows = Math.min(
+                limitRows(captured, rows + Math.round(dy / (float) CELL)),
+                (viewport.bottom() - start.y - FRAME_PADDING) / CELL);
+            if (columns < 1 || rows < 1) return;
+            bounds = captured.size(start.x, start.y, columns, rows);
+            for (Rect obstacle : obstaclesFor(captured.id)) if (bounds.intersects(obstacle)) return;
         } else {
             Rect wanted = new Rect(start.x + dx, start.y + dy, start.width, start.height);
             bounds = InventoryPanelLayout.alignDrag(wanted, viewport, obstaclesFor(captured.id), 3, gap).bounds;
@@ -283,11 +297,15 @@ public final class AeNativePanelControls extends Gui {
     private void finish(int x, int y) {
         move(x, y);
         Rect fitted = fit(preview.bounds, viewport, obstaclesFor(captured.id), gap);
-        if (fitted == null) return;
+        if (fitted == null) {
+            placed.put(captured.id, initial);
+            return;
+        }
+        placed.put(captured.id, placement(captured, fitted, preview.columns, preview.rows));
         int[] saved = { fitted.x, fitted.y, preview.columns, preview.rows };
         preferences.put(captured.id, saved);
         InventoryViewSettings.setNativeAe2Panel(key + captured.id, saved);
-        if (PackCompatibility.aePinnedPanel()) AePinnedPanel.retainPositionAfterNativeDrag(gui);
+        if (PackCompatibility.aePinnedPanel()) AePinnedPanel.retainPosition(gui);
     }
 
     private boolean blocked() {
@@ -299,8 +317,10 @@ public final class AeNativePanelControls extends Gui {
             || PackCompatibility.enabled() && PackClientCompatibility.neiDragging();
     }
 
-    private static Rect moveGrip(Rect bounds) {
-        return new Rect(bounds.right() - 15, bounds.y, 11, 5);
+    private static Rect moveGrip(Frame frame, Rect bounds) {
+        // The right corner of the main terminal belongs to AE2's crafting-status button.
+        int x = MAIN.equals(frame.id) ? bounds.x + bounds.width / 4 - 5 : bounds.right() - 15;
+        return new Rect(x, bounds.y, 11, 5);
     }
 
     private static Rect resizeGrip(Rect bounds) {
@@ -315,7 +335,7 @@ public final class AeNativePanelControls extends Gui {
         for (Frame frame : frames.values()) {
             Placement position = placed.get(frame.id);
             Rect bounds = position.bounds;
-            Rect grip = moveGrip(bounds);
+            Rect grip = moveGrip(frame, bounds);
             PanelChrome.insetDragGrip(grip, grip.contains(mouseX, mouseY) || captured == frame && !resizing);
             if (!frame.tool()) continue;
             PanelChrome.grip(bounds, 10, resizeGrip(bounds).contains(mouseX, mouseY));

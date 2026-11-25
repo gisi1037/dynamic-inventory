@@ -16,6 +16,7 @@ public final class InventoryViewSettings {
     public static boolean automaticStorageScroll = true;
     public static boolean centerLastRow = true;
     public static boolean hotbarPanelVisible = false;
+    static boolean hotbarSwapIgnoresLocks;
     static int slotLockMouseButton;
     static int hotbarPanelColumns = 9;
     static int hotbarPanelRows = HotbarBanks.MAX_BANKS;
@@ -42,6 +43,11 @@ public final class InventoryViewSettings {
 
     public static void initialize(File file) {
         configuration = new Configuration(file);
+        hotbarSwapIgnoresLocks = configuration.getBoolean(
+            "ignoreSlotLocksWhenSwapping",
+            "hotbars",
+            false,
+            "Let hotbar bank swaps move stacks together with full locks. Item type restrictions still apply.");
         slotLockMouseButton = configuration.getInt(
             "mouseButton",
             "slotLock",
@@ -173,6 +179,13 @@ public final class InventoryViewSettings {
         configuration.get("layout", "defaultsVersion", 2)
             .set(2);
         if (configuration.hasChanged()) configuration.save();
+    }
+
+    static void toggleHotbarSwapLocks() {
+        hotbarSwapIgnoresLocks = !hotbarSwapIgnoresLocks;
+        configuration.get("hotbars", "ignoreSlotLocksWhenSwapping", false)
+            .set(hotbarSwapIgnoresLocks);
+        configuration.save();
     }
 
     static void setPinsGrid(AePinsGrid grid) {

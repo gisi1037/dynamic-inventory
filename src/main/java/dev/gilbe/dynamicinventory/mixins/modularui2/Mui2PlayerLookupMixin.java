@@ -17,6 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.cleanroommc.modularui.screen.ModularContainer;
 import com.cleanroommc.modularui.widgets.slot.ModularSlot;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import dev.gilbe.dynamicinventory.compat.mui2.Mui2PlayerInventory;
 import dev.gilbe.dynamicinventory.container.PlayerInventoryTransfers;
@@ -26,6 +28,14 @@ import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 /** Resolves both framework slot groups using MUI2's canonical raw player indices. */
 @Mixin(value = ModularContainer.class, remap = false)
 public abstract class Mui2PlayerLookupMixin extends Container {
+
+    @WrapMethod(method = "transferItem")
+    private ItemStack dynamicinventory$preferFilteredSlots(ModularSlot source, ItemStack stack,
+        Operation<ItemStack> original) {
+        ModularContainer container = (ModularContainer) (Object) this;
+        PlayerInventoryTransfers.mergeIntoFilters(container, container.getPlayer(), stack);
+        return stack.stackSize == 0 ? stack : original.call(source, stack);
+    }
 
     @Inject(method = "getShiftClickSlots", at = @At("RETURN"), cancellable = true)
     private void dynamicinventory$mainTargets(CallbackInfoReturnable<List<ModularSlot>> cir) {

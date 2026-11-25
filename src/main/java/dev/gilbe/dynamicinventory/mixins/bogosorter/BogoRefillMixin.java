@@ -44,7 +44,8 @@ public abstract class BogoRefillMixin {
                     .rawIndex(logical));
         }
         for (int i = slots.size() - 1; i >= 0; i--) {
-            if (InventorySlotLocks.locked(inventory, slots.getInt(i))) slots.removeInt(i);
+            int raw = slots.getInt(i);
+            if (!InventorySlotLocks.accepts(inventory, raw, swap ? stack : null)) slots.removeInt(i);
         }
     }
 

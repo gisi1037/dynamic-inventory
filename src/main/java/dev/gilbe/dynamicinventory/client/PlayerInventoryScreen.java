@@ -234,6 +234,14 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                         20,
                         "Key: " + HotbarControls.keyName(HotbarControls.ROWS[hotbarRow])));
                 ((GuiButton) buttonList.get(buttonList.size() - 1)).enabled = count > 0;
+                addOwnedButton(
+                    new GuiButton(
+                        140,
+                        x + 6,
+                        y + 133,
+                        160,
+                        20,
+                        InventoryViewSettings.hotbarSwapIgnoresLocks ? "Swap locks: Ignore" : "Swap locks: Respect"));
                 addOwnedButton(new GuiButton(114, x + 6, y + 157, 76, 20, "Back"));
                 addOwnedButton(new GuiButton(108, x + 90, y + 157, 76, 20, "Done"));
                 return;
@@ -389,6 +397,10 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 return;
             case 130:
                 bindingHotbarKey = HotbarControls.ROWS[hotbarRow];
+                return;
+            case 140:
+                InventoryViewSettings.toggleHotbarSwapLocks();
+                initGui();
                 return;
             case 101:
                 columns = 18;
@@ -827,9 +839,9 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
                 theme.settingsText);
             drawCenteredString(
                 fontRendererObj,
-                bindingHotbarKey == null ? "9 storage slots per extra row" : "Press key; Esc clears",
+                bindingHotbarKey == null ? "9 storage slots per extra row" : "Press key to bind",
                 width / 2,
-                y + 139,
+                y + 178,
                 theme.settingsText);
         } else if (terminalSettings) {
             for (int setting = 0; setting < TERMINAL_ROW_LABELS.length; setting++) {
@@ -923,7 +935,7 @@ public final class PlayerInventoryScreen extends InventoryEffectRenderer {
     }
 
     private InventoryPanelLayout.Rect sectionViewport() {
-        return new InventoryPanelLayout.Rect(0, 8, width, Math.max(0, height - 36));
+        return InventoryPanelLayout.panelViewport(width, height);
     }
 
     private InventoryPanelLayout.Rect preferredPlayerSection() {

@@ -28,7 +28,7 @@ public class CommonProxy {
 
     public void receiveHotbarSwap(dev.gilbe.dynamicinventory.network.HotbarSwapReply reply) {}
 
-    public void receiveInventoryLocks(net.minecraft.network.INetHandler connection, int[] locks) {}
+    public void receiveInventoryLocks(net.minecraft.network.INetHandler connection, int[] locks, int[] types) {}
 
     public void receiveAePins(dev.gilbe.dynamicinventory.network.AePinsChannel.Snapshot snapshot) {}
 

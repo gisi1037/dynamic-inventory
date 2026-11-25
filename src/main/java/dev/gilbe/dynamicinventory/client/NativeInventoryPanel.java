@@ -467,9 +467,17 @@ public final class NativeInventoryPanel extends Gui {
     public boolean updateModeOrigin() {
         if (floating == null || detachedOrigin == floating.detached()) return false;
         detachedOrigin = floating.detached();
-        int shift = detachedOrigin
-            ? floating.detachedVerticalOffset(attachedTop, attachedHeight, verticalOffset, topMargin, bottomMargin)
-            : 0;
+        int shift = 0;
+        if (detachedOrigin) {
+            Rect viewport = InventoryPanelLayout.panelViewport(gui.width, gui.height);
+            Rect base = defaultMachine(access.dynamicinventory$left(), attachedTop);
+            int saved = PlayerPanelProfiles.savedVerticalOffset(floating.key(), base, viewport);
+            // An explicitly placed panel can change the group's height. Re-centering it on every
+            // open slides the terminal and all inventory panels away from their saved positions.
+            shift = saved < 0
+                ? floating.detachedVerticalOffset(attachedTop, attachedHeight, verticalOffset, topMargin, bottomMargin)
+                : Math.min(saved, Math.max(0, viewport.bottom() - base.bottom()));
+        }
         if (shift == originShift) return false;
         floating.translateVertically(shift - originShift);
         originShift = shift;
@@ -817,7 +825,7 @@ public final class NativeInventoryPanel extends Gui {
         frames.add(new AeNativePanelControls.Frame(AeNativePanelControls.MAIN, anchor));
         if (aeSidePanels != null) aeSidePanels.detachedFrames(frames, left, top);
         aeNativeControls.layout(
-            new Rect(0, 8, gui.width, Math.max(0, gui.height - 36)),
+            InventoryPanelLayout.panelViewport(gui.width, gui.height),
             frames,
             fixed,
             floating.seamless() ? 0 : 1);
@@ -1317,7 +1325,10 @@ public final class NativeInventoryPanel extends Gui {
             || !net.minecraft.client.resources.I18n.format("container.inventory")
                 .equals(text))
             return null;
-        int targetX = panel.playerX + (panel.floating == null ? 8 : 24) - panel.headerX;
+        int labelInset = panel.floating == null ? 8 : 24;
+        // Attached captions need the same clearance for the Pins control as detached headings.
+        if (panel.floating != null && PackCompatibility.aePinnedPanel()) labelInset += 13;
+        int targetX = panel.playerX + labelInset - panel.headerX;
         int targetY = panel.playerY + 4 - panel.headerY;
         return targetX == x && targetY == y ? null : new int[] { targetX, targetY };
     }

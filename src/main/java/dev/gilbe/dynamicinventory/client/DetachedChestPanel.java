@@ -51,6 +51,7 @@ public final class DetachedChestPanel extends Gui {
     private int startX, startY, grip;
     private int lastDragX, lastDragY;
     private boolean lastResizeSnap;
+    private Rect gesturePinsBounds;
     private int guideX = Integer.MIN_VALUE, guideY = Integer.MIN_VALUE;
     private boolean releaseOwned, usable;
     private boolean inherited;
@@ -133,7 +134,7 @@ public final class DetachedChestPanel extends Gui {
             if (slotIds[i] < 0 || slotIds[i] >= gui.inventorySlots.inventorySlots.size() || !seen.add(slotIds[i]))
                 throw new IllegalArgumentException("Invalid framework player slot mapping");
         }
-        viewport = new Rect(0, 8, gui.width, Math.max(0, gui.height - 36));
+        viewport = InventoryPanelLayout.panelViewport(gui.width, gui.height);
         String adapter = profileKey != null ? null
             : gui instanceof PlayerInventoryScreen ? "dynamicinventory:player"
                 : InventoryUi.findAdapter(gui.inventorySlots)
@@ -260,6 +261,12 @@ public final class DetachedChestPanel extends Gui {
                 .toArray();
         int[] destinations = dev.gilbe.dynamicinventory.container.PanelTransferTargets
             .quickMove(sourceId, hotbar, storage, columns);
+        if (destinations.length == 0 && dev.gilbe.dynamicinventory.container.PlayerInventoryTransfers.hasMatchingFilter(
+            gui.inventorySlots,
+            Minecraft.getMinecraft().thePlayer,
+            gui.inventorySlots.getSlot(sourceId)
+                .getStack()))
+            return false;
         if (destinations.length > 0) dev.gilbe.dynamicinventory.network.PanelTransferRequest.send(
             gui.inventorySlots,
             InventoryLayout.of(Minecraft.getMinecraft().thePlayer.inventory)
@@ -618,6 +625,7 @@ public final class DetachedChestPanel extends Gui {
 
     private void refitGesture(Panel moved, Rect requested) {
         List<Rect> obstacles = new ArrayList<>(fixed);
+        if (gesturePinsBounds != null) obstacles.add(gesturePinsBounds);
         if (main().profile.detached && !main().profile.visible) obstacles.add(recoveryControl());
         for (Panel panel : panels) if (panel != moved && panel.layout != null) obstacles.add(panel.layout.bounds);
         int margin = margin(moved);
@@ -643,8 +651,10 @@ public final class DetachedChestPanel extends Gui {
                 gap);
             if (safe == null) return;
         } else {
+            requested = InventoryPanelLayout.clampResize(requested, viewport, grip);
             int minimumWidth = 18 + margin * 2;
             int minimumHeight = InventoryPanelLayout.minimumHeight(requested.width, margin, moved.main());
+            if (requested.width < minimumWidth || requested.height < minimumHeight) return;
             Rect aligned = InventoryPanelLayout.alignResize(
                 dragStart,
                 requested,
@@ -673,6 +683,7 @@ public final class DetachedChestPanel extends Gui {
     private void settleDrag() {
         if (grip != 0) return;
         List<Rect> obstacles = new ArrayList<>(fixed);
+        if (gesturePinsBounds != null) obstacles.add(gesturePinsBounds);
         if (!mainVisible()) obstacles.add(recoveryControl());
         for (Panel panel : panels) if (panel != captured && panel.layout != null) obstacles.add(panel.layout.bounds);
         Rect safe = InventoryPanelLayout.snapDrag(captured.layout.bounds, viewport, obstacles, panelGap(captured));
@@ -1247,8 +1258,13 @@ public final class DetachedChestPanel extends Gui {
                 else {
                     move(x, y);
                     settleDrag();
+                    Rect before = gestureLayout.bounds, after = captured.layout.bounds;
+                    if (gesturePinsBounds != null) AePinnedPanel.retainPosition(gui);
                     captured = null;
-                    save();
+                    gesturePinsBounds = null;
+                    if (before.x != after.x || before.y != after.y
+                        || before.width != after.width
+                        || before.height != after.height) save();
                 }
             }
             releaseOwned = false;
@@ -1333,6 +1349,7 @@ public final class DetachedChestPanel extends Gui {
             lastDragY = y;
             lastResizeSnap = corner != 0 && resizeModifierDown();
             grip = corner;
+            gesturePinsBounds = PackCompatibility.aePinnedPanel() ? AePinnedPanel.occupied(gui) : null;
             captured = panel;
             return true;
         }
@@ -1407,8 +1424,13 @@ public final class DetachedChestPanel extends Gui {
         captured.scroll = gestureScroll;
         revision++;
         captured = null;
+        gesturePinsBounds = null;
         position();
         return true;
+    }
+
+    Rect gesturePinsBounds() {
+        return gesturePinsBounds;
     }
 
     private void save() {
@@ -1417,10 +1439,9 @@ public final class DetachedChestPanel extends Gui {
             for (Panel panel : panels) set = set.replace(
                 set.get(panel.id)
                     .profile(key, savedProfile(panel)));
-            PlayerPanelProfiles.applyPanels(set, key, savedProfile(main()), layoutReference());
-            // A global layout's authored coordinates belong to its global reference. Once saved as
-            // an interface override, use the normalized profiles belonging to the new reference too.
-            reload();
+            PlayerPanelProfiles.savePanelGeometry(set, key, savedProfile(main()), layoutReference());
+            for (Panel panel : panels) panel.profile = savedProfile(panel);
+            inherited = false;
         } catch (IOException failure) {
             reload();
             message("Could not save panel layout");

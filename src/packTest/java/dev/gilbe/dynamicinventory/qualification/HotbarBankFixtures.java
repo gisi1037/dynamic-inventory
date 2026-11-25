@@ -17,6 +17,7 @@ import dev.gilbe.dynamicinventory.inventory.ExpandedInventoryAccess;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.HotbarPrediction;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 import dev.gilbe.dynamicinventory.network.HotbarSwapReply;
 
 /** Headless tests execute the production reservation/swap logic and canonical merge with fake connected state. */
@@ -104,6 +105,12 @@ public final class HotbarBankFixtures {
         access.setAccessible(true);
         sun.misc.Unsafe allocator = (sun.misc.Unsafe) access.get(null);
         Item item = new Item();
+        Item subtypes = new Item() {
+
+            {
+                setHasSubtypes(true);
+            }
+        };
         // The headless process has no LaunchClassLoader/active FML mod. Supply vanilla's
         // namespaced registry so the real item packet codec can round-trip fixture NBT.
         Field registry = Item.class.getDeclaredField("itemRegistry");
@@ -112,6 +119,8 @@ public final class HotbarBankFixtures {
             allocator.staticFieldOffset(registry),
             new net.minecraft.util.RegistryNamespaced());
         Item.itemRegistry.addObject(32000, "dynamicinventory:hotbar_fixture", item);
+        Item.itemRegistry.addObject(32001, "dynamicinventory:slot_filter_fixture", subtypes);
+        slotLocks((Player) allocator.allocateInstance(Player.class), item, subtypes);
         int checks = 0;
         for (boolean offhand : new boolean[] { false, true })
             for (int count = 1; count <= HotbarBanks.MAX_BANKS; count++) {
@@ -421,6 +430,44 @@ public final class HotbarBankFixtures {
         inventory.shape = inventory.shape.resized(207);
         check(!prediction.pending(player), "Capacity revision invalidates pending permutation");
         inventory.shape = new InventoryShape(216, inventory.shape.hasOffhand(), revision);
+        prediction.enable(player, revision, 0);
+        InventorySlotLocks.receive(player, new int[] { 0 });
+        int bankLock = 9 + slots[0];
+        HotbarPrediction.Swap lockFirst = prediction.predict(player, 0, true);
+        HotbarSwapReply lockFirstState = HotbarSwapReply.capture(player, lockFirst.sequence);
+        check(InventorySlotLocks.contains(player, bankLock), "Predicted swap immediately moves the full lock");
+        HotbarPrediction.Swap lockSecond = prediction.predict(player, 0, true);
+        io.netty.buffer.ByteBuf lockWire = io.netty.buffer.Unpooled.buffer();
+        lockFirstState.toBytes(lockWire);
+        HotbarSwapReply decodedLockState = new HotbarSwapReply();
+        decodedLockState.fromBytes(lockWire);
+        check(
+            java.util.Arrays.equals(decodedLockState.locks, new int[] { bankLock }),
+            "Reply carries the full-lock snapshot");
+        prediction.reconcile(
+            player,
+            decodedLockState.sequence,
+            revision,
+            decodedLockState.next,
+            slots,
+            decodedLockState.stacks,
+            decodedLockState.locks);
+        check(
+            InventorySlotLocks.contains(player, 0) && !InventorySlotLocks.contains(player, bankLock),
+            "Delayed authority and replay move the lock back with the second exchange");
+        prediction.reconcile(
+            player,
+            lockSecond.sequence,
+            revision,
+            decodedLockState.next,
+            slots,
+            decodedLockState.stacks,
+            decodedLockState.locks);
+        check(
+            !prediction.pending(player) && !InventorySlotLocks.contains(player, 0)
+                && InventorySlotLocks.contains(player, bankLock),
+            "Rejected prediction restores the authoritative lock");
+        InventorySlotLocks.receive(player, new int[0]);
         HotbarBanks.configure(player, 0);
     }
 
@@ -428,6 +475,89 @@ public final class HotbarBankFixtures {
         ItemStack[] copy = new ItemStack[stacks.length];
         for (int i = 0; i < stacks.length; i++) copy[i] = ItemStack.copyItemStack(stacks[i]);
         return copy;
+    }
+
+    private static void slotLocks(Player player, Item item, Item subtypes) {
+        Inventory inventory = new Inventory(player, true);
+        player.inventory = inventory;
+        int bank = inventory.shape.rawIndex(9);
+        HotbarBanks.receive(player, new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+        ItemStack active = new ItemStack(item), stored = new ItemStack(subtypes, 1, 3);
+        inventory.mainInventory[0] = active;
+        inventory.mainInventory[bank] = stored;
+        InventorySlotLocks.toggle(player, 0);
+        HotbarBanks.exchange(player, 0);
+        check(inventory.mainInventory[0] == active, "Normal swaps respect full slot locks");
+        HotbarBanks.exchange(player, 0, true);
+        check(
+            inventory.mainInventory[0] == stored && !InventorySlotLocks.contains(player, 0)
+                && InventorySlotLocks.contains(player, 9),
+            "Opt-in swaps move the full lock with its stack");
+        InventorySlotLocks.toggleType(player, 0, stored);
+        check(
+            !InventorySlotLocks.contains(player, 0) && InventorySlotLocks.accepts(inventory, 0, stored),
+            "Type locks allow normal matching insertion and extraction");
+        check(
+            !InventorySlotLocks.accepts(inventory, 0, new ItemStack(subtypes, 1, 4)),
+            "Subtype filters reject different metadata");
+        inventory.mainInventory[0] = null;
+        check(
+            InventorySlotLocks.template(player, 0)
+                .getItem() == subtypes,
+            "An empty slot retains its filter");
+        HotbarBanks.exchange(player, 0, true);
+        check(inventory.mainInventory[0] == null, "Ignoring full locks still protects a slot's type restriction");
+        InventorySlotLocks.receive(player, new int[0], InventorySlotLocks.typeSnapshot(player));
+        check(!InventorySlotLocks.accepts(inventory, 0, active), "Client snapshot preserves the type filter");
+        InventorySlotLocks.toggleType(player, 0, null);
+        check(InventorySlotLocks.accepts(inventory, 0, active), "Filter can be cleared while empty");
+
+        inventory.mainInventory[bank] = stored;
+        InventorySlotLocks.toggle(player, 9);
+        InventorySlotLocks.toggleType(player, 0, stored);
+        HotbarBanks.exchange(player, 0, true);
+        InventorySlotLocks
+            .receive(player, InventorySlotLocks.snapshot(player), InventorySlotLocks.typeSnapshot(player));
+        check(
+            InventorySlotLocks.contains(player, 0) && InventorySlotLocks.template(player, 0) != null,
+            "A matching destination keeps its filter when it also receives a full lock");
+        HotbarBanks.exchange(player, 0, true);
+        check(
+            InventorySlotLocks.contains(player, 9) && InventorySlotLocks.template(player, 0) != null,
+            "The full lock returns with its item and releases the still-filtered destination");
+        InventorySlotLocks.receive(player, new int[0], new int[0]);
+
+        Host container = new Host();
+        for (int logical : new int[] { 0, 1, 9, 40 })
+            container.dynamicinventory$append(new Slot(inventory, inventory.shape.rawIndex(logical), 0, 0));
+        int filtered = inventory.shape.rawIndex(40);
+        InventorySlotLocks.toggleType(player, 40, stored);
+        inventory.mainInventory[1] = new ItemStack(subtypes, 7, 3);
+        ItemStack moved = PlayerInventoryTransfers.transferToFilter(container, player, 1);
+        check(
+            moved != null && moved.stackSize == 7
+                && inventory.mainInventory[filtered].stackSize == 7
+                && inventory.mainInventory[1] == null,
+            "A player quick move reaches an empty matching filter in a distant panel");
+        inventory.mainInventory[filtered] = null;
+        ItemStack incoming = new ItemStack(subtypes, 4, 3);
+        check(
+            PlayerInventoryTransfers.mergeToPlayer(container, incoming, new int[] { 0 })
+                && inventory.mainInventory[0] == null
+                && inventory.mainInventory[filtered].stackSize == 4,
+            "A matching filter is filled before the usual native shift-click range");
+        check(
+            PlayerInventoryTransfers.mergeToPlayer(container, new ItemStack(subtypes, 3, 3), new int[] { 0 })
+                && inventory.mainInventory[0].stackSize == 3
+                && inventory.mainInventory[filtered].stackSize == 4,
+            "An occupied filter does not override the usual destination");
+        inventory.mainInventory[filtered] = null;
+        inventory.mainInventory[0] = null;
+        check(
+            PlayerInventoryTransfers.mergeToPlayer(container, new ItemStack(subtypes, 5, 4), new int[] { 0 })
+                && inventory.mainInventory[0].stackSize == 5
+                && inventory.mainInventory[filtered] == null,
+            "A different subtype follows normal routing");
     }
 
     private static void same(ItemStack[] actual, ItemStack[] expected, String message) {

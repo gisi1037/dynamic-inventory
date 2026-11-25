@@ -44,6 +44,8 @@ public final class BuiltinInventoryUiAdapters {
             HarvestCraftCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("Thaumcraft"))
             ThaumcraftCompatibility.registerInventoryAdapters();
+        if (ThaumcraftCompatibility.researchTweaks() && OptionalInventoryAdapters.reviewedVersion("Thaumcraft"))
+            ThaumcraftCompatibility.registerResearchTweaksAdapter();
         BackpackCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.reviewedVersion("witchery")) WitcheryCompatibility.registerInventoryAdapters();
         if (OptionalInventoryAdapters.profileVersion("SpiceOfLife", "SpiceOfLife"))

@@ -105,8 +105,10 @@ public abstract class InventoryOpeningServerMixin implements ServerGateAccess {
             return;
         }
         if (InventoryLockSync.REQUEST.equals(channel)) {
-            if (dynamicinventory$gate.allowsInput(playerEntity, playerEntity.openContainer.windowId))
-                InventoryLockSync.toggle(playerEntity, packet.func_149558_e());
+            byte[] payload = packet.func_149558_e();
+            if (!InventoryLockSync.refresh(playerEntity, payload)
+                && dynamicinventory$gate.allowsInput(playerEntity, playerEntity.openContainer.windowId))
+                InventoryLockSync.toggle(playerEntity, payload);
             ci.cancel();
             return;
         }
@@ -139,14 +141,15 @@ public abstract class InventoryOpeningServerMixin implements ServerGateAccess {
         CallbackInfo ci) {
         if (!dynamicinventory$resize.allowsInput(playerEntity)) {
             ci.cancel();
-        } else if (InventorySlotLocks.locked(playerEntity.inventoryContainer, packet.func_149627_c(), playerEntity)) {
+        } else {
             int slot = packet.func_149627_c();
-            playerEntity.playerNetServerHandler.sendPacket(
-                new net.minecraft.network.play.server.S2FPacketSetSlot(
-                    0,
-                    slot,
-                    playerEntity.inventoryContainer.getSlot(slot)
-                        .getStack()));
+            if (slot < 0 || slot >= playerEntity.inventoryContainer.inventorySlots.size()) return;
+            var target = playerEntity.inventoryContainer.getSlot(slot);
+            int index = InventorySlotLocks.index(playerEntity.inventory, target);
+            if (!InventorySlotLocks.contains(playerEntity, index)
+                && InventorySlotLocks.permits(playerEntity, index, packet.func_149625_d())) return;
+            playerEntity.playerNetServerHandler
+                .sendPacket(new net.minecraft.network.play.server.S2FPacketSetSlot(0, slot, target.getStack()));
             ci.cancel();
         }
     }

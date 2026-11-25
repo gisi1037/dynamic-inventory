@@ -1,5 +1,8 @@
 package dev.gilbe.dynamicinventory.container;
 
+import java.util.Arrays;
+import java.util.stream.IntStream;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Container;
@@ -8,7 +11,9 @@ import net.minecraft.item.ItemStack;
 
 import dev.gilbe.dynamicinventory.compat.BackhandCompatibility;
 import dev.gilbe.dynamicinventory.inventory.AutomaticInventoryRouting;
+import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 
 /** Shift-click destinations use logical regions rather than assuming storage has contiguous container IDs. */
@@ -45,12 +50,13 @@ public final class PlayerInventoryTransfers {
             || (BackhandCompatibility.enabled() && id == PlayerContainerLayout.OFFHAND)) {
                 moved = mergeAutomatic(container, source, allMain);
             } else {
-                moved = equipArmor(container, source);
-                if (!moved) {
+                moved = mergeIntoFilters(container, player, source);
+                if (source.stackSize > 0 && equipArmor(container, source)) moved = true;
+                else if (source.stackSize > 0) {
                     int mainIndex = PlayerContainerLayout.mainIndex(inventory, id);
-                    if (mainIndex < InventoryLayout.HOTBAR_SLOTS) moved = merge(container, source, storage);
+                    if (mainIndex < InventoryLayout.HOTBAR_SLOTS) moved = merge(container, source, storage) || moved;
                     else {
-                        moved = merge(container, source, hotbar);
+                        moved = merge(container, source, hotbar) || moved;
                         if (source.stackSize > 0) {
                             int[] destinations = PanelTransferTargets.quickMove(id, hotbar, storage, 9);
                             moved = merge(
@@ -67,6 +73,62 @@ public final class PlayerInventoryTransfers {
         else slot.onSlotChanged();
         slot.onPickupFromSlot(player, source);
         return original;
+    }
+
+    public static boolean hasMatchingFilter(Container container, EntityPlayer player, ItemStack stack) {
+        return emptyFilters(container, player, stack).length > 0;
+    }
+
+    public static boolean mergeIntoFilters(Container container, EntityPlayer player, ItemStack stack) {
+        int[] filters = emptyFilters(container, player, stack);
+        return filters.length > 0 && merge(container, stack, filters);
+    }
+
+    /** Keep native extraction rules for special slots and take priority only for ordinary player stacks. */
+    public static ItemStack transferToFilter(Container container, EntityPlayer player, int id) {
+        if (!InventorySlotLocks.hasTypeLocks(player) || id < 0
+            || id >= container.inventorySlots.size()
+            || player.inventory.getItemStack() != null) return null;
+        Slot source = container.getSlot(id);
+        if (source.inventory != player.inventory) return null;
+        int logical = InventorySlotLocks.index(player.inventory, source);
+        if (logical < 0 || logical >= InventoryLayout.of(player.inventory)
+            .mainSlots()) return null;
+        int[] filters = emptyFilters(container, player, source.getStack());
+        if (filters.length == 0) return null;
+        return transferTo(container, player, id, filters);
+    }
+
+    private static int[] emptyFilters(Container container, EntityPlayer player, ItemStack stack) {
+        if (stack == null || stack.stackSize <= 0 || !InventorySlotLocks.hasTypeLocks(player)) return new int[0];
+        InventoryShape shape = InventoryLayout.of(player.inventory);
+        int[] slots = new int[shape.mainSlots()];
+        Arrays.fill(slots, -1);
+        for (int id = 0; id < container.inventorySlots.size(); id++) {
+            Slot slot = container.getSlot(id);
+            int logical = InventorySlotLocks.index(player.inventory, slot);
+            if (logical < 0 || logical >= slots.length
+                || slots[logical] >= 0
+                || InventorySlotLocks.template(player, logical) == null
+                || !InventorySlotLocks.permits(player, logical, stack)
+                || InventorySlotLocks.contains(player, logical)
+                || HotbarBanks.isReserved(player.inventory, shape.rawIndex(logical))
+                || !slot.func_111238_b()
+                || slot.getHasStack()
+                || !hasTransferRoom(slot, stack)) continue;
+            slots[logical] = id;
+        }
+        return Arrays.stream(slots)
+            .filter(id -> id >= 0)
+            .toArray();
+    }
+
+    private static int[] filtersForPlayer(Container container, ItemStack source) {
+        for (Object entry : container.inventorySlots) {
+            if (((Slot) entry).inventory instanceof InventoryPlayer inventory)
+                return emptyFilters(container, inventory.player, source);
+        }
+        return new int[0];
     }
 
     private static boolean equipArmor(Container container, ItemStack source) {
@@ -155,9 +217,12 @@ public final class PlayerInventoryTransfers {
 
     /** Routed player targets are in logical order. Fill the active hotbar before touching Main storage. */
     public static boolean mergeToPlayer(Container container, ItemStack source, int[] destinations) {
+        boolean preferred = merge(container, source, filtersForPlayer(container, source));
+        if (source.stackSize == 0) return preferred;
         int hotbar = hotbarPrefix(container, destinations);
         boolean moved = merge(container, source, destinations, 0, hotbar);
-        return source.stackSize > 0 && merge(container, source, destinations, hotbar, destinations.length) || moved;
+        return source.stackSize > 0 && merge(container, source, destinations, hotbar, destinations.length) || moved
+            || preferred;
     }
 
     public static int hotbarPrefix(Container container, int[] destinations) {
@@ -176,7 +241,10 @@ public final class PlayerInventoryTransfers {
         int[] allowed = java.util.Arrays.stream(AutomaticInventoryRouting.filter(container, destinations))
             .distinct()
             .toArray();
-        return remainingAfterMerge(container, source, allowed) == 0 && mergeToPlayer(container, source, allowed);
+        int[] capacity = IntStream.concat(Arrays.stream(filtersForPlayer(container, source)), Arrays.stream(allowed))
+            .distinct()
+            .toArray();
+        return remainingAfterMerge(container, source, capacity) == 0 && mergeToPlayer(container, source, allowed);
     }
 
     /** Simulate the same slot rules as merge for a unique, already routed destination list. */

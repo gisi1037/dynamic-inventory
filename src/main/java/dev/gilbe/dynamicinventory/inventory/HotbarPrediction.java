@@ -15,10 +15,12 @@ public final class HotbarPrediction {
 
         public final long sequence;
         public final int row;
+        private final boolean ignoreLocks;
 
-        private Swap(long sequence, int row) {
+        private Swap(long sequence, int row, boolean ignoreLocks) {
             this.sequence = sequence;
             this.row = row;
+            this.ignoreLocks = ignoreLocks;
         }
     }
 
@@ -56,11 +58,15 @@ public final class HotbarPrediction {
     }
 
     public synchronized Swap predict(EntityPlayer player, int row) {
+        return predict(player, row, false);
+    }
+
+    public synchronized Swap predict(EntityPlayer player, int row, boolean ignoreLocks) {
         if (!supported(player) || pending.size() >= MAX_PENDING || HotbarBanks.count(player) == 0) return null;
         HotbarBanks.requireReady(player);
         int selected = row < 0 ? HotbarBanks.next(player) : row;
-        HotbarBanks.exchange(player, selected);
-        Swap swap = new Swap(++sequence, selected);
+        HotbarBanks.exchange(player, selected, ignoreLocks);
+        Swap swap = new Swap(++sequence, selected, ignoreLocks);
         pending.addLast(swap);
         return swap;
     }
@@ -76,6 +82,11 @@ public final class HotbarPrediction {
 
     public synchronized void reconcile(EntityPlayer player, long sequence, long revision, int next, int[] slots,
         ItemStack[] stacks) {
+        reconcile(player, sequence, revision, next, slots, stacks, null);
+    }
+
+    public synchronized void reconcile(EntityPlayer player, long sequence, long revision, int next, int[] slots,
+        ItemStack[] stacks, int[] locks) {
         refresh(player);
         if (owner != player || this.revision != revision
             || pending.isEmpty()
@@ -89,11 +100,13 @@ public final class HotbarPrediction {
         while (!pending.isEmpty() && pending.peekFirst().sequence <= sequence) pending.removeFirst();
         HotbarBanks.receive(player, slots);
         HotbarBanks.next(player, next);
+        if (locks != null) InventorySlotLocks.receive(player, locks);
         for (int i = 0; i < stacks.length; i++) {
             int raw = i < 9 ? i : shape.rawIndex(9 + slots[i - 9]);
             player.inventory.mainInventory[raw] = ItemStack.copyItemStack(stacks[i]);
         }
-        for (Swap swap : pending) if (swap.row < slots.length / 9) HotbarBanks.exchange(player, swap.row);
+        for (Swap swap : pending)
+            if (swap.row < slots.length / 9) HotbarBanks.exchange(player, swap.row, swap.ignoreLocks);
         player.inventory.markDirty();
     }
 }

@@ -16,7 +16,7 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.common.registry.GameRegistry;
 import dev.gilbe.dynamicinventory.api.InventoryUi;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
-import dev.gilbe.dynamicinventory.inventory.InventoryResizePlan;
+import dev.gilbe.dynamicinventory.inventory.InventoryOverflowDrops;
 import dev.gilbe.dynamicinventory.inventory.InventoryResizing;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
 
@@ -105,7 +105,6 @@ public final class InventoryUpgrades {
             // Record its base before normal saving/disconnection; never restore an old bonus on login.
             if ((saved != null || equipment > 0) && (completed || InventoryLayout.of(player.inventory) != before)) {
                 account(player, true).setInteger("baseSlots", base);
-                if (belt != null) BaubleUpgradeSupport.synchronizeBase(player, base);
             }
         }
     }
@@ -129,24 +128,7 @@ public final class InventoryUpgrades {
                 NBTTagCompound saved = account(player, true);
                 saved.setInteger("baseSlots", target);
                 saved.setBoolean("fixedCapacity", true);
-                if (belt != null) BaubleUpgradeSupport.synchronizeBase(player, target);
             }
-        }
-    }
-
-    /** Normal unequip is refused before moving a belt whose extra cells still contain items. */
-    public static boolean canRemoveBelt(EntityPlayer player) {
-        if (player.worldObj.isRemote) return true; // The server owns rules and saved upgrade metadata.
-        try {
-            NBTTagCompound saved = account(player, false);
-            if (saved == null) return true; // No applied bonus yet.
-            new InventoryResizePlan<>(
-                InventoryLayout.of(player.inventory),
-                player.inventory.mainInventory,
-                saved.getInteger("baseSlots"));
-            return true;
-        } catch (IllegalArgumentException | IllegalStateException occupiedOrInvalid) {
-            return false;
         }
     }
 
@@ -155,6 +137,7 @@ public final class InventoryUpgrades {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.player;
         if (player.isDead || player.getHealth() <= 0 || player.playerNetServerHandler == null) return;
+        if (player.ticksExisted % 20 == 0) InventoryOverflowDrops.flush(player);
         CreativeSizeRequest.applyPending(player);
         ItemStack request = REQUESTS.remove(player);
         // Gear polling is cheap and bounded; unchanged capacity never rebuilds containers or sends packets.
@@ -166,8 +149,6 @@ public final class InventoryUpgrades {
         try {
             int equipment = bonus(player);
             NBTTagCompound saved = account(player, equipment > 0);
-            if (saved != null && belt != null)
-                BaubleUpgradeSupport.synchronizeBase(player, saved.getInteger("baseSlots"));
             if (request != null) {
                 if (!UpgradeSettings.modulesEnabled) throw new IllegalStateException("Permanent upgrades are disabled");
                 ItemStack held = player.inventory.getCurrentItem();
@@ -196,7 +177,6 @@ public final class InventoryUpgrades {
                         saved = account(player, true);
                         saved.setInteger("baseSlots", nextBase);
                         saved.setInteger("modulesUsed", used + 1);
-                        if (belt != null) BaubleUpgradeSupport.synchronizeBase(player, nextBase);
                         if (--request.stackSize == 0)
                             player.inventory.setInventorySlotContents(player.inventory.currentItem, null);
                         player.inventory.markDirty();
@@ -210,8 +190,7 @@ public final class InventoryUpgrades {
             }
             WARNED_TARGETS.remove(player);
         } catch (IllegalArgumentException | IllegalStateException refused) {
-            // Forced gear removal or changed configuration must never delete an occupied tail.
-            // Retain the current shape, warn once, and retry after the player clears the cells/cursor/grid.
+            // A busy cursor or crafting grid leaves the current shape intact until a later tick.
             int current = InventoryLayout.of(player.inventory)
                 .storageSlots();
             if (request != null || !Integer.valueOf(current)

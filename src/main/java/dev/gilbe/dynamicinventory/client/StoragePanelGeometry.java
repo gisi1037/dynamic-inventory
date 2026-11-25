@@ -65,6 +65,8 @@ public final class StoragePanelGeometry {
         if (thaumcraftCrop > 0)
             // These sheets draw the workstation and the old inventory frame as separate pieces.
             return new StoragePanelGeometry(0, width, thaumcraftCrop + 6, thaumcraftCrop, true);
+        if (screen.equals(dev.gilbe.dynamicinventory.compat.ThaumcraftCompatibility.TWEAKS_GUI))
+            return new StoragePanelGeometry(0, width, 223, 219, true);
         if (screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiBarrel")
             || screen.equals("ganymedes01.etfuturum.client.gui.inventory.GuiShulkerBox")) {
             int inset = slots > 27 ? 4 : 0;

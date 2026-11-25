@@ -8,6 +8,16 @@ consumable use, and the world's death rules. To use a different mouse button wit
 Alt+Shift, set `slotLock.mouseButton` in `config/dynamicinventory-client.cfg`
 (`0` for left, `1` for right, or `2` for middle).
 
+**Item-type locks.** Alt+Shift+right-click with an item in the slot or on the
+cursor to restrict that slot to the same item and subtype. An empty filtered
+slot shows a ghost of the item. The same shortcut removes the filter, and
+matching items can be placed or taken normally. If right-click is assigned to
+full locks, use Alt+Shift+left-click for item-type locks instead.
+Shift-click fills matching empty filtered slots before the usual transfer destinations.
+
+With **Swappable hotbars → Swap locks: Ignore**, full locks travel with successful
+swaps, including reserved empty slots. Item-type filters stay on their assigned slots.
+
 Attached inventory stays the default. Separate panels are enabled for the main
 player inventory and all eleven vanilla container families: chests, crafting,
 furnaces, dispensers/droppers, hoppers, brewing, enchanting, beacons, anvils,

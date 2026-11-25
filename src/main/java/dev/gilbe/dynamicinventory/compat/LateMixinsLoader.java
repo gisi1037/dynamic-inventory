@@ -38,6 +38,11 @@ public final class LateMixinsLoader implements ILateMixinLoader {
         if (PackCompatibility.enabled() && loadedMods.contains("Thaumcraft")
             && OptionalInventoryAdapters.reviewedVersion("Thaumcraft")) {
             mixins.addAll(Arrays.asList("thaumcraft.WorkbenchTransferMixin", "thaumcraft.ResearchTableTransferMixin"));
+            if (loadedMods.contains("ThaumcraftResearchTweaks") && ThaumcraftCompatibility.researchTweaks()) {
+                mixins.add("thaumcraft.ResearchTweaksTransferMixin");
+                if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                    .isClient()) mixins.add("thaumcraft.ResearchTweaksGuiMixin");
+            }
             if (cpw.mods.fml.relauncher.FMLLaunchHandler.side()
                 .isClient())
                 mixins.addAll(
@@ -131,7 +136,14 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                         "appliedenergistics2.AeSeparatePinsRepoMixin",
                         "appliedenergistics2.AeSeparatePinsTerminalMixin",
                         "appliedenergistics2.AeRemoteRenamerGuiMixin",
+                        "appliedenergistics2.AeOpeningTraceMixin",
                         "appliedenergistics2.AeSpaceTransferGuiMixin"));
+            if (IntegrationProfile.selected()
+                .usesRelease29Adapters() && loadedMods.contains("ae2wct")
+                && OptionalInventoryAdapters.reviewedVersion("ae2wct")
+                && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
+                    .isClient())
+                mixins.add("appliedenergistics2.StandaloneWirelessOpeningTraceMixin");
             if (IntegrationProfile.selected()
                 .usesRelease29Adapters() && loadedMods.contains("MouseTweaks")
                 && cpw.mods.fml.relauncher.FMLLaunchHandler.side()
@@ -147,6 +159,7 @@ public final class LateMixinsLoader implements ILateMixinLoader {
                         "appliedenergistics2.AeStorageBusGuiMixin",
                         "appliedenergistics2.AeLevelEmitterGuiMixin",
                         "appliedenergistics2.AeAdvancedLevelEmitterGuiMixin",
+                        "appliedenergistics2.AeQuartzKnifeGuiMixin",
                         "appliedenergistics2.AeTerminalOriginMixin",
                         "appliedenergistics2.AePatternTerminalGuiMixin",
                         "appliedenergistics2.AeInterfaceTerminalGuiMixin",

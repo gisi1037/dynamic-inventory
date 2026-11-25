@@ -171,8 +171,12 @@ public final class HotbarBanks {
 
     /** Direct keys exchange the selected stored row; cycling visits the stored rows in sequence. */
     public static void swap(EntityPlayerMP player, int row) {
+        swap(player, row, false);
+    }
+
+    public static void swap(EntityPlayerMP player, int row, boolean ignoreLocks) {
         requireReady(player);
-        exchange(player, row);
+        exchange(player, row, ignoreLocks);
         player.inventoryContainer.detectAndSendChanges();
     }
 
@@ -187,6 +191,10 @@ public final class HotbarBanks {
 
     /** Same permutation for server execution and local prediction; no packets or container callbacks. */
     public static void exchange(EntityPlayer player, int row) {
+        exchange(player, row, false);
+    }
+
+    public static void exchange(EntityPlayer player, int row, boolean ignoreLocks) {
         int count = count(player);
         if (count == 0) return;
         int selected = row < 0 ? next(player) : row;
@@ -195,12 +203,16 @@ public final class HotbarBanks {
         int[] reserved = slots(player);
         ItemStack[] stacks = player.inventory.mainInventory;
         for (int i = 0; i < 9; i++) {
-            int bank = shape.rawIndex(9 + reserved[selected * 9 + i]);
-            if (InventorySlotLocks.locked(player.inventory, i) || InventorySlotLocks.locked(player.inventory, bank))
-                continue;
+            int logical = 9 + reserved[selected * 9 + i];
+            int bank = shape.rawIndex(logical);
+            if (!ignoreLocks && (InventorySlotLocks.locked(player.inventory, i)
+                || InventorySlotLocks.locked(player.inventory, bank))) continue;
+            if (!InventorySlotLocks.permits(player, i, stacks[bank])
+                || !InventorySlotLocks.permits(player, logical, stacks[i])) continue;
             ItemStack previous = stacks[i];
             stacks[i] = stacks[bank];
             stacks[bank] = previous;
+            if (ignoreLocks) InventorySlotLocks.exchangeFullLocks(player, i, logical);
         }
         data(player).setInteger("next", (selected + 1) % count);
         player.inventory.markDirty();

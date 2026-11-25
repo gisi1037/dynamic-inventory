@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.5 — 2026-11-24
+
+This is the final Dynamic Inventory release for **GT New Horizons 2.9.1** on Minecraft 1.7.10. Install the same `dynamicinventory-0.8.5.jar` on both client and server.
+
+- Alt+Shift+right-click sets or clears an item-type filter. Empty filtered slots show a ghost of the assigned item, and matching items can still be moved. Shift-click fills an empty matching slot before trying the usual destinations.
+- With **Swap locks: Ignore**, full locks follow the swapped items across hotbars. Item-type filters stay assigned to their slots. Lock indicators refresh after a world reload or dimension change.
+- If inventory capacity shrinks, items are moved into available slots and any overflow drops on the ground. The death path also handles items in the cursor and open inventories while respecting grave mods and `keepInventory`.
+- Fixed panel jumps and resizing at screen edges, aligned the AE2 Pins panel with inventory bounds, and moved the wireless terminal drag handle clear of Crafting Status.
+- Added expanded inventory support for the Quartz Cutting Knife and Thaumcraft Research Tables with Research Tweaks. Wireless terminal opening failures now log window IDs, terminal slot, and mode.
+
+A dimension change that retains an open container can still trigger an inventory agreement disconnect. Closing the container before changing dimensions avoids the case reproduced in testing.
+
 ## 0.8.4 — 2026-11-23
 
 Dynamic Inventory for **GT New Horizons 2.9.1** on Minecraft 1.7.10.

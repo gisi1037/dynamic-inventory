@@ -39,7 +39,7 @@ public final class Mui1PlayerInventory extends PlayerMainInvWrapper {
 
     @Override
     public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
-        if (InventorySlotLocks.contains(getInventoryPlayer().player, slot)) return stack;
+        if (!isItemValid(slot, stack)) return stack;
         return canonical.insertItem(shape.rawIndex(slot), stack, simulate);
     }
 
@@ -57,6 +57,7 @@ public final class Mui1PlayerInventory extends PlayerMainInvWrapper {
     @Override
     public boolean isItemValid(int slot, ItemStack stack) {
         return !InventorySlotLocks.contains(getInventoryPlayer().player, slot)
+            && InventorySlotLocks.permits(getInventoryPlayer().player, slot, stack)
             && canonical.isItemValid(shape.rawIndex(slot), stack);
     }
 

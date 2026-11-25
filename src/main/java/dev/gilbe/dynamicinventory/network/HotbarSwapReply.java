@@ -11,6 +11,7 @@ import dev.gilbe.dynamicinventory.DynamicInventory;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
 import dev.gilbe.dynamicinventory.inventory.InventoryShape;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 import io.netty.buffer.ByteBuf;
 
 /** Ordered acknowledgement, including rejected swaps. Only hotbar/bank cells are synchronized here. */
@@ -20,6 +21,7 @@ public final class HotbarSwapReply implements IMessage {
     public int next;
     public int[] slots = new int[0];
     public ItemStack[] stacks = new ItemStack[0];
+    public int[] locks;
 
     public HotbarSwapReply() {}
 
@@ -30,6 +32,7 @@ public final class HotbarSwapReply implements IMessage {
         reply.revision = shape.revision();
         reply.next = HotbarBanks.next(player);
         reply.slots = HotbarBanks.slots(player);
+        reply.locks = InventorySlotLocks.snapshot(player);
         reply.stacks = new ItemStack[9 + reply.slots.length];
         for (int i = 0; i < reply.stacks.length; i++) reply.stacks[i] = ItemStack
             .copyItemStack(player.inventory.mainInventory[i < 9 ? i : shape.rawIndex(9 + reply.slots[i - 9])]);
@@ -59,6 +62,10 @@ public final class HotbarSwapReply implements IMessage {
         }
         stacks = new ItemStack[9 + count];
         for (int i = 0; i < stacks.length; i++) stacks[i] = ByteBufUtils.readItemStack(bytes);
+        if (bytes.isReadable()) {
+            locks = InventoryLockSync.readLocks(bytes);
+            if (locks == null) return;
+        }
         if (bytes.readableBytes() == 0) sequence = id;
     }
 
@@ -70,6 +77,7 @@ public final class HotbarSwapReply implements IMessage {
             .writeInt(slots.length);
         for (int slot : slots) bytes.writeInt(slot);
         for (ItemStack stack : stacks) ByteBufUtils.writeItemStack(bytes, stack);
+        if (locks != null) InventoryLockSync.writeLocks(bytes, locks);
     }
 
     public static final class Handler implements IMessageHandler<HotbarSwapReply, IMessage> {

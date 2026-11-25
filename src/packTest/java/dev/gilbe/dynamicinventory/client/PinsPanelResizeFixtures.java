@@ -46,10 +46,40 @@ public final class PinsPanelResizeFixtures {
         check(fitted.x == obstacle.right() + 1, "Top-left drag stops at the neighboring panel");
         anchor(start, fitted, true, true);
         checkSizeMatching(start, viewport);
+        Rect bottom = new Rect(42, 235, 150, 83);
+        Rect clamped = InventoryPanelLayout.clampResize(new Rect(42, 235, 154, 114), viewport, 10);
+        check(
+            clamped.y == bottom.y && clamped.bottom() == viewport.bottom() && clamped.width == 154,
+            "Growing downward stops at the viewport without lifting the opposite edge");
+        Rect offsetNeighbor = new Rect(265, 53, 80, 140);
+        Rect alignedBottom = InventoryPanelLayout.alignResize(
+            start,
+            new Rect(120, 100, 120, 91),
+            10,
+            viewport,
+            Collections.singletonList(offsetNeighbor),
+            72,
+            43,
+            450,
+            450);
+        check(
+            alignedBottom.bottom() == offsetNeighbor.bottom() && alignedBottom.y == start.y,
+            "A resize can match the far edge of an offset neighbor with a different height");
         checkWideMain();
         checkTallPanels();
         checkSeamlessDocking(start, viewport);
         checkPinsAppearance();
+        Rect terminal = new Rect(100, 20, 174, 153);
+        check(
+            new PanelLayoutReference(terminal, viewport).verticalOffset(terminal, viewport) == 0,
+            "A saved breakout layout at the original height does not re-center on reopen");
+        check(
+            new PanelLayoutReference(terminal.translatedVertically(30), viewport).verticalOffset(terminal, viewport)
+                == 30,
+            "A previously centered layout retains its offset");
+        check(
+            new PanelLayoutReference(terminal, viewport).verticalOffset(terminal, new Rect(2, 18, 410, 300)) == -1,
+            "A different viewport still allows the layout to refit");
         System.out
             .println("PASS corner resizing, size snapping, wider and taller panels, and seamless docking and styles");
     }

@@ -11,6 +11,7 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import dev.gilbe.dynamicinventory.api.InventoryUi;
+import dev.gilbe.dynamicinventory.container.PlayerInventoryTransfers;
 
 /** WrapMethod's higher-priority outer wrapper preserves extras around Hodgepodge's quick-move shortcut. */
 @Mixin(value = Container.class, priority = 2000)
@@ -32,9 +33,20 @@ public abstract class RegisteredInventoryClickMixin {
         // Custom quick-move dispatch may call the container directly instead of the vanilla packet handler.
         if (player instanceof EntityPlayerMP && player.openContainer == container
             && !InventoryUi.isOpeningReady(player)) return null;
-        if (mode == 1 && (button == 0 || button == 1)
-            && InventoryUi.handlesAdditionalTransfer((Container) (Object) this, slotId))
-            return InventoryUi.transferAdditional((Container) (Object) this, player, slotId);
+        if (mode == 1 && (button == 0 || button == 1)) {
+            ItemStack filtered = container == player.inventoryContainer ? null
+                : PlayerInventoryTransfers.transferToFilter(container, player, slotId);
+            if (filtered != null && !container.getSlot(slotId)
+                .getHasStack()) return filtered;
+            if (InventoryUi.handlesAdditionalTransfer(container, slotId)) {
+                ItemStack moved = InventoryUi.transferAdditional(container, player, slotId);
+                return filtered == null ? moved : filtered;
+            }
+            if (filtered != null) {
+                original.call(slotId, button, mode, player);
+                return filtered;
+            }
+        }
         return original.call(slotId, button, mode, player);
     }
 

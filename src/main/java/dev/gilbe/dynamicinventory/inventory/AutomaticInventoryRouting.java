@@ -109,10 +109,17 @@ public final class AutomaticInventoryRouting {
     }
 
     public static int firstEmpty(InventoryPlayer inventory) {
+        return firstEmpty(inventory, null);
+    }
+
+    public static int firstEmpty(InventoryPlayer inventory, ItemStack source) {
         InventoryShape shape = InventoryLayout.of(inventory);
         for (int logical = 0; logical < shape.mainSlots(); logical++) {
             int raw = shape.rawIndex(logical);
-            if (pickup(inventory, raw) && inventory.mainInventory[raw] == null) return raw;
+            if (pickup(inventory, raw) && inventory.mainInventory[raw] == null
+                && (source == null ? InventorySlotLocks.template(inventory.player, logical) == null
+                    : InventorySlotLocks.accepts(inventory, raw, source)))
+                return raw;
         }
         return -1;
     }
@@ -121,7 +128,7 @@ public final class AutomaticInventoryRouting {
         InventoryShape shape = InventoryLayout.of(inventory);
         for (int logical = 0; logical < shape.mainSlots(); logical++) {
             int raw = shape.rawIndex(logical);
-            if (!pickup(inventory, raw)) continue;
+            if (!pickup(inventory, raw) || !InventorySlotLocks.accepts(inventory, raw, source)) continue;
             ItemStack existing = inventory.mainInventory[raw];
             if (existing != null && existing.getItem() == source.getItem()
                 && existing.isStackable()
@@ -136,7 +143,7 @@ public final class AutomaticInventoryRouting {
     public static int[] nativeRange(Container container, int start, int end, boolean reverse) {
         if (start < 0 || start >= end || end > container.inventorySlots.size()) return null;
         int[] ids = new int[end - start];
-        boolean coversHotbar = false, coversStorage = false;
+        boolean coversHotbar = false, coversStorage = false, containsFilter = false;
         for (int i = 0; i < ids.length; i++) {
             int id = reverse ? end - 1 - i : start + i;
             Slot slot = container.getSlot(id);
@@ -146,6 +153,7 @@ public final class AutomaticInventoryRouting {
             if (logical < 0) return null;
             coversHotbar |= logical < InventoryShape.HOTBAR_SLOTS;
             coversStorage |= logical >= InventoryShape.HOTBAR_SLOTS;
+            containsFilter |= InventorySlotLocks.template(inventory.player, logical) != null;
             ids[i] = id;
         }
         int[] allowed = filter(container, ids);
@@ -159,7 +167,7 @@ public final class AutomaticInventoryRouting {
                 .mapToInt(Integer::intValue)
                 .toArray();
         }
-        return allowed.length == ids.length ? null : allowed;
+        return allowed.length == ids.length && !containsFilter ? null : allowed;
     }
 
     /** Reorder the player cells in place, preserving native positions for other destination groups. */

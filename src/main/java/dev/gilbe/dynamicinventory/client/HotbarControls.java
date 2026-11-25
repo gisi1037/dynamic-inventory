@@ -8,6 +8,7 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.INetHandler;
 
 import org.lwjgl.input.Keyboard;
 
@@ -19,6 +20,7 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 import dev.gilbe.dynamicinventory.inventory.HotbarBanks;
 import dev.gilbe.dynamicinventory.inventory.HotbarPrediction;
 import dev.gilbe.dynamicinventory.inventory.InventoryLayout;
+import dev.gilbe.dynamicinventory.inventory.InventorySlotLocks;
 import dev.gilbe.dynamicinventory.network.HotbarRequest;
 import dev.gilbe.dynamicinventory.network.HotbarSwapReply;
 
@@ -95,7 +97,16 @@ public final class HotbarControls {
         EntityPlayer player = Minecraft.getMinecraft().thePlayer;
         queue(
             player,
-            () -> PREDICTION.reconcile(player, reply.sequence, reply.revision, reply.next, reply.slots, reply.stacks));
+            () -> PREDICTION
+                .reconcile(player, reply.sequence, reply.revision, reply.next, reply.slots, reply.stacks, reply.locks));
+    }
+
+    public static void receiveLocks(INetHandler connection, int[] locks, int[] types) {
+        Minecraft mc = Minecraft.getMinecraft();
+        EntityPlayer player = mc.thePlayer;
+        queue(
+            player,
+            () -> { if (mc.getNetHandler() == connection) InventorySlotLocks.receive(player, locks, types); });
     }
 
     public static void swap(int row) {
@@ -105,10 +116,11 @@ public final class HotbarControls {
             .revision();
         try {
             HotbarBanks.requireReady(mc.thePlayer);
+            boolean ignoreLocks = InventoryViewSettings.hotbarSwapIgnoresLocks;
             if (PREDICTION.supported(mc.thePlayer)) {
-                HotbarPrediction.Swap swap = PREDICTION.predict(mc.thePlayer, row);
-                if (swap != null) HotbarRequest.swap(swap.row, revision, swap.sequence);
-            } else HotbarRequest.swap(row, revision);
+                HotbarPrediction.Swap swap = PREDICTION.predict(mc.thePlayer, row, ignoreLocks);
+                if (swap != null) HotbarRequest.swap(swap.row, revision, swap.sequence, ignoreLocks);
+            } else HotbarRequest.swap(row, revision, 0, ignoreLocks);
         } catch (IllegalArgumentException | IllegalStateException refused) {
             mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText("Hotbars: " + refused.getMessage()));
         }

@@ -114,7 +114,9 @@ public final class PanelTransferRequest implements IMessage {
             || !ordinary(container, player, source)) return;
         Set<Integer> unique = new HashSet<>();
         for (int id : destinations) if (id == source || !unique.add(id) || !ordinary(container, player, id)) return;
-        if (PlayerInventoryTransfers.transferToArmor(container, player, source) == null)
+        PlayerInventoryTransfers.transferToFilter(container, player, source);
+        if (container.getSlot(source)
+            .getHasStack() && PlayerInventoryTransfers.transferToArmor(container, player, source) == null)
             PlayerInventoryTransfers.transferTo(container, player, source, destinations, preferred);
         player.inventory.markDirty();
         container.detectAndSendChanges();

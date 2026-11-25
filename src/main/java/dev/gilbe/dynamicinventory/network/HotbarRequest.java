@@ -31,6 +31,7 @@ public final class HotbarRequest implements IMessage {
     private int operation = -1, value;
     private long revision;
     private long sequence;
+    private boolean ignoreLocks;
     private int[] slots = new int[0];
 
     public HotbarRequest() {}
@@ -62,8 +63,13 @@ public final class HotbarRequest implements IMessage {
     }
 
     public static void swap(int row, long revision, long sequence) {
+        swap(row, revision, sequence, false);
+    }
+
+    public static void swap(int row, long revision, long sequence, boolean ignoreLocks) {
         HotbarRequest request = new HotbarRequest(1, row, revision);
         request.sequence = sequence;
+        request.ignoreLocks = ignoreLocks;
         channel.sendToServer(request);
     }
 
@@ -85,9 +91,13 @@ public final class HotbarRequest implements IMessage {
             return;
         }
         if (candidate == 1) {
-            if (bytes.readableBytes() == 8) {
+            if (bytes.readableBytes() == 8 || bytes.readableBytes() == 9) {
                 sequence = bytes.readLong();
                 if (sequence <= 0) return;
+            }
+            if (bytes.readableBytes() == 1) {
+                if (bytes.readUnsignedByte() != 1) return;
+                ignoreLocks = true;
             }
             if (bytes.readableBytes() == 0) operation = candidate;
             return;
@@ -111,6 +121,7 @@ public final class HotbarRequest implements IMessage {
             .writeLong(revision);
         if (operation == 0 || operation == 2) for (int slot : slots) bytes.writeInt(slot);
         if (operation == 1 && sequence > 0) bytes.writeLong(sequence);
+        if (operation == 1 && ignoreLocks) bytes.writeByte(1);
     }
 
     public static final class ServerHandler implements IMessageHandler<HotbarRequest, IMessage> {
@@ -144,13 +155,17 @@ public final class HotbarRequest implements IMessage {
         }
         if (requests == null) return;
         boolean configured = false;
+        boolean sendLocks = false;
         HotbarRequest acknowledgement = null;
         for (HotbarRequest request : requests) {
             if (request.revision == InventoryLayout.of(player.inventory)
                 .revision()) {
                 try {
                     if (request.operation == 0) HotbarBanks.configure(player, request.slots);
-                    else if (request.operation == 1) HotbarBanks.swap(player, request.value);
+                    else if (request.operation == 1) {
+                        HotbarBanks.swap(player, request.value, request.ignoreLocks);
+                        sendLocks |= request.sequence == 0 && request.ignoreLocks;
+                    }
                 } catch (IllegalArgumentException | IllegalStateException refused) {
                     player.addChatMessage(new ChatComponentText("Hotbars: " + refused.getMessage()));
                 }
@@ -160,6 +175,7 @@ public final class HotbarRequest implements IMessage {
         }
         // Acknowledge through the latest processed sequence, including refused swaps.
         if (acknowledgement != null) channel.sendTo(HotbarSwapReply.capture(player, acknowledgement.sequence), player);
+        else if (sendLocks) InventoryLockSync.send(player);
         if (configured) synchronizeSlots(player, true);
     }
 

@@ -3,6 +3,10 @@ package dev.gilbe.dynamicinventory.client;
 /** Pure player-panel fitting. All coordinates are scaled screen pixels, never container slot IDs. */
 public final class InventoryPanelLayout {
 
+    static Rect panelViewport(int width, int height) {
+        return new Rect(0, 8, width, Math.max(0, height - 36));
+    }
+
     public static final int CELL = 18, MIN_WIDTH = 178, MIN_HEIGHT = 64;
     static final int SCROLLBAR_WIDTH = 3;
     public static final int MAX_MAIN_COLUMNS = 36, MAX_ROWS = 36, MAX_HEIGHT = 720;
@@ -276,14 +280,36 @@ public final class InventoryPanelLayout {
         int width = requested.width, height = requested.height;
         int dx = 4, dy = 4;
         for (Rect panel : panels) {
-            int w = Math.abs(panel.width - requested.width), h = Math.abs(panel.height - requested.height);
-            if (w < dx && panel.width >= minimumWidth && panel.width <= maximumWidth) {
-                width = panel.width;
-                dx = w;
+            boolean left = (grip & 1) != 0, top = (grip & 4) != 0;
+            int anchorX = left ? requested.right() : requested.x;
+            int anchorY = top ? requested.bottom() : requested.y;
+            for (int candidate : new int[] { panel.width, left ? anchorX - panel.x : panel.right() - anchorX }) {
+                int distance = Math.abs(candidate - requested.width);
+                if (distance < dx && candidate >= minimumWidth
+                    && candidate <= maximumWidth
+                    && canResize(
+                        before,
+                        fromOppositeCorner(requested, grip, candidate, requested.height),
+                        viewport,
+                        panels,
+                        gap)) {
+                    width = candidate;
+                    dx = distance;
+                }
             }
-            if (h < dy && panel.height >= minimumHeight && panel.height <= maximumHeight) {
-                height = panel.height;
-                dy = h;
+            for (int candidate : new int[] { panel.height, top ? anchorY - panel.y : panel.bottom() - anchorY }) {
+                int distance = Math.abs(candidate - requested.height);
+                if (distance < dy && candidate >= minimumHeight
+                    && candidate <= maximumHeight
+                    && canResize(
+                        before,
+                        fromOppositeCorner(requested, grip, requested.width, candidate),
+                        viewport,
+                        panels,
+                        gap)) {
+                    height = candidate;
+                    dy = distance;
+                }
             }
         }
         if (width == requested.width && height == requested.height) return requested;
@@ -310,6 +336,17 @@ public final class InventoryPanelLayout {
             (grip & 4) == 0 ? before.y : before.bottom() - height,
             width,
             height);
+    }
+
+    /** Limit the moving edges before collision checks so resize never translates the opposite corner. */
+    static Rect clampResize(Rect requested, Rect viewport, int grip) {
+        int width = (grip & 1) != 0 ? requested.right() - viewport.x : viewport.right() - requested.x;
+        int height = (grip & 4) != 0 ? requested.bottom() - viewport.y : viewport.bottom() - requested.y;
+        return fromOppositeCorner(
+            requested,
+            grip,
+            Math.min(requested.width, width),
+            Math.min(requested.height, height));
     }
 
     /** Resizing follows the pointer up to the first obstacle, preserving its anchored edge. */

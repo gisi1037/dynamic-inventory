@@ -22,6 +22,11 @@ public final class ClientInventoryGate {
     private long lastNonce;
     private Message offer;
     private boolean accepted, committed, ready, recipeDetour;
+    private final ClientInventoryOpeningTrace openingTrace = new ClientInventoryOpeningTrace();
+
+    public ClientInventoryOpeningTrace openingTrace() {
+        return openingTrace;
+    }
 
     public boolean allowsInput(EntityPlayer player, int packetWindow) {
         if (player == null) return false;
@@ -49,6 +54,7 @@ public final class ClientInventoryGate {
                 if (message.nonce <= lastNonce) return; // Replayed offer cannot reset a newer approved opening.
                 lastNonce = message.nonce;
                 if (player.openContainer.windowId != message.window) {
+                    openingTrace.reject(client, message.window, "Client has a different window when the offer arrived");
                     send(client, message.reply(InventoryOpeningProtocol.REJECT));
                     return; // Never close a replacement screen in response to an old window's offer.
                 }
@@ -171,7 +177,7 @@ public final class ClientInventoryGate {
         accepted = false;
         committed = false;
         ready = false;
-        DynamicInventory.LOG.warn("Rejected client inventory window: {}", reason);
+        openingTrace.reject(client, offer.window, reason);
         send(client, offer.reply(InventoryOpeningProtocol.REJECT));
         // The server closes the same opening after receiving REJECT. Until then both contents and input stay locked.
     }

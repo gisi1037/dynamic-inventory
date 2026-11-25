@@ -1,9 +1,14 @@
 package dev.gilbe.dynamicinventory.compat;
 
+import cpw.mods.fml.common.Loader;
 import dev.gilbe.dynamicinventory.api.InventoryUiAdapter;
 
 /** Thaumcraft hosts with ordinary player slots and a native machine transfer implementation. */
 public final class ThaumcraftCompatibility {
+
+    public static final String TWEAKS_GUI = "elan.tweaks.common.gui.ComposableContainerGui";
+    private static final String TWEAKS_CONTAINER = "elan.tweaks.common.container.SpecializedContainer";
+    private static final String TWEAKS_ID = "dynamicinventory:thaumcraft/research-tweaks-table";
 
     private static final Host[] HOSTS = { new Host("alchemical-furnace", "AlchemyFurnace", 38),
         new Host("arcane-bore", "ArcaneBore", 38), new Host("arcane-workbench", "ArcaneWorkbench", 47),
@@ -20,7 +25,19 @@ public final class ThaumcraftCompatibility {
         }
     }
 
+    public static void registerResearchTweaksAdapter() {
+        NativeMachineAdapters.machine(TWEAKS_ID, TWEAKS_CONTAINER, TWEAKS_GUI, 38);
+    }
+
+    static boolean researchTweaks() {
+        return Loader.isModLoaded("ThaumcraftResearchTweaks")
+            && OptionalInventoryAdapters.reviewedVersion("ThaumcraftResearchTweaks");
+    }
+
     static boolean panelHost(InventoryUiAdapter adapter, String container) {
+        if (container.equals(TWEAKS_CONTAINER) && TWEAKS_CONTAINER.equals(adapter.getContainerClassName())
+            && TWEAKS_GUI.equals(adapter.getGuiClassName())
+            && TWEAKS_ID.equals(adapter.getId())) return true;
         for (Host host : HOSTS) {
             if (host.container.equals(container) && host.container.equals(adapter.getContainerClassName())
                 && host.gui.equals(adapter.getGuiClassName())

@@ -2,6 +2,7 @@ package dev.gilbe.dynamicinventory.mixins.modularui2;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.item.ItemStack;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,6 +31,19 @@ public abstract class Mui2SlotLockMixin implements InventorySlotLocks.Backing {
     @Inject(method = "canTakeStack", remap = true, at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$denyTake(EntityPlayer player, CallbackInfoReturnable<Boolean> result) {
         if (InventorySlotLocks.locked((ModularSlot) (Object) this, player)) result.setReturnValue(false);
+    }
+
+    @Inject(method = "isItemValid", remap = true, at = @At("HEAD"), cancellable = true)
+    private void dynamicinventory$filterItem(ItemStack stack, CallbackInfoReturnable<Boolean> result) {
+        ModularSlot slot = (ModularSlot) (Object) this;
+        InventoryPlayer inventory;
+        if (slot.getItemHandler() instanceof PlayerMainInvWrapper wrapper) inventory = wrapper.getInventoryPlayer();
+        else if (slot.getItemHandler() instanceof PlayerArmorInvWrapper wrapper)
+            inventory = wrapper.getInventoryPlayer();
+        else return;
+        int index = dynamicinventory$lockIndex(inventory);
+        if (InventorySlotLocks.contains(inventory.player, index)
+            || !InventorySlotLocks.permits(inventory.player, index, stack)) result.setReturnValue(false);
     }
 
 }

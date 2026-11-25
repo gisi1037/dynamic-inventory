@@ -247,10 +247,17 @@ public final class PlayerPanelProfiles {
             : custom ? origin.adaptCustom(profile, machine) : origin.adapt(profile, machine, viewport);
     }
 
+    static int savedVerticalOffset(String key, InventoryPanelLayout.Rect baseMachine,
+        InventoryPanelLayout.Rect viewport) {
+        PanelLayoutReference origin = interfaceReferences.get(key);
+        return origin == null ? -1 : origin.verticalOffset(baseMachine, viewport);
+    }
+
     /** Automatic fitting keeps inventory panels out of the space above their machine. */
     public static InventoryPanelLayout.Rect fittingViewport(String key, PlayerPanelProfile profile,
         InventoryPanelLayout.Rect machine, InventoryPanelLayout.Rect viewport) {
-        PanelLayoutReference origin = hasOverride(key) ? interfaceReferences.get(key) : reference;
+        if (hasOverride(key)) return viewport;
+        PanelLayoutReference origin = reference;
         if (origin != null && origin.placedAbove(profile)) return viewport;
         int top = Math.max(viewport.y, Math.min(viewport.bottom(), machine.y));
         return new InventoryPanelLayout.Rect(viewport.x, top, viewport.width, viewport.bottom() - top);
@@ -342,12 +349,22 @@ public final class PlayerPanelProfiles {
 
     public static void applyPanels(PlayerPanelSet nextPanels, String key, PlayerPanelProfile main,
         PanelLayoutReference origin) throws IOException {
+        applyPanels(nextPanels, key, main, origin, false);
+    }
+
+    static void savePanelGeometry(PlayerPanelSet panels, String key, PlayerPanelProfile main,
+        PanelLayoutReference origin) throws IOException {
+        applyPanels(panels, key, main, origin, true);
+    }
+
+    private static void applyPanels(PlayerPanelSet nextPanels, String key, PlayerPanelProfile main,
+        PanelLayoutReference origin, boolean explicitGeometry) throws IOException {
         Map<String, PlayerPanelProfile> next = new TreeMap<>(overrides);
         Map<String, PlayerPanelSet> sets = new TreeMap<>(interfacePanels);
         if (key != null) {
             validateKey(key);
             PlayerPanelSet local = scoped(nextPanels, key);
-            if (main.toJson()
+            if (!explicitGeometry && main.toJson()
                 .equals(global.toJson())
                 && local.toJson()
                     .equals(panels.toJson())) {

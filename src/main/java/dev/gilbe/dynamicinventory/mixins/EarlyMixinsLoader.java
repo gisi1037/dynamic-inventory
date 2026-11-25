@@ -57,6 +57,7 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
                 "forge.CapacityLoginMixin",
                 "minecraft.InventoryPlayerMixin",
                 "minecraft.EntityPlayerMixin",
+                "minecraft.PlayerDeathInventoryMixin",
                 "minecraft.ContainerPlayerMixin",
                 "minecraft.SlotInventoryAccess",
                 "minecraft.SlotLockMixin",
@@ -86,6 +87,8 @@ public class EarlyMixinsLoader implements IFMLLoadingPlugin, IEarlyMixinLoader {
             .isClient()) {
             mixins.addAll(
                 Arrays.asList(
+                    "forge.ForgeOpenGuiAccess",
+                    "forge.ForgeOpeningTraceMixin",
                     "minecraft.PendingInventoryInputMixin",
                     "minecraft.InventoryEditorInputMixin",
                     "minecraft.NativeInventoryLabelMixin",

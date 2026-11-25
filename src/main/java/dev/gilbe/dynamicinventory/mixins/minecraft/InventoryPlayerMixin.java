@@ -51,7 +51,7 @@ public class InventoryPlayerMixin implements ExpandedInventoryAccess {
 
     @Inject(method = "isItemValidForSlot", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$denyInsertion(int raw, ItemStack item, CallbackInfoReturnable<Boolean> result) {
-        if (InventorySlotLocks.locked((InventoryPlayer) (Object) this, raw)) result.setReturnValue(false);
+        if (!InventorySlotLocks.accepts((InventoryPlayer) (Object) this, raw, item)) result.setReturnValue(false);
     }
 
     @com.llamalad7.mixinextras.injector.ModifyExpressionValue(
@@ -81,14 +81,25 @@ public class InventoryPlayerMixin implements ExpandedInventoryAccess {
     @Inject(method = "getFirstEmptyStack", at = @At("RETURN"), cancellable = true, order = 2000)
     private void dynamicinventory$findOrdinaryEmpty(CallbackInfoReturnable<Integer> cir) {
         InventoryPlayer inventory = (InventoryPlayer) (Object) this;
-        if (cir.getReturnValue() >= 0 && AutomaticInventoryRouting.pickup(inventory, cir.getReturnValue())) return;
+        int found = cir.getReturnValue();
+        if (found >= 0 && AutomaticInventoryRouting.pickup(inventory, found)
+            && InventorySlotLocks.template(inventory.player, InventorySlotLocks.index(inventory, found)) == null)
+            return;
         cir.setReturnValue(AutomaticInventoryRouting.firstEmpty(inventory));
+    }
+
+    @com.llamalad7.mixinextras.injector.ModifyExpressionValue(
+        method = { "storePartialItemStack", "addItemStackToInventory" },
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/InventoryPlayer;getFirstEmptyStack()I"))
+    private int dynamicinventory$emptyForType(int found, ItemStack source) {
+        return AutomaticInventoryRouting.firstEmpty((InventoryPlayer) (Object) this, source);
     }
 
     @Inject(method = "storeItemStack", at = @At("RETURN"), cancellable = true, order = 2000)
     private void dynamicinventory$skipReservedMerge(ItemStack source, CallbackInfoReturnable<Integer> cir) {
         InventoryPlayer inventory = (InventoryPlayer) (Object) this;
-        if (cir.getReturnValue() >= 0 && AutomaticInventoryRouting.pickup(inventory, cir.getReturnValue())) return;
+        if (cir.getReturnValue() >= 0 && AutomaticInventoryRouting.pickup(inventory, cir.getReturnValue())
+            && InventorySlotLocks.accepts(inventory, cir.getReturnValue(), source)) return;
         cir.setReturnValue(AutomaticInventoryRouting.mergeSlot(inventory, source));
     }
 

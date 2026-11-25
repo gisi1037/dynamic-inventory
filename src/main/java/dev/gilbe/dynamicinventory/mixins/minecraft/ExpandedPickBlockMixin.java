@@ -42,7 +42,7 @@ public abstract class ExpandedPickBlockMixin {
             ItemStack stack = inventory.getStackInSlot(raw);
             if (stack == null || !stack.isItemEqual(result) || !ItemStack.areItemStackTagsEqual(stack, result))
                 continue;
-            int hotbar = dynamicinventory$chooseHotbar(inventory);
+            int hotbar = dynamicinventory$chooseHotbar(inventory, raw, stack);
             if (hotbar < 0) return;
             int source = PlayerContainerLayout.containerId(inventory, logical);
             // Number-key swap is one ordinary, predicted window click. The server moves both stacks together.
@@ -57,17 +57,19 @@ public abstract class ExpandedPickBlockMixin {
     }
 
     @Unique
-    private static int dynamicinventory$chooseHotbar(InventoryPlayer inventory) {
+    private static int dynamicinventory$chooseHotbar(InventoryPlayer inventory, int source, ItemStack item) {
         int ordinary = -1;
+        int fallback = -1;
         for (int offset = 0; offset < InventoryShape.HOTBAR_SLOTS; offset++) {
             int candidate = (inventory.currentItem + offset) % InventoryShape.HOTBAR_SLOTS;
-            if (InventorySlotLocks.locked(inventory, candidate)) continue;
             ItemStack stack = inventory.getStackInSlot(candidate);
+            if (!InventorySlotLocks.accepts(inventory, candidate, item)
+                || !InventorySlotLocks.accepts(inventory, source, stack)) continue;
             if (stack == null) return candidate;
+            if (candidate == inventory.currentItem) fallback = candidate;
             if (ordinary < 0 && !stack.isItemEnchanted()) ordinary = candidate;
         }
-        return ordinary < 0 && !InventorySlotLocks.locked(inventory, inventory.currentItem) ? inventory.currentItem
-            : ordinary;
+        return ordinary < 0 ? fallback : ordinary;
     }
 
     @Inject(
@@ -78,7 +80,8 @@ public abstract class ExpandedPickBlockMixin {
             remap = true),
         cancellable = true)
     private static void dynamicinventory$protectCreativePick(MovingObjectPosition target, EntityPlayer player,
-        World world, CallbackInfoReturnable<Boolean> result, @Local(ordinal = 0) int destination) {
-        if (InventorySlotLocks.locked(player.inventory, destination)) result.setReturnValue(false);
+        World world, CallbackInfoReturnable<Boolean> result, @Local(ordinal = 0) int destination,
+        @Local(name = "result") ItemStack stack) {
+        if (!InventorySlotLocks.accepts(player.inventory, destination, stack)) result.setReturnValue(false);
     }
 }

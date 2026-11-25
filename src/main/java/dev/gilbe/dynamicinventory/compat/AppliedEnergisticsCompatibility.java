@@ -25,7 +25,8 @@ public final class AppliedEnergisticsCompatibility {
         { "extended_pattern_terminal", "PatternTermEx" }, { "portable_cell", "MEPortableCell" },
         { "interface_terminal", "InterfaceTerminal" }, { "crafting_diagnostic_terminal", "CraftingDiagnosticTerminal" },
         { "storage_bus", "StorageBus" }, { "import_export_bus", "BusIO" }, { "level_emitter", "LevelEmitter" },
-        { "formation_plane", "FormationPlane" }, { "advanced_level_emitter", "AdvancedLevelEmitter" } };
+        { "formation_plane", "FormationPlane" }, { "advanced_level_emitter", "AdvancedLevelEmitter" },
+        { "quartz_cutting_knife", "QuartzKnife" } };
 
     private static final NativeUiLayout LAYOUT = NativeUiLayout.builder()
         .fixedPlayerColumns(9)

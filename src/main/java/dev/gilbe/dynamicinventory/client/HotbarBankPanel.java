@@ -135,7 +135,7 @@ public final class HotbarBankPanel extends net.minecraft.client.gui.Gui {
     }
 
     private static Rect viewport(GuiContainer gui) {
-        return new Rect(0, 8, gui.width, Math.max(0, gui.height - 16));
+        return InventoryPanelLayout.panelViewport(gui.width, gui.height);
     }
 
     private static int gap(GuiContainer gui) {

@@ -58,7 +58,8 @@ public final class PanelSortScope {
     public static boolean reserved(SlotAccessor slot) {
         return matchesPlayerSlot(
             slot,
-            (inventory, raw) -> InventorySlotLocks.locked(inventory, raw) || HotbarBanks.isReserved(inventory, raw));
+            (inventory, raw) -> InventorySlotLocks.locked(inventory, raw) || HotbarBanks.isReserved(inventory, raw)
+                || InventorySlotLocks.template(inventory.player, InventorySlotLocks.index(inventory, raw)) != null);
     }
 
     /** Retain the native shortcut's order and pin/lock exclusions. Only restrict player destinations. */

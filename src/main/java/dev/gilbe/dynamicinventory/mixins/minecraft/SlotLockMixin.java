@@ -1,6 +1,7 @@
 package dev.gilbe.dynamicinventory.mixins.minecraft;
 
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 
@@ -21,6 +22,8 @@ public abstract class SlotLockMixin {
 
     @Inject(method = "isItemValid", at = @At("HEAD"), cancellable = true)
     private void dynamicinventory$denyInsert(ItemStack stack, CallbackInfoReturnable<Boolean> result) {
-        if (InventorySlotLocks.locked((Slot) (Object) this)) result.setReturnValue(false);
+        Slot slot = (Slot) (Object) this;
+        if (slot.inventory instanceof InventoryPlayer inventory
+            && !InventorySlotLocks.accepts(inventory, slot.getSlotIndex(), stack)) result.setReturnValue(false);
     }
 }

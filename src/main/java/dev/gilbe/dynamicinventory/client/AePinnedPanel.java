@@ -259,7 +259,7 @@ public final class AePinnedPanel extends Gui {
     }
 
     private static Rect viewport(GuiScreen gui) {
-        return new Rect(2, 18, Math.max(1, gui.width - 4), Math.max(1, gui.height - 44));
+        return InventoryPanelLayout.panelViewport(gui.width, gui.height);
     }
 
     private static List<Rect> obstacles(GuiScreen gui, DetachedChestPanel host) {
@@ -281,6 +281,7 @@ public final class AePinnedPanel extends Gui {
         int bevel = frameStyle == 0 ? 4 : frameStyle == NativePanelFrame.SEAMLESS ? 0 : appearance.borderWidth;
         padding = Math.max(appearance.minimumMargin, bevel + frameCrop + 4);
         if (gesture != null && gestureScreen == gui && lastBounds != null) return lastBounds;
+        if (host.gesturePinsBounds() != null) return host.gesturePinsBounds();
         Rect viewport = viewport(gui);
         Rect preferred = PlayerPanelProfiles.requestedPinsBounds(host.key(), host.pinsLayoutAnchor());
         int width = Math.min(preferred.width, viewport.width);
@@ -312,11 +313,11 @@ public final class AePinnedPanel extends Gui {
         return PANEL.enabled && !PanelSettingsOverlay.isOpen(gui) ? PANEL.bounds(gui, host) : null;
     }
 
-    static void retainPositionAfterNativeDrag(GuiContainer gui) {
+    static void retainPosition(GuiScreen gui) {
         Rect visible = occupied(gui);
         DetachedChestPanel host = DetachedChestPanel.of(gui);
         if (visible == null || host == null) return;
-        // Removing the terminal as an obstacle must not make Pins jump into the freed space.
+        // Moving a neighboring panel must not make Pins jump into the freed space.
         PANEL.retainedBounds = visible;
         PANEL.retainedGeometry = PlayerPanelProfiles.pins(host.key());
     }
@@ -660,6 +661,11 @@ public final class AePinnedPanel extends Gui {
         if (PinnedItemTransfer.playerIndex(player, slot) < 0) return false;
         if (dev.gilbe.dynamicinventory.inventory.InventorySlotLocks.locked(slot, player)) return true;
         ItemStack stack = prediction.slot(container, player.inventory, slot);
+        if (shift && !bulk
+            && !space
+            && dev.gilbe.dynamicinventory.container.PlayerInventoryTransfers
+                .hasMatchingFilter(container.inventorySlots, player, stack))
+            return false;
         if (shift && !bulk && AppliedEnergisticsPatternTransfers.canLoadPattern(container.inventorySlots, stack))
             return false;
         if (gui instanceof TerminalPinsView) {
